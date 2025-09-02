@@ -17,8 +17,10 @@ export default function DetailsPanel({ event, onPrev, onPlay, onPause, onNext })
           <h2 style={{ marginTop: 0 }}>{event.event}</h2>
           <p><strong>{event.group_event}</strong></p>
           <p>
-            {(event.from_year ?? "")}
-            {event.to_year && event.to_year !== event.from_year ? ` – ${event.to_year}` : ""}
+            {(event.from_year ?? event.year_from ?? "")}
+            {(event.to_year ?? event.year_to) && (event.to_year ?? event.year_to) !== (event.from_year ?? event.year_from)
+              ? ` – ${event.to_year ?? event.year_to}`
+              : ""}
           </p>
           {event.description && <p>{event.description}</p>}
           {event.wikipedia && (
@@ -34,3 +36,4 @@ export default function DetailsPanel({ event, onPrev, onPlay, onPause, onNext })
     </aside>
   );
 }
+

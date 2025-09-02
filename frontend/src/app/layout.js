@@ -1,4 +1,4 @@
-export const metadata = { title: "GeoHistory Journey" };
+export const metadata = { title: "GeoHistory" };
 
 import "../styles/globals.css";
 import "leaflet/dist/leaflet.css";
