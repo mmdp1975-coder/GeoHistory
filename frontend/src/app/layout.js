@@ -6,7 +6,10 @@ import "leaflet/dist/leaflet.css";
 export default function RootLayout({ children }) {
   return (
     <html lang="it">
-      <body>{children}</body>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </head>
+      <body className="gh-body">{children}</body>
     </html>
   );
 }

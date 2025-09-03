@@ -1,137 +1,186 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
-import { useEffect, useMemo, Fragment } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 
-/* ==== Icone Leaflet (fix asset) ==== */
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
-
-/* ==== Helpers marker divIcon ==== */
-function slug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
-function typeClass(type) {
-  const t = slug(type);
-  if (t.includes("war") || t.includes("battle")) return "t-war";
-  if (t.includes("relig")) return "t-religion";
-  if (t.includes("scien") || t.includes("tech")) return "t-science";
-  if (t.includes("polit")) return "t-politics";
-  if (t.includes("econom")) return "t-economy";
-  if (t.includes("explor") || t.includes("voyage")) return "t-exploration";
-  if (t.includes("disast") || t.includes("plague") || t.includes("earthquake")) return "t-disaster";
-  if (t.includes("culture") || t.includes("art") || t.includes("music")) return "t-culture";
-  return "t-default";
+/* ===== Icone per type_event (emoji) ===== */
+function symbolForType(type) {
+  const key = String(type || "").toLowerCase();
+  if (key.includes("war") || key.includes("battle")) return "⚔️";
+  if (key.includes("treaty") || key.includes("accord")) return "📜";
+  if (key.includes("discover") || key.includes("scien")) return "🔬";
+  if (key.includes("relig")) return "✝️";
+  if (key.includes("culture") || key.includes("art")) return "🎭";
+  if (key.includes("politic") || key.includes("empire") || key.includes("kingdom")) return "👑";
+  if (key.includes("revolt") || key.includes("uprising")) return "🔥";
+  if (key.includes("colon") || key.includes("migrat")) return "🧭";
+  if (key.includes("catast") || key.includes("plague") || key.includes("earthquake")) return "💀";
+  if (key.includes("econom") || key.includes("trade")) return "💰";
+  return "•";
 }
-function iconFor(type) {
+function makeIcon(symbol, active = false) {
   return L.divIcon({
-    className: "",
-    html: `<div class="gh-marker ${typeClass(type)}"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    className: active ? "gh-marker active" : "gh-marker",
+    html: `<span class="gh-emoji">${symbol}</span>`,
+    iconSize: active ? [48, 48] : [36, 36],
+    iconAnchor: active ? [24, 24] : [18, 18],
+    tooltipAnchor: [0, -18],
   });
 }
 
-/* ==== Fit dinamico ==== */
-function AutoFit({ markers }) {
+/* ===== FocusController: centra con offset pixel-to-latlng ===== */
+function FocusController({ focusEvent, panOffsetPx }) {
   const map = useMap();
-  const points = useMemo(
-    () => (markers || [])
-      .filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude))
-      .map(m => [m.latitude, m.longitude]),
-    [markers]
-  );
+  const last = useRef({ id: null, x: 0, y: 0 });
+
+  const centerWithOffset = (latlng, offset) => {
+    const z = Math.max(map.getZoom(), 5);
+    const pt = map.latLngToContainerPoint(latlng, z);
+    const targetPt = L.point(pt.x - (offset?.x || 0), pt.y + (offset?.y || 0));
+    const target = map.containerPointToLatLng(targetPt, z);
+    map.stop();
+    map.flyTo(target, z, { animate: true, duration: 0.75 });
+  };
 
   useEffect(() => {
-    if (!points.length) { map.setView([20, 0], 2, { animate: false }); return; }
-    if (points.length === 1) { map.flyTo(points[0], Math.max(map.getZoom(), 6), { duration: 0.6 }); return; }
-    const bounds = L.latLngBounds(points);
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 7 });
-  }, [points, map]);
+    if (!focusEvent || !Number.isFinite(focusEvent.latitude) || !Number.isFinite(focusEvent.longitude)) return;
+    const latlng = L.latLng(focusEvent.latitude, focusEvent.longitude);
+    last.current = { id: focusEvent.id, x: panOffsetPx?.x || 0, y: panOffsetPx?.y || 0 };
+    centerWithOffset(latlng, panOffsetPx);
+  }, [focusEvent]); // eslint-disable-line
+
+  // Se cambia l’offset per lo stesso evento (es. apre/chiude sheet o resize), ricentra
+  useEffect(() => {
+    if (!focusEvent || last.current.id !== focusEvent.id) return;
+    const latlng = L.latLng(focusEvent.latitude, focusEvent.longitude);
+    if (last.current.x === (panOffsetPx?.x || 0) && last.current.y === (panOffsetPx?.y || 0)) return;
+    last.current = { id: focusEvent.id, x: panOffsetPx?.x || 0, y: panOffsetPx?.y || 0 };
+    centerWithOffset(latlng, panOffsetPx);
+  }, [panOffsetPx?.x, panOffsetPx?.y]); // eslint-disable-line
 
   return null;
 }
 
-/* ==== Focus su evento selezionato ==== */
-function FocusOn({ event }) {
+/* ===== FitController: inquadra tutti i marker quando cambia fitSignal ===== */
+function FitController({ markers, fitSignal, fitPadding }) {
   const map = useMap();
+  const lastSignal = useRef(0);
+
   useEffect(() => {
-    if (!event || event.latitude == null || event.longitude == null) return;
-    map.flyTo([event.latitude, event.longitude], Math.max(map.getZoom(), 6), { duration: 0.8 });
-  }, [event, map]);
+    if (!markers || !markers.length) return;
+    if (fitSignal === lastSignal.current) return;
+    lastSignal.current = fitSignal;
+
+    const latlngs = markers
+      .filter(ev => Number.isFinite(ev.latitude) && Number.isFinite(ev.longitude))
+      .map(ev => [ev.latitude, ev.longitude]);
+
+    if (!latlngs.length) return;
+
+    const bounds = L.latLngBounds(latlngs);
+    const pad = fitPadding || { top: 12, right: 12, bottom: 12, left: 12 };
+    map.stop();
+    map.fitBounds(bounds, {
+      paddingTopLeft: L.point(pad.left, pad.top),
+      paddingBottomRight: L.point(pad.right, pad.bottom),
+      animate: true,
+    });
+  }, [markers, fitSignal, fitPadding, map]);
+
   return null;
 }
 
-export default function MapView({ markers = [], onSelect, focusEvent }) {
-  const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-  const tiles = `https://api.maptiler.com/maps/hybrid/256/{z}/{x}/{y}.jpg?key=${key}`;
-
-  const safeMarkers = useMemo(
-    () => (markers || []).filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude)),
-    [markers]
-  );
+/* ===== Markers layer con evidenziazione del selezionato ===== */
+const MarkersLayer = memo(function MarkersLayer({ markers, selectedId, onSelect }) {
+  const items = useMemo(() => (markers || []).map((ev) => {
+    const lat = Number(ev.latitude), lon = Number(ev.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const sym = symbolForType(ev.type_event ?? ev.event_type ?? ev.type ?? null);
+    const active = (selectedId != null) && (ev.id === selectedId);
+    const icon = makeIcon(sym, active);
+    return { ev, lat, lon, icon, active };
+  }).filter(Boolean), [markers, selectedId]);
 
   return (
-    <Fragment>
-      <div className="mapContainer">
-        <MapContainer
-          center={[20, 0]}
-          zoom={2}
-          minZoom={2}
-          worldCopyJump
-          scrollWheelZoom
-          style={{ height: "100%", width: "100%" }}
+    <>
+      {items.map(({ ev, lat, lon, icon, active }) => (
+        <Marker
+          key={ev.id ?? `${lat},${lon},${ev.event}`}
+          position={[lat, lon]}
+          icon={icon}
+          zIndexOffset={active ? 1000 : 0}
+          eventHandlers={{ click: () => onSelect?.(ev) }}
         >
-          <TileLayer url={tiles} attribution="&copy; MapTiler &copy; OpenStreetMap &copy; NASA" />
-          <AutoFit markers={safeMarkers} />
-          {focusEvent && <FocusOn event={focusEvent} />}
+          {(ev.event || ev.group_event) && (
+            <Tooltip direction="top" offset={[0, -10]} opacity={0.9}>
+              <div style={{ maxWidth: 240 }}>
+                <strong>{ev.event || "Event"}</strong>
+                {ev.group_event ? <div style={{ opacity: .8 }}>{ev.group_event}</div> : null}
+              </div>
+            </Tooltip>
+          )}
+        </Marker>
+      ))}
+    </>
+  );
+});
 
-          {safeMarkers.map((m) => (
-            <Marker
-              key={m.id}
-              position={[m.latitude, m.longitude]}
-              icon={iconFor(m.type_event)}
-              eventHandlers={{ click: () => onSelect?.(m) }}
-            >
-              <Popup>
-                <strong>{m.event}</strong>
-                <div>{m.group_event}</div>
-                <div>
-                  {(m.from_year ?? m.year_from ?? "")}
-                  {(m.to_year ?? m.year_to) && (m.to_year ?? m.year_to) !== (m.from_year ?? m.year_from)
-                    ? ` – ${m.to_year ?? m.year_to}`
-                    : ""}
-                </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MapContainer>
-      </div>
+/* ===== Scala icone con zoom ===== */
+function ScaleController() {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    const setScale = () => {
+      const z = map.getZoom();
+      const s = Math.min(1.8, Math.max(0.85, 0.95 + 0.12 * (z - 3)));
+      el.style.setProperty("--mk-scale", String(s));
+    };
+    setScale();
+    map.on("zoomend", setScale);
+    return () => map.off("zoomend", setScale);
+  }, [map]);
+  return null;
+}
 
-      {/* CSS marker visibili */}
-      <style jsx global>{`
-        .mapContainer { height: 100%; width: 100%; }
-        .gh-marker {
-          width: 14px; height: 14px;
-          border-radius: 50%;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 1px rgba(0,0,0,.25);
-          background: #3b82f6; /* default */
-        }
-        .gh-marker.t-war { background: #ef4444; }
-        .gh-marker.t-religion { background: #a855f7; }
-        .gh-marker.t-science { background: #10b981; }
-        .gh-marker.t-politics { background: #f59e0b; }
-        .gh-marker.t-economy { background: #22c55e; }
-        .gh-marker.t-exploration { background: #06b6d4; }
-        .gh-marker.t-disaster { background: #111827; }
-        .gh-marker.t-culture { background: #eab308; }
-        .gh-marker.t-default { background: #3b82f6; }
-      `}</style>
-    </Fragment>
+export default function MapView({
+  markers = [],
+  selectedId = null,
+  onSelect,
+  focusEvent = null,
+  panOffsetPx = { x: 0, y: 0 },
+  fitSignal = 0,
+  fitPadding = { top: 12, right: 12, bottom: 12, left: 12 },
+}) {
+  const center = [20, 0];
+
+  return (
+    <MapContainer
+      center={center}
+      zoom={2}
+      minZoom={2}
+      worldCopyJump
+      style={{ height: "100%", width: "100%" }}
+      zoomControl={false}
+    >
+      {/* Satellite + Labels (ESRI) */}
+      <TileLayer
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        attribution='Tiles &copy; Esri — Sources: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+        zIndex={200}
+      />
+      <TileLayer
+        url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+        attribution='Labels &copy; Esri — Reference Layer'
+        zIndex={650}
+      />
+
+      <MarkersLayer markers={markers} selectedId={selectedId} onSelect={onSelect} />
+      <FocusController focusEvent={focusEvent} panOffsetPx={panOffsetPx} />
+      <FitController markers={markers} fitSignal={fitSignal} fitPadding={fitPadding} />
+      <ScaleController />
+    </MapContainer>
   );
 }
+
+

@@ -9,187 +9,54 @@ import { getEvents } from "../lib/api";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 
-/* ===== Helpers ===== */
 function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-/* ===== RangeSlider (solo track+maniglie; input e reset sono esterni, sulla stessa riga) ===== */
-function RangeSlider({
-  min, max,
-  start, end,
-  onChange,      // (s, e) => void — durante il drag/keypress
-  onCommit,      // () => void     — al rilascio
-  disabled = false,
-}) {
+/* ===== RangeSlider (immutato nell’aspetto) ===== */
+function RangeSlider({ min, max, start, end, onChange, onCommit, disabled = false }) {
   const trackRef = useRef(null);
-  const draggingRef = useRef(null); // 'start' | 'end' | null
-
+  const draggingRef = useRef(null);
   const range = Math.max(1, (max - min));
-  const valueToPct = (v) => range === 0 ? 0 : ((v - min) / range) * 100;
-  const pctToValue = (pct) => {
-    const raw = min + (pct/100) * range;
-    return Math.round(clamp(raw, min, max));
-  };
-
-  const posStartPct = valueToPct(clamp(start ?? min, min, max));
-  const posEndPct   = valueToPct(clamp(end   ?? max, min, max));
-
-  const pickHandleByPointer = (clientX) => {
-    const rect = trackRef.current.getBoundingClientRect();
-    const pxStart = rect.left + (posStartPct/100) * rect.width;
-    const pxEnd   = rect.left + (posEndPct/100) * rect.width;
-    return Math.abs(clientX - pxStart) <= Math.abs(clientX - pxEnd) ? "start" : "end";
-  };
-
-  const moveToPointer = (which, clientX) => {
+  const clampPct = (pct) => Math.max(0, Math.min(100, pct));
+  const pctToValue = (pct) => Math.round(clamp(min + (pct/100) * range, min, max));
+  const onDown = (clientX, which) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
-    const pct = clamp(((clientX - rect.left) / rect.width) * 100, 0, 100);
+    const pct = clampPct(((clientX - rect.left) / rect.width) * 100);
     const val = pctToValue(pct);
-    if (which === "start") {
-      const s = clamp(val, min, (end ?? max));
-      onChange?.(Math.min(s, end ?? max), end ?? max);
-    } else {
-      const e = clamp(val, (start ?? min), max);
-      onChange?.(start ?? min, Math.max(e, start ?? min));
-    }
+    if (which === "start") onChange?.(Math.min(val, end ?? max), end ?? max);
+    else onChange?.(start ?? min, Math.max(val, start ?? min));
   };
-
-  const onMouseDown = (e) => {
-    if (disabled || !trackRef.current) return;
-    const which = pickHandleByPointer(e.clientX);
-    draggingRef.current = which;
-    moveToPointer(which, e.clientX);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    e.preventDefault();
+  const pick = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const sPct = ((start - min) / range) * rect.width;
+    const ePct = ((end - min) / range) * rect.width;
+    const pxS = rect.left + sPct;
+    const pxE = rect.left + ePct;
+    return Math.abs(clientX - pxS) <= Math.abs(clientX - pxE) ? "start" : "end";
   };
-  const onMouseMove = (e) => {
-    if (!draggingRef.current) return;
-    moveToPointer(draggingRef.current, e.clientX);
-  };
-  const onMouseUp = () => {
-    if (!draggingRef.current) return;
-    draggingRef.current = null;
-    window.removeEventListener("mousemove", onMouseMove);
-    window.removeEventListener("mouseup", onMouseUp);
-    onCommit?.();
-  };
-
-  const onTouchStart = (e) => {
-    if (disabled || !trackRef.current) return;
-    const t = e.touches[0]; if (!t) return;
-    const which = pickHandleByPointer(t.clientX);
-    draggingRef.current = which;
-    moveToPointer(which, t.clientX);
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("touchend", onTouchEnd);
-  };
-  const onTouchMove = (e) => {
-    if (!draggingRef.current) return;
-    const t = e.touches[0]; if (!t) return;
-    moveToPointer(draggingRef.current, t.clientX);
-  };
-  const onTouchEnd = () => {
-    if (!draggingRef.current) return;
-    draggingRef.current = null;
-    window.removeEventListener("touchmove", onTouchMove);
-    window.removeEventListener("touchend", onTouchEnd);
-    onCommit?.();
-  };
-
-  const handleKeyDown = (which) => (e) => {
-    if (disabled) return;
-    const step = e.shiftKey ? 10 : 1;
-    if (["ArrowLeft","ArrowRight","Home","End","PageDown","PageUp"].includes(e.key)) {
-      e.preventDefault();
-    }
-    if (which === "start") {
-      let s = start ?? min;
-      if (e.key === "ArrowLeft" || e.key === "PageDown") s -= step;
-      if (e.key === "ArrowRight"|| e.key === "PageUp")   s += step;
-      if (e.key === "Home") s = min;
-      if (e.key === "End")  s = end ?? max;
-      s = clamp(s, min, (end ?? max));
-      onChange?.(s, end ?? max);
-      if (["ArrowLeft","ArrowRight","Home","End","PageDown","PageUp"].includes(e.key)) onCommit?.();
-    } else {
-      let eVal = end ?? max;
-      if (e.key === "ArrowLeft" || e.key === "PageDown") eVal -= step;
-      if (e.key === "ArrowRight"|| e.key === "PageUp")   eVal += step;
-      if (e.key === "Home") eVal = start ?? min;
-      if (e.key === "End")  eVal = max;
-      eVal = clamp(eVal, (start ?? min), max);
-      onChange?.(start ?? min, eVal);
-      if (["ArrowLeft","ArrowRight","Home","End","PageDown","PageUp"].includes(e.key)) onCommit?.();
-    }
-  };
-
   return (
     <>
       <div
         ref={trackRef}
         className="gh-track"
-        onMouseDown={onMouseDown}
-        onTouchStart={onTouchStart}
         role="group"
         aria-label="Time range"
+        onMouseDown={(e)=>{ draggingRef.current=pick(e.clientX); onDown(e.clientX, draggingRef.current); const mm=(ev)=>onDown(ev.clientX, draggingRef.current); const mu=()=>{ draggingRef.current=null; window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",mu); onCommit?.(); }; window.addEventListener("mousemove",mm); window.addEventListener("mouseup",mu); e.preventDefault(); }}
+        onTouchStart={(e)=>{ const t=e.touches[0]; if(!t) return; draggingRef.current=pick(t.clientX); onDown(t.clientX, draggingRef.current); const tm=(ev)=>{ const tt=ev.touches[0]; if(tt) onDown(tt.clientX, draggingRef.current); }; const te=()=>{ draggingRef.current=null; window.removeEventListener("touchmove",tm); window.removeEventListener("touchend",te); onCommit?.(); }; window.addEventListener("touchmove",tm,{passive:false}); window.addEventListener("touchend",te); }}
       >
-        <div
-          className="gh-range-fill"
-          style={{
-            left: `${posStartPct}%`,
-            width: `${Math.max(0, posEndPct - posStartPct)}%`
-          }}
-        />
-        <button
-          className="gh-handle"
-          style={{ left: `${posStartPct}%` }}
-          aria-label="Start year"
-          onKeyDown={handleKeyDown("start")}
-        />
-        <button
-          className="gh-handle"
-          style={{ left: `${posEndPct}%` }}
-          aria-label="End year"
-          onKeyDown={handleKeyDown("end")}
-        />
+        <div className="gh-range-fill" style={{ left: `${(start-min)/(max-min)*100}%`, width: `${Math.max(0, ((end-start)/(max-min))*100)}%` }} />
+        <button className="gh-handle" style={{ left: `${(start-min)/(max-min)*100}%` }} aria-label="Start year" />
+        <button className="gh-handle" style={{ left: `${(end-min)/(max-min)*100}%` }} aria-label="End year" />
       </div>
-
       <style jsx>{`
-        .gh-track {
-          flex: 1 1 auto;
-          position: relative;
-          height: 8px;
-          background: #e5e7eb;
-          border-radius: 999px;
-          cursor: pointer;
-          user-select: none;
-          touch-action: none;
-        }
-        .gh-range-fill {
-          position: absolute;
-          top: 0; bottom: 0;
-          background: #3b82f6;
-          border-radius: 999px;
-        }
-        .gh-handle {
-          position: absolute;
-          top: 50%;
-          transform: translate(-50%, -50%);
-          width: 18px; height: 18px;
-          border-radius: 50%;
-          border: 2px solid #fff;
-          box-shadow: 0 0 0 1px rgba(0,0,0,.2);
-          background: #111827;
-          cursor: grab;
-        }
-        .gh-handle:focus { outline: none; box-shadow: 0 0 0 3px rgba(59,130,246,.35); }
+        .gh-track { flex: 1 1 auto; position: relative; height: 8px; background: #e5e7eb; border-radius: 999px; cursor: pointer; user-select: none; touch-action: none; }
+        .gh-range-fill { position: absolute; top: 0; bottom: 0; background: #3b82f6; border-radius: 999px; }
+        .gh-handle { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.2); background: #111827; cursor: grab; }
       `}</style>
     </>
   );
 }
 
-/* ===== Page ===== */
 export default function Page() {
   const [lang, setLang] = useState((process.env.NEXT_PUBLIC_LANG || "it").toLowerCase());
   const [q, setQ] = useState("");
@@ -198,36 +65,31 @@ export default function Page() {
   const [location, setLocation] = useState("");
   const [group, setGroup] = useState("");
 
-  // Attivazione esplicita: finché non interagisci, NON mostro marker
   const [activated, setActivated] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Bounds + periodo
   const DEFAULT_MIN = -3000;
   const DEFAULT_MAX = new Date().getFullYear();
   const [bounds, setBounds] = useState({ min: DEFAULT_MIN, max: DEFAULT_MAX, source: "default" });
   const [period, setPeriod] = useState({ start: null, end: null });
 
-  // Stato eventi
   const [events, setEvents] = useState([]);
   const [markers, setMarkers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [focusEvent, setFocusEvent] = useState(null);
 
-  const typingTimer = useRef(null);
+  // === NUOVO: fit dopo Apply ===
+  const [fitSignal, setFitSignal] = useState(0);
+  const fitNextRef = useRef(false);
 
-  // Reader
+  const typingTimer = useRef(null);
   const synthRef = useRef(null), utterRef = useRef(null), readerIndexRef = useRef(0);
   useEffect(() => { synthRef.current = window.speechSynthesis; }, []);
 
-  const hasAnyFilter = useMemo(
-    () => !!(q || continent || country || location || group || period.start !== null || period.end !== null),
-    [q, continent, country, location, group, period]
-  );
+  const hasAnyFilter = useMemo(() => !!(q || continent || country || location || group || period.start !== null || period.end !== null), [q, continent, country, location, group, period]);
   const canQuery = activated && hasAnyFilter;
-  const noOtherFilters = useMemo(
-    () => !(q || continent || country || location || group),
-    [q, continent, country, location, group]
-  );
+  const resultsLen = useMemo(() => (markers.length || events.length), [markers.length, events.length]);
+  const noOtherFilters = useMemo(() => !(q || continent || country || location || group), [q, continent, country, location, group]);
 
   /* ===== Bounds ===== */
   const fetchBounds = useCallback(async ({ hardReset = false } = {}) => {
@@ -237,20 +99,14 @@ export default function Page() {
     if (country) params.set("country", country);
     if (location) params.set("location", location);
     if (group) params.set("group", group);
-
     try {
       const res = await fetch(`/api/events/bounds?${params.toString()}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("bounds not available");
-      const data = await res.json();
-
+      const data = res.ok ? await res.json() : null;
       const min = Number.isFinite(data?.min_year) ? data.min_year : DEFAULT_MIN;
       const max = Number.isFinite(data?.max_year) ? data.max_year : DEFAULT_MAX;
-      const normMin = Math.min(min, max);
-      const normMax = Math.max(min, max);
-
-      setBounds({ min: normMin, max: normMax, source: "api" });
-
-      setPeriod((p) => {
+      const normMin = Math.min(min, max), normMax = Math.max(min, max);
+      setBounds({ min: normMin, max: normMax, source: data ? "api" : "default" });
+      setPeriod(p => {
         if (hardReset) return { start: normMin, end: normMax };
         let s = p.start == null ? normMin : clamp(p.start, normMin, normMax);
         let e = p.end == null ? normMax : clamp(p.end, normMin, normMax);
@@ -259,7 +115,7 @@ export default function Page() {
       });
     } catch {
       setBounds({ min: DEFAULT_MIN, max: DEFAULT_MAX, source: "default" });
-      setPeriod((p) => {
+      setPeriod(p => {
         if (hardReset) return { start: DEFAULT_MIN, end: DEFAULT_MAX };
         let s = p.start == null ? DEFAULT_MIN : clamp(p.start, DEFAULT_MIN, DEFAULT_MAX);
         let e = p.end == null ? DEFAULT_MAX : clamp(p.end, DEFAULT_MIN, DEFAULT_MAX);
@@ -269,7 +125,6 @@ export default function Page() {
     }
   }, [q, continent, country, location, group]);
 
-  // Ricalcolo bounds SOLO quando serve:
   const prevGroupRef = useRef(group);
   useEffect(() => {
     const groupChanged = prevGroupRef.current !== group;
@@ -314,15 +169,25 @@ export default function Page() {
         setSelected(null);
         setFocusEvent(null);
         readerIndexRef.current = 0;
-        try { console.log(`[getEvents] rows=${normalized.length}, markers=${m.length}`); } catch {}
+
+        // segnala che al prossimo render va fatto fit
+        if (fitNextRef.current) {
+          // verrà triggerato dall'effetto su "markers"
+        }
       })
-      .catch(err => {
-        console.error(err);
+      .catch(() => {
         setEvents([]); setMarkers([]); setSelected(null); setFocusEvent(null);
       });
   }, [canQuery, lang, q, continent, country, location, group, period.start, period.end, normalizeI18n]);
 
-  /* ===== Notifiche dai filtri ===== */
+  // === Fit automatico quando i marker cambiano ed è stato richiesto da "Apply"
+  useEffect(() => {
+    if (!fitNextRef.current) return;
+    fitNextRef.current = false;
+    setFitSignal(v => v + 1);
+  }, [markers]);
+
+  /* ===== Notifiche dai filtri (digita/cambia) ===== */
   const onFiltersChanged = useCallback((action) => {
     if (typingTimer.current) { clearTimeout(typingTimer.current); typingTimer.current = null; }
 
@@ -349,10 +214,18 @@ export default function Page() {
     typingTimer.current = setTimeout(() => applyFilters(), 350);
   }, [q, canQuery, applyFilters]); // eslint-disable-line
 
-  /* ===== Reset Range (richiesta #2) ===== */
+  /* ===== Apply “forte” dal pannello: forza update + fit ===== */
+  const onApplyAndClose = useCallback(async () => {
+    if (!activated) setActivated(true);
+    fitNextRef.current = true;           // dopo l'update, fai fit
+    await fetchBounds({ hardReset: true }); // aggiorna range dai filtri correnti
+    applyFilters();                        // aggiorna eventi e marker SUBITO
+    setFiltersOpen(false);                 // chiudi overlay
+  }, [activated, fetchBounds, applyFilters]);
+
+  /* ===== Reset Range ===== */
   const onResetRange = useCallback(() => {
     if (noOtherFilters) {
-      // Nessun filtro selezionato → niente marker in mappa
       setActivated(false);
       setPeriod({ start: null, end: null });
       setEvents([]); setMarkers([]); setSelected(null); setFocusEvent(null);
@@ -362,7 +235,7 @@ export default function Page() {
     }
   }, [noOtherFilters, activated, bounds.min, bounds.max]);
 
-  /* ===== Reader ===== */
+  /* ===== Sintesi vocale ===== */
   const speakEvent = useCallback((ev) => {
     const synth = synthRef.current;
     if (!synth || !ev) return;
@@ -381,76 +254,73 @@ export default function Page() {
     synth.speak(u);
   }, [lang]);
 
+  /* ===== Offset per centraggio (misura reale bottom-sheet su mobile) ===== */
+  const bottomSheetRef = useRef(null);
+  const [panOffsetPx, setPanOffsetPx] = useState({ x: 0, y: 0 });
+
+  const computeOffset = useCallback(() => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 1024;
+    if (!isMobile) return { x: 0, y: 0 };
+    const h = (selected && bottomSheetRef.current)
+      ? bottomSheetRef.current.getBoundingClientRect().height
+      : 0;
+    return { x: 0, y: Math.round(h * 0.55) };
+  }, [selected]);
+
+  useEffect(() => { setPanOffsetPx(computeOffset()); }, [selected, computeOffset]);
+  useEffect(() => {
+    const onResize = () => setPanOffsetPx(computeOffset());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [computeOffset]);
+
+  /* ===== Fit padding adattivo (desktop: spazio per pannello destro) ===== */
+  const fitPadding = useMemo(() => {
+    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 1025;
+    if (isDesktop) {
+      return { top: 24, right: 420, bottom: 24, left: 24 }; // pannello destro ~380 + margine
+    }
+    return { top: 24, right: 24, bottom: 24, left: 24 };
+  }, []);
+
+  /* ===== Lista corrente e tour ===== */
+  const listRef = useRef([]);
+  useEffect(() => { listRef.current = markers.length ? markers : events; }, [markers, events]);
+
+  const setByIndex = useCallback((idx) => {
+    const list = listRef.current;
+    if (!list.length) return;
+    const clamped = Math.max(0, Math.min(idx, list.length - 1));
+    const ev = list[clamped];
+    setSelected(ev);                  // apre sheet su mobile
+    setPanOffsetPx(computeOffset());  // offset pronto
+    readerIndexRef.current = clamped;
+    setFocusEvent(ev);                // centra usando offset
+    speakEvent(ev);
+  }, [computeOffset, speakEvent]);
+
   const onPlay = useCallback(() => {
     const synth = synthRef.current;
     if (synth?.paused) { synth.resume(); return; }
-    const list = markers.length ? markers : events;
-    if (!list.length) return;
-    const idx = readerIndexRef.current || 0;
-    const ev = list[idx] || list[0];
-    setSelected(ev); setFocusEvent(ev); speakEvent(ev);
-  }, [events, markers, speakEvent]);
+    if (!listRef.current.length) return;
+    setByIndex(readerIndexRef.current || 0);
+  }, [setByIndex]);
+  const onNext = useCallback(() => { if (listRef.current.length) setByIndex((readerIndexRef.current || 0) + 1); }, [setByIndex]);
+  const onPrev = useCallback(() => { if (listRef.current.length) setByIndex((readerIndexRef.current || 0) - 1); }, [setByIndex]);
+  const onPause = useCallback(() => { const s = synthRef.current; if (s?.speaking && !s.paused) s.pause(); }, []);
 
-  const onNext = useCallback(() => {
-    const list = markers.length ? markers : events;
-    if (!list.length) return;
-    const from = readerIndexRef.current || 0;
-    const to = Math.min(from + 1, list.length - 1);
-    readerIndexRef.current = to;
-    const ev = list[to];
-    setSelected(ev); setFocusEvent(ev); speakEvent(ev);
-  }, [events, markers, speakEvent]);
-
-  const onPrev = useCallback(() => {
-    const list = markers.length ? markers : events;
-    if (!list.length) return;
-    const from = readerIndexRef.current || 0;
-    const to = Math.max(from - 1, 0);
-    readerIndexRef.current = to;
-    const ev = list[to];
-    setSelected(ev); setFocusEvent(ev); speakEvent(ev);
-  }, [events, markers, speakEvent]);
-
-  const onPause = useCallback(() => {
-    const synth = synthRef.current;
-    if (synth?.speaking && !synth.paused) synth.pause();
-  }, []);
-
-  /* ===== UI ===== */
   return (
-    <div className="app">
-      {/* ===== BANDA SUPERIORE (bianca) con SOLO LOGO a sinistra ===== */}
-      <header className="site-header">
-        <div className="logo-wrap">
-          <Image
-            src="/logo.png"
-            alt="GeoHistory Journey"
-            fill
-            sizes="(max-width: 768px) 160px, 200px"
-            priority
-            style={{ objectFit: "contain" }}
-          />
+    <div className="gh-app">
+      {/* Header con logo */}
+      <header className="gh-header">
+        <div className="gh-logo">
+          <Image src="/logo.png" alt="GeoHistory Journey" fill sizes="(max-width: 768px) 160px, 200px" priority style={{ objectFit: "contain" }}/>
         </div>
       </header>
 
-      <div className="toolbar">
-        <FiltersBar
-          lang={lang} setLang={setLang}
-          q={q} setQ={setQ}
-          continent={continent} setContinent={setContinent}
-          country={country} setCountry={setCountry}
-          location={location} setLocation={setLocation}
-          group={group} setGroup={setGroup}
-          period={period}
-          onFiltersChanged={onFiltersChanged}
-        />
-        <span className="spacer" />
-        <strong>Visible events: {canQuery ? markers.length : 0} / {canQuery ? events.length : 0}</strong>
-      </div>
-
-      {/* ===== RIGA UNICA: Min | Slider | Max | Reset ===== */}
-      <div className="time-inline">
-        <label className="mm">
+      {/* Time range */}
+      <div className="gh-time">
+        <label className="gh-mm">
           <span>Min</span>
           <input
             type="number"
@@ -460,24 +330,19 @@ export default function Page() {
               if (!activated) setActivated(true);
               setPeriod(p => ({ start: v, end: (p.end ?? bounds.max) }));
             }}
-            onBlur={()=>{ if (canQuery) /* commit */ null; }}
           />
         </label>
 
         <RangeSlider
-          min={bounds.min}
-          max={bounds.max}
+          min={bounds.min} max={bounds.max}
           start={period.start ?? bounds.min}
           end={period.end ?? bounds.max}
-          onChange={(s,e) => {
-            if (!activated) setActivated(true);
-            setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) });
-          }}
-          onCommit={() => { if (canQuery) /* commit → fetch */ null; }}
+          onChange={(s,e) => { if (!activated) setActivated(true); setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) }); }}
+          onCommit={()=>{}}
           disabled={bounds.min === bounds.max}
         />
 
-        <label className="mm">
+        <label className="gh-mm">
           <span>Max</span>
           <input
             type="number"
@@ -487,77 +352,81 @@ export default function Page() {
               if (!activated) setActivated(true);
               setPeriod(p => ({ start: (p.start ?? bounds.min), end: v }));
             }}
-            onBlur={()=>{ if (canQuery) /* commit */ null; }}
           />
         </label>
 
-        <button onClick={onResetRange} className="btn-reset">Reset Range</button>
+        <button onClick={onResetRange} className="gh-btn-reset">Reset Range</button>
       </div>
 
-      <div className="main">
-        <section className="panel">
+      {/* Main */}
+      <div className="gh-main">
+        <section className="gh-map-panel">
           <MapView
             markers={canQuery ? markers : []}
+            selectedId={selected?.id ?? null}
             onSelect={(ev) => {
               setSelected(ev);
+              setPanOffsetPx(computeOffset());
               const list = markers.length ? markers : events;
               const idx = Math.max(0, list.findIndex(x => x.id === ev.id));
               readerIndexRef.current = idx;
+              setFocusEvent(ev);
             }}
             focusEvent={focusEvent}
+            panOffsetPx={panOffsetPx}
+            fitSignal={fitSignal}
+            fitPadding={fitPadding}
           />
         </section>
-        <DetailsPanel event={selected} onPrev={onPrev} onPlay={onPlay} onPause={onPause} onNext={onNext} />
+
+        {/* Dettagli laterale (desktop) */}
+        <aside className="gh-details">
+          <DetailsPanel event={selected} />
+        </aside>
       </div>
 
-      <style jsx>{`
-        /* ===== HEADER (banda bianca) ===== */
-        .site-header{
-          position: relative;
-          z-index: 20;
-          display: flex;
-          align-items: center;
-          padding: 8px 12px;
-          background: #ffffff;               /* banda bianca */
-          border-bottom: 1px solid #e5e7eb;
-          height: 64px;                      /* altezza barra */
-        }
-        .logo-wrap{
-          position: relative;
-          height: 100%;                      /* logo alto quanto la barra */
-          width: 220px;                      /* spazio per non schiacciare il logo */
-        }
+      {/* FAB Filters (desktop+mobile) */}
+      <button className="gh-fab" onClick={() => setFiltersOpen(true)} aria-label="Open Filters" title="Open Filters">Filters</button>
 
-        .time-inline {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 10px 12px 0 12px;
-        }
-        .mm {
-          display: inline-flex;
-          flex-direction: column;
-          gap: 4px;
-          min-width: 120px;
-          font-size: 12px;
-          color: #6b7280;
-        }
-        .mm input {
-          width: 120px;
-          padding: 6px 8px;
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          font-size: 14px;
-        }
-        .btn-reset {
-          border: 1px solid #d1d5db;
-          background: #f9fafb;
-          border-radius: 8px;
-          padding: 8px 12px;
-          font-size: 14px;
-          white-space: nowrap;
-        }
-      `}</style>
+      {/* Overlay Filters */}
+      {filtersOpen && (
+        <div className="gh-overlay" onClick={() => setFiltersOpen(false)}>
+          <div className="gh-sheet" onClick={(e)=>e.stopPropagation()}>
+            <div className="gh-sheet-header">
+              <div className="gh-sheet-title">Filters</div>
+              <button className="gh-close" onClick={onApplyAndClose}>Apply & Close</button>
+            </div>
+            <div className="gh-sheet-body">
+              <FiltersBar
+                lang={lang} setLang={setLang}
+                q={q} setQ={setQ}
+                continent={continent} setContinent={setContinent}
+                country={country} setCountry={setCountry}
+                location={location} setLocation={setLocation}
+                group={group} setGroup={setGroup}
+                period={period}
+                onFiltersChanged={(k)=>{ onFiltersChanged(k); }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom-sheet (mobile) */}
+      <div ref={bottomSheetRef} className={`gh-bottomsheet ${selected ? "open" : ""}`}>
+        <div className="grabber" />
+        <div className="inner"><DetailsPanel event={selected} /></div>
+      </div>
+
+      {/* Reader Bar */}
+      {(canQuery && resultsLen > 0) && (
+        <div className="gh-readerbar" role="toolbar" aria-label="Tour controls">
+          <button title="Previous" aria-label="Previous" onClick={onPrev}>⏮</button>
+          <button title="Play"     aria-label="Play"    onClick={onPlay}>▶</button>
+          <button title="Pause"    aria-label="Pause"   onClick={onPause}>⏸</button>
+          <button title="Next"     aria-label="Next"    onClick={onNext}>⏭</button>
+        </div>
+      )}
     </div>
   );
 }

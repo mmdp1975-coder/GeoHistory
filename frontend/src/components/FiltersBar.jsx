@@ -166,13 +166,13 @@ export default function FiltersBar({
   };
 
   return (
-    <div className="toolbar">
+    <div className="gh-filters">
       <select value={lang} onChange={handleLangChange}>
         <option value="it">Italian</option>
         <option value="en">English</option>
       </select>
 
-      <input type="text" placeholder="Search..." value={q} onChange={handleSearchChange} style={{ minWidth: 220 }} />
+      <input type="text" placeholder="Search..." value={q} onChange={handleSearchChange} />
 
       {/* Group Event - PRIMO */}
       <select value={group} onChange={handleGroupChange}>
