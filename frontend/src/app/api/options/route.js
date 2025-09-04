@@ -1,4 +1,6 @@
 // src/app/api/options/route.js
+export const runtime = 'nodejs'; // serve per usare 'pg' su Vercel
+
 import { NextResponse } from "next/server";
 import pg from "pg";
 
@@ -8,28 +10,30 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-// cache in memoria: scopre se la colonna 'lang' esiste
+// cache: scopre se la colonna 'lang' esiste
 let hasLangColumn = null;
 async function ensureSchema() {
   if (hasLangColumn !== null) return;
   const q = `
     select 1
     from information_schema.columns
-    where table_schema='public' and table_name='events' and column_name='lang'
+    where table_schema='public' 
+      and table_name='events' 
+      and column_name='lang'
     limit 1;
   `;
   const res = await pool.query(q);
   hasLangColumn = res.rowCount > 0;
 }
 
-// builder della query in base al "type" e alla presenza della colonna lang
+// costruisce la query in base al type e alla presenza della colonna lang
 function buildSQL(type, lang) {
-  const tables = {
+  const cols = {
     groups: "group_event",
     continents: "continent",
     locations: "location",
   };
-  const col = tables[type];
+  const col = cols[type];
   if (!col) return null;
 
   if (hasLangColumn && lang) {
@@ -43,7 +47,6 @@ function buildSQL(type, lang) {
       params: [lang],
     };
   } else {
-    // niente filtro lingua (colonna assente o lang non passato)
     return {
       text: `
         SELECT DISTINCT ${col} AS value
