@@ -1,33 +1,27 @@
 // src/lib/api.js
-
-// Per debug rigoroso: usa SEMPRE gli endpoint locali Next.js
-const API_EVENTS = "/api/events";
-const API_OPTIONS = "/api/options";
-
-export async function getEvents(params = {}) {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v === undefined || v === null || v === "") continue;
-    qs.set(k, String(v));
-  }
-  const url = `${API_EVENTS}?${qs.toString()}`;
+export async function getOptions(type, lang) {
+  const base = process.env.NEXT_PUBLIC_API_BASE || "/api";
+  const safeLang = (lang || process.env.NEXT_PUBLIC_LANG || "it").toString().toLowerCase();
+  const url = `${base}/options?type=${encodeURIComponent(type)}&lang=${encodeURIComponent(safeLang)}`;
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`getEvents ${res.status} ${url}`);
-  const data = await res.json();
-  // L'endpoint locale ritorna già un ARRAY
-  return Array.isArray(data) ? data : (Array.isArray(data?.events) ? data.events : []);
+  if (!res.ok) throw new Error(`getOptions failed ${res.status}`);
+  return res.json();
 }
 
-export async function getOptions(type, query = {}) {
-  if (!type) return [];
-  const qs = new URLSearchParams({ type });
-  for (const [k, v] of Object.entries(query)) {
-    if (v === undefined || v === null || v === "") continue;
-    qs.set(k, String(v));
+export async function getEvents(params = {}) {
+  const base = process.env.NEXT_PUBLIC_API_BASE || "/api";
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") sp.append(k, String(v));
   }
-  const url = `${API_OPTIONS}?${qs.toString()}`;
+  // normalizza anche qui se esiste lang
+  if (sp.has("lang")) {
+    sp.set("lang", sp.get("lang").toLowerCase());
+  } else if (process.env.NEXT_PUBLIC_LANG) {
+    sp.set("lang", process.env.NEXT_PUBLIC_LANG.toLowerCase());
+  }
+  const url = `${base}/events?${sp.toString()}`;
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`getOptions ${type} ${res.status} ${url}`);
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  if (!res.ok) throw new Error(`getEvents failed ${res.status}`);
+  return res.json();
 }
