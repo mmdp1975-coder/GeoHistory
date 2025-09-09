@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useMemo, useRef, useState } from "react";
 import FiltersBar from "../components/FiltersBar";
 import DetailsPanel from "../components/DetailsPanel";
-import { getEvents, getBounds } from "../lib/api";
+import { getEvents } from "../lib/api"; // ← rimosso getBounds
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 
@@ -70,6 +70,25 @@ function RangeSlider({ min, max, start, end, onChange }) {
   );
 }
 
+/* ===== util: ricava min/max anni dai rows in modo robusto ===== */
+function getYearRangeFromRows(rows, ABS_MIN, ABS_MAX) {
+  let min = +Infinity, max = -Infinity;
+  for (const r of rows || []) {
+    const candsStart = [r.year_start, r.start_year, r.from_year, r.year]
+      .map(x => (x === 0 ? 0 : Number(x)))
+      .filter(Number.isFinite);
+    const candsEnd   = [r.year_end, r.end_year, r.to_year, r.year]
+      .map(x => (x === 0 ? 0 : Number(x)))
+      .filter(Number.isFinite);
+    if (candsStart.length) min = Math.min(min, Math.min(...candsStart));
+    if (candsEnd.length)   max = Math.max(max, Math.max(...candsEnd));
+  }
+  if (!Number.isFinite(min)) min = ABS_MIN;
+  if (!Number.isFinite(max)) max = ABS_MAX;
+  if (min > max) [min, max] = [max, min];
+  return { min, max };
+}
+
 export default function Page() {
   /* ===== stato filtri ===== */
   const [lang, setLang] = useState((process.env.NEXT_PUBLIC_LANG || "it").toLowerCase());
@@ -86,7 +105,7 @@ export default function Page() {
   const ABS_MIN = -3000;
   const ABS_MAX = new Date().getFullYear();
 
-  /* ===== bounds + periodo (i bounds reali si aggiornano su Apply) ===== */
+  /* ===== bounds + periodo (i bounds reali si allineano su Apply) ===== */
   const [bounds, setBounds] = useState({ min: ABS_MIN, max: ABS_MAX, source: "default" });
   const [period, setPeriod] = useState({ start: ABS_MIN, end: ABS_MAX });
 
@@ -130,52 +149,44 @@ export default function Page() {
     return ev;
   }, []);
 
-  /* ===== fetch helpers (solo su Apply) ===== */
-  const fetchBoundsApply = useCallback(async () => {
-    const params = {};
-    if (q) params.q = q;
-    if (continent) params.continent = continent;
-    if (country) params.country = country;
-    if (location) params.location = location;
-    if (group) params.group = group;
-
-    try {
-      const data = await getBounds(params);
-      const min = Number.isFinite(data?.min_year) ? data.min_year : ABS_MIN;
-      const max = Number.isFinite(data?.max_year) ? data.max_year : ABS_MAX;
-      const normMin = Math.min(min, max), normMax = Math.max(min, max);
-      setBounds({ min: normMin, max: normMax, source: "api" });
-      setPeriod({ start: normMin, end: normMax });
-    } catch {
-      setBounds({ min: ABS_MIN, max: ABS_MAX, source: "default" });
-      setPeriod({ start: ABS_MIN, end: ABS_MAX });
-    }
-  }, [q, continent, country, location, group]);
-
+  /* ===== fetch helpers (Apply) ===== */
   const fetchEventsApply = useCallback(async () => {
-    const params = {
+    // 1) fetch preliminare senza range per calcolare bounds reali
+    const baseParams = {
       lang: lang.toUpperCase(),
       q, continent, country, location, group,
-      year_start: period.start, year_end: period.end,
       limit: 2000
     };
-    const rows = await getEvents(params);
+    const preRows = await getEvents(baseParams);
+    const preNorm = (preRows || []).map(r => normalizeI18n(r, lang));
+    const { min: bMin, max: bMax } = getYearRangeFromRows(preNorm, ABS_MIN, ABS_MAX);
+
+    // 2) allinea bounds + periodo
+    setBounds({ min: bMin, max: bMax, source: "derived" });
+    setPeriod({ start: bMin, end: bMax });
+
+    // 3) fetch finale con il range determinato
+    const rangedParams = {
+      ...baseParams,
+      year_start: bMin,
+      year_end: bMax
+    };
+    const rows = await getEvents(rangedParams);
     const normalized = (rows || []).map(r => normalizeI18n(r, lang));
     const m = normalized.filter(r => Number.isFinite(r.latitude) && Number.isFinite(r.longitude));
     setEvents(normalized);
     setMarkers(m);
     setSelected(null);
     setFocusEvent(null);
-  }, [lang, q, continent, country, location, group, period.start, period.end, normalizeI18n]);
+  }, [lang, q, continent, country, location, group, normalizeI18n]);
 
   /* ===== APPLY (unico punto che scatena il caricamento) ===== */
   const onApplyAndClose = useCallback(async () => {
     setActivated(true);
-    await fetchBoundsApply();               // allinea il range al filtro scelto
-    await fetchEventsApply();               // carica i dati
+    await fetchEventsApply();               // carica dati + calcola bounds localmente
     setFitSignal(v => v + 1);               // fai fit ai risultati
     setFiltersOpen(false);
-  }, [fetchBoundsApply, fetchEventsApply]);
+  }, [fetchEventsApply]);
 
   /* ===== reset totale ===== */
   const onResetRange = useCallback(() => {
@@ -319,4 +330,3 @@ export default function Page() {
     </div>
   );
 }
-

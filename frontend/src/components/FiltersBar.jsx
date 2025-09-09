@@ -54,7 +54,7 @@ export default function FiltersBar({
     })();
   }, [lang, continent, country, location, ys, ye]);
 
-  // Se cambia il PERIODO → ricarico tutte le opzioni correnti
+  // Se cambia il PERIODO o i filtri gerarchici → ricarico liste
   useEffect(() => {
     (async () => {
       try {
@@ -177,25 +177,41 @@ export default function FiltersBar({
       {/* Group Event - PRIMO */}
       <select value={group} onChange={handleGroupChange}>
         <option value="">All Group Events</option>
-        {groups.map(g => <option key={g.value} value={g.value}>{g.value}{typeof g.count==="number"?` (${g.count})`:""}</option>)}
+        {groups.map(g => (
+          <option key={g.value} value={g.value}>
+            {g.label || g.value}{typeof g.count==="number" ? ` (${g.count})` : ""}
+          </option>
+        ))}
       </select>
 
       {/* Continent */}
       <select value={continent} onChange={handleContinentChange}>
         <option value="">All Continents</option>
-        {continents.map(c => <option key={c.value} value={c.value}>{c.value}{typeof c.count==="number"?` (${c.count})`:""}</option>)}
+        {continents.map(c => (
+          <option key={c.value} value={c.value}>
+            {c.label || c.value}{typeof c.count==="number" ? ` (${c.count})` : ""}
+          </option>
+        ))}
       </select>
 
       {/* Country */}
       <select value={country} onChange={handleCountryChange} disabled={!continent && !group}>
         <option value="">All Countries</option>
-        {countries.map(c => <option key={c.value} value={c.value}>{c.value}{typeof c.count==="number"?` (${c.count})`:""}</option>)}
+        {countries.map(c => (
+          <option key={c.value} value={c.value}>
+            {c.label || c.value}{typeof c.count==="number" ? ` (${c.count})` : ""}
+          </option>
+        ))}
       </select>
 
       {/* Location */}
       <select value={location} onChange={handleLocationChange} disabled={(!continent && !group) || (!!continent && !country)}>
         <option value="">All Locations</option>
-        {locations.map(l => <option key={l.value} value={l.value}>{l.value}{typeof l.count==="number"?` (${l.count})`:""}</option>)}
+        {locations.map(l => (
+          <option key={l.value} value={l.value}>
+            {l.label || l.value}{typeof l.count==="number" ? ` (${l.count})` : ""}
+          </option>
+        ))}
       </select>
 
       <button onClick={handleReset}>Reset</button>

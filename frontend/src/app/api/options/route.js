@@ -1,81 +1,118 @@
 // src/app/api/options/route.js
-export const runtime = 'nodejs'; // serve per usare 'pg' su Vercel
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
-import pg from "pg";
+import { createClient } from "@supabase/supabase-js";
 
-const { Pool } = pg;
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-});
+/** === Supabase client (niente pooler PG) === */
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false } }
+);
 
-// cache: scopre se la colonna 'lang' esiste
-let hasLangColumn = null;
-async function ensureSchema() {
-  if (hasLangColumn !== null) return;
-  const q = `
-    select 1
-    from information_schema.columns
-    where table_schema='public' 
-      and table_name='events' 
-      and column_name='lang'
-    limit 1;
-  `;
-  const res = await pool.query(q);
-  hasLangColumn = res.rowCount > 0;
+const ok  = (d) => NextResponse.json(d ?? [], { status: 200 });
+const bad = (m, s = 400) => NextResponse.json({ error: m }, { status: s });
+
+function normLang(v) {
+  const L = String(v || "it").toLowerCase();
+  return (L === "en" || L === "it") ? L : "it";
 }
 
-// costruisce la query in base al type e alla presenza della colonna lang
-function buildSQL(type, lang) {
-  const cols = {
-    groups: "group_event",
-    continents: "continent",
-    locations: "location",
-  };
-  const col = cols[type];
-  if (!col) return null;
-
-  if (hasLangColumn && lang) {
-    return {
-      text: `
-        SELECT DISTINCT ${col} AS value
-        FROM public.events
-        WHERE lower(lang) = lower($1)
-        ORDER BY 1;
-      `,
-      params: [lang],
-    };
-  } else {
-    return {
-      text: `
-        SELECT DISTINCT ${col} AS value
-        FROM public.events
-        ORDER BY 1;
-      `,
-      params: [],
-    };
+/** Dedup client-side e sort per label */
+function uniqSortValueLabel(rows) {
+  const map = new Map();
+  for (const r of rows || []) {
+    const value = String(r.value || "").trim();
+    const label = String(r.label || "").trim();
+    if (value && label) map.set(value + "||" + label, { value, label });
   }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export async function GET(req) {
+  const { searchParams } = new URL(req.url);
+  const type = String(searchParams.get("type") || "").toLowerCase();
+  const lang = normLang(searchParams.get("lang"));
+
+  if (!type) return bad("Missing 'type'");
+
   try {
-    await ensureSchema();
+    if (type === "groups") {
+      // Nella tua tabella: group_event_en, group_event_it (niente base)
+      const { data, error } = await supabase
+        .from("events")
+        .select("group_event_en, group_event_it")
+        .or("group_event_en.not.is.null,group_event_it.not.is.null")
+        .limit(5000);
+      if (error) throw error;
 
-    const url = new URL(req.url);
-    const type = url.searchParams.get("type");
-    const langRaw = url.searchParams.get("lang");
-    const lang = langRaw ? String(langRaw).toLowerCase() : null;
+      const out = (data || []).map(r => {
+        const value = (r.group_event_en || r.group_event_it || "").trim();
+        const label = (lang === "it"
+          ? (r.group_event_it || r.group_event_en || "")
+          : (r.group_event_en || r.group_event_it || "")
+        ).trim();
+        return { value, label };
+      });
 
-    const sql = buildSQL(type, lang);
-    if (!sql) {
-      return NextResponse.json({ error: "Invalid 'type' parameter" }, { status: 400 });
+      return ok(uniqSortValueLabel(out));
     }
 
-    const { rows } = await pool.query(sql.text, sql.params);
-    return NextResponse.json(rows.map(r => r.value));
+    if (type === "continents") {
+      const { data, error } = await supabase
+        .from("events")
+        .select("continent")
+        .not("continent", "is", null)
+        .neq("continent", "")
+        .limit(5000);
+      if (error) throw error;
+
+      const out = (data || []).map(r => {
+        const v = String(r.continent || "").trim();
+        return { value: v, label: v };
+      });
+      return ok(uniqSortValueLabel(out));
+    }
+
+    if (type === "countries") {
+      const { data, error } = await supabase
+        .from("events")
+        .select("country")
+        .not("country", "is", null)
+        .neq("country", "")
+        .limit(5000);
+      if (error) throw error;
+
+      const out = (data || []).map(r => {
+        const v = String(r.country || "").trim();
+        return { value: v, label: v };
+      });
+      return ok(uniqSortValueLabel(out));
+    }
+
+    if (type === "locations") {
+      const { data, error } = await supabase
+        .from("events")
+        .select("location")
+        .not("location", "is", null)
+        .neq("location", "")
+        .limit(5000);
+      if (error) throw error;
+
+      const out = (data || []).map(r => {
+        const v = String(r.location || "").trim();
+        return { value: v, label: v };
+      });
+      return ok(uniqSortValueLabel(out));
+    }
+
+    return bad(`Unsupported 'type': ${type}`);
   } catch (err) {
     console.error("[/api/options] error:", err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal error", detail: String(err?.message || err) },
+      { status: 500 }
+    );
   }
 }
