@@ -1,45 +1,17 @@
-# Node / Next.js
+﻿# === GeoHistory canonical ignore ===
+/backups/
+/backups/**
+*.zip
+*.7z
+*.rar
+# Node / Next / general
 node_modules/
 .next/
-out/
 dist/
-.nextcache/
-coverage/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Env & secrets
+build/
 .env
-.env.*
-!.env.example
-*.local
-*.dev
-*.test
-
-# Editor/OS
-.vscode/
-.idea/
+.env.local
+.env.*.local
+# OS noise
 .DS_Store
 Thumbs.db
-
-# Build artifacts
-*.cache
-*.tmp
-*.swp
-*.lock
-
-# Python (se usi script)
-__pycache__/
-*.pyc
-.venv/
-venv/
-
-# Supabase
-supabase/.temp/
-supabase/.branches/
-supabase/.shadow/
-
-# Misc
-*.sqlite
