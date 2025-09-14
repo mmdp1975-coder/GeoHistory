@@ -1,126 +1,42 @@
+// src/app/page.js
 "use client";
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import FiltersBar from "../components/FiltersBar";
 import DetailsPanel from "../components/DetailsPanel";
 import { getEvents } from "../lib/api";
 import TourControls from "../components/TourControls";
+import TimelineSlider from "../components/TimelineSlider";
 
 const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-/* ===== RangeSlider ===== */
-function RangeSlider({ min, max, start, end, onChange }) {
-  const trackRef = useRef(null);
-  const draggingRef = useRef(null);
-  const range = Math.max(1, (max - min));
-  const clampPct = (pct) => Math.max(0, Math.min(100, pct));
-  const pctToValue = (pct) => Math.round(clamp(min + (pct / 100) * range, min, max));
-  const onDown = (clientX, which) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
-    const pct = clampPct(((clientX - rect.left) / rect.width) * 100);
-    const val = pctToValue(pct);
-    if (which === "start") onChange?.(Math.min(val, end ?? max), end ?? max);
-    else onChange?.(start ?? min, Math.max(val, start ?? min));
-  };
-  const pick = (clientX) => {
-    const rect = trackRef.current.getBoundingClientRect();
-    const sPct = ((start - min) / range) * rect.width;
-    const ePct = ((end - min) / range) * rect.width;
-    const pxS = rect.left + sPct;
-    const pxE = rect.left + ePct;
-    return Math.abs(clientX - pxS) <= Math.abs(clientX - pxE) ? "start" : "end";
-  };
-  return (
-    <>
-      <div
-        ref={trackRef}
-        className="gh-track"
-        role="group"
-        aria-label="Time range"
-        onMouseDown={(e) => {
-          draggingRef.current = pick(e.clientX);
-          onDown(e.clientX, draggingRef.current);
-          const mm = (ev) => onDown(ev.clientX, draggingRef.current);
-          const mu = () => { draggingRef.current = null; window.removeEventListener("mousemove", mm); window.removeEventListener("mouseup", mu); };
-          window.addEventListener("mousemove", mm); window.addEventListener("mouseup", mu); e.preventDefault();
-        }}
-        onTouchStart={(e) => {
-          const t = e.touches[0]; if (!t) return;
-          draggingRef.current = pick(t.clientX);
-          onDown(t.clientX, draggingRef.current);
-          const tm = (ev) => { const tt = ev.touches[0]; if (tt) onDown(tt.clientX, draggingRef.current); };
-          const te = () => { draggingRef.current = null; window.removeEventListener("touchmove", tm); window.removeEventListener("touchend", te); };
-          window.addEventListener("touchmove", tm, { passive: false }); window.addEventListener("touchend", te);
-        }}
-      >
-        <div className="gh-range-fill" style={{ left: `${(start - min) / (max - min) * 100}%`, width: `${Math.max(0, ((end - start) / (max - min)) * 100)}%` }} />
-        <button className="gh-handle" style={{ left: `${(start - min) / (max - min) * 100}%` }} aria-label="Start year" />
-        <button className="gh-handle" style={{ left: `${(end - min) / (max - min) * 100}%` }} aria-label="End year" />
-      </div>
-      <style jsx>{`
-        .gh-track { flex: 1 1 auto; position: relative; height: 8px; background: #e5e7eb; border-radius: 999px; cursor: pointer; user-select: none; touch-action: none; }
-        .gh-range-fill { position: absolute; top: 0; bottom: 0; background: #3b82f6; border-radius: 999px; }
-        .gh-handle { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.2); background: #111827; cursor: grab; }
-      `}</style>
-    </>
-  );
-}
-
 /* ===== Helpers anni + inferenza era ===== */
-function toNum(n) {
-  if (n === 0) return 0;
-  const v = Number(n);
-  return Number.isFinite(v) ? v : undefined;
-}
-
+function toNum(n) { if (n === 0) return 0; const v = Number(n); return Number.isFinite(v) ? v : undefined; }
 const BC_TOKENS_RE = /\b(a\s*\.?\s*c\.?|ante\s+cristo|bc|bce)\b/i;
-
-/** Normalizza 'era' (BC/AD) con fallback se mancante/sbagliata */
 function inferEra(row) {
   const raw = String(row?.era || "").trim().toUpperCase();
   if (raw === "BC" || raw === "AD") return raw;
-
-  const yf = toNum(row?.year_from);
-  const yt = toNum(row?.year_to);
-
-  // 1) Intervallo "al contrario" (tipico dei BC salvati come positivi): from > to
+  const yf = toNum(row?.year_from), yt = toNum(row?.year_to);
   if (yf !== undefined && yt !== undefined && yf > yt) return "BC";
-
-  // 2) Indicatori nel testo (titolo/descrizione)
-  const txt = [
-    row?.event_it, row?.event_en, row?.event,
-    row?.description_it, row?.description_en, row?.description
-  ].filter(Boolean).join(" ");
+  const txt = [row?.event_it,row?.event_en,row?.event,row?.description_it,row?.description_en,row?.description].filter(Boolean).join(" ");
   if (BC_TOKENS_RE.test(txt)) return "BC";
-
-  // 3) Default
   return "AD";
 }
-
-/** Calcola start/end firmati per sort/filtri, usando l'era inferita */
 function getSignedStartEnd(ev) {
   const era = inferEra(ev);
-  const yf = toNum(ev?.year_from);
-  const yt = toNum(ev?.year_to);
-
+  const yf = toNum(ev?.year_from), yt = toNum(ev?.year_to);
   if (yf !== undefined && yt !== undefined) {
-    if (era === "BC") {
-      // BC: numeri più grandi = più antichi → start = -max, end = -min
-      return { s: -Math.max(yf, yt), e: -Math.min(yf, yt), era };
-    } else {
-      return { s: Math.min(yf, yt), e: Math.max(yf, yt), era };
-    }
+    if (era === "BC") return { s: -Math.max(yf, yt), e: -Math.min(yf, yt), era };
+    return { s: Math.min(yf, yt), e: Math.max(yf, yt), era };
   }
   if (yf !== undefined) return { s: (era === "BC" ? -yf : yf), e: (era === "BC" ? -yf : yf), era };
   if (yt !== undefined) return { s: (era === "BC" ? -yt : yt), e: (era === "BC" ? -yt : yt), era };
   return { s: undefined, e: undefined, era };
 }
-
 function getYearRangeFromRows(rows, ABS_MIN, ABS_MAX) {
   let min = +Infinity, max = -Infinity;
   for (const r of rows || []) {
@@ -133,7 +49,6 @@ function getYearRangeFromRows(rows, ABS_MIN, ABS_MAX) {
   if (min > max) [min, max] = [max, min];
   return { min, max };
 }
-
 function normalizeRow(row, langCode) {
   const L = (langCode || "it").toLowerCase();
   const isIt = L === "it";
@@ -148,24 +63,39 @@ function normalizeRow(row, langCode) {
   const lon = ev.longitude ?? ev.lng ?? ev.lon ?? ev.Longitude ?? ev.x ?? null;
   ev.latitude = Number.isFinite(lat) ? lat : (lat != null ? Number(lat) : null);
   ev.longitude = Number.isFinite(lon) ? lon : (lon != null ? Number(lon) : null);
-
   const { s, e, era } = getSignedStartEnd(ev);
-  ev.__start = s;
-  ev.__end = e;
-  ev.__era = era; // era “pulita”/inferita per la UI
+  ev.__start = s; ev.__end = e; ev.__era = era;
   return ev;
 }
 
-function norm(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[’'`"“”„]/g, "'")
-    .replace(/…/g, "...")
-    .replace(/\s+/g, " ").trim();
+/* ===== Search token + alias ===== */
+const ALIASES = {
+  rome: ["rome", "roma"], florence: ["florence", "firenze"], milan: ["milan", "milano"],
+  turin: ["turin", "torino"], venice: ["venice", "venezia"], naples: ["naples", "napoli"],
+  genoa: ["genoa", "genova"], padua: ["padua", "padova"], verona: ["verona"],
+  bologna: ["bologna"], pisa: ["pisa"],
+};
+const normLocal = (s) => String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[’'`"“”„]/g,"'").replace(/…/g,"...").replace(/\s+/g," ").trim();
+const tokenize = (t) => normLocal(t).split(/[^a-z0-9]+/).filter(Boolean);
+const expandAliases = (t) => { const k=normLocal(t); const set=new Set([k]); const ali=ALIASES[k]; if(ali) ali.forEach(a=>set.add(normLocal(a))); return set; };
+function wholeWordMatch(ev, q) {
+  if (!q) return true;
+  const hay = [
+    ev.event, ev.event_it, ev.event_en,
+    ev.title, ev.title_it, ev.title_en,
+    ev.description, ev.description_it, ev.description_en, ev.desc, ev.desc_it, ev.desc_en,
+    ev.group_event, ev.group_event_it, ev.group_event_en,
+    ev.tags, ev.figures, ev.continent, ev.country, ev.location
+  ].filter(Boolean).join(" | ");
+  const hayTokens = new Set(tokenize(hay));
+  const queryTokens = tokenize(q);
+  return queryTokens.every(t => {
+    const aliases = expandAliases(t);
+    for (const a of aliases) if (hayTokens.has(a)) return true;
+    return false;
+  });
 }
 
-/* ===== Pagina ===== */
 export default function Page() {
   const [lang, setLang] = useState((process.env.NEXT_PUBLIC_LANG || "it").toLowerCase());
   const [q, setQ] = useState("");
@@ -190,42 +120,30 @@ export default function Page() {
   const bottomSheetRef = useRef(null);
   const [panOffsetPx, setPanOffsetPx] = useState({ x: 0, y: 0 });
 
-  const computeOffset = useCallback(() => {
-    const isMobile = typeof window !== "undefined" && window.innerWidth <= 1024;
-    if (!isMobile) return { x: 0, y: 0 };
-    const h = (selected && bottomSheetRef.current)
-      ? bottomSheetRef.current.getBoundingClientRect().height
-      : 0;
-    return { x: 0, y: Math.round(h * 0.55) };
-  }, [selected]);
+  const listRef = useMemo(() => (markers.length ? markers : events), [markers, events]);
 
-  const resultsLen = useMemo(() => (markers.length || events.length), [markers.length, events.length]);
-
-  /* ===== FETCH + FILTRI + SORT ===== */
+  /* ===== FETCH + FILTRI + ORDINAMENTO ===== */
   const fetchEventsApply = useCallback(async () => {
-    const baseParams = { lang: lang.toUpperCase(), q, continent, country, location, limit: 10000 };
+    // ⛔️ NON mandiamo più year_start/year_end al backend
+    const baseParams = {
+      lang: (lang || "it").toUpperCase(),
+      q, group, continent, country, location,
+      limit: 20000
+    };
 
-    // 1) bounds reali
-    const pre = await getEvents(baseParams);
-    const preNorm = (pre || []).map(r => normalizeRow(r, lang));
-    const { min: bMin, max: bMax } = getYearRangeFromRows(preNorm, ABS_MIN, ABS_MAX);
-    setBounds({ min: bMin, max: bMax, source: "derived" });
-    setPeriod({ start: bMin, end: bMax });
-
-    // 2) dati + normalizza
     const rows = await getEvents(baseParams);
+
+    console.log("ENH-01 DEBUG — backend rows:", rows?.length ?? 0, {
+      sent: { group, continent, country, location, q }
+    });
+
     let list = (rows || []).map(r => normalizeRow(r, lang));
 
-    // filtro group se presente
-    if (group) {
-      const g = norm(group);
-      list = list.filter(ev => {
-        const fields = [ev.group_event, ev.group_event_it, ev.group_event_en, ev.group, ev.group_it, ev.group_en].map(norm);
-        return fields.some(f => f === g || f.includes(g));
-      });
-    }
+    // search locale
+    if (q) list = list.filter(ev => wholeWordMatch(ev, q));
 
-    // filtro periodo su start/end firmati
+    // filtro temporale SOLO lato client
+    const beforeTime = list.length;
     list = list.filter(ev => {
       const s = ev.__start, e = ev.__end;
       if (s === undefined && e === undefined) return true;
@@ -233,8 +151,10 @@ export default function Page() {
       const to   = (e !== undefined ? e : s);
       return !(to < period.start || from > period.end);
     });
+    console.log("ENH-01 DEBUG — after time filter:", list.length, "(before:", beforeTime, ")",
+      { periodStart: period.start, periodEnd: period.end });
 
-    // === ORDINAMENTO CRONOLOGICO ASC (più antico → più recente) ===
+    // ordina cronologico stabile
     list = list
       .map((it, idx) => ({ it, idx }))
       .sort((A, B) => {
@@ -245,7 +165,7 @@ export default function Page() {
         const ae = a.__end ?? a.__start ?? 0;
         const be = b.__end ?? b.__start ?? 0;
         if (ae !== be) return ae - be;
-        return A.idx - B.idx; // stabilità
+        return A.idx - B.idx;
       })
       .map(x => x.it);
 
@@ -254,9 +174,53 @@ export default function Page() {
     setMarkers(m);
     setSelected(null);
     setFocusEvent(null);
-    setCurrentIndex(-1);
-  }, [lang, q, continent, country, location, group, period.start, period.end]);
 
+    // aggiorna bounds derivati solo se la lista è “sana”
+    if (list.length >= 10) {
+      const { min: bMin, max: bMax } = getYearRangeFromRows(list, ABS_MIN, ABS_MAX);
+      setBounds({ min: bMin, max: bMax, source: "derived" });
+    } else {
+      setBounds(b => ({ ...b, source: "stable" }));
+    }
+
+    console.log("ENH-01 DEBUG — markers:", m.length, "events:", list.length);
+  }, [lang, q, group, continent, country, location, period.start, period.end]);
+
+  // === Auto-apply SOLO dopo interazione utente sulla timeline ===
+  const userTouchedTimeline = useRef(false);
+  const debounceRef = useRef(0);
+
+  const onTimelineChange = useCallback((s, e) => {
+    userTouchedTimeline.current = true;
+    setActivated(true);
+    setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) });
+  }, [bounds.min, bounds.max]);
+
+  useEffect(() => {
+    if (!userTouchedTimeline.current) return; // no fetch al primo render
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchEventsApply();
+      setFitSignal(v => v + 1);
+    }, 250);
+    return () => clearTimeout(debounceRef.current);
+  }, [period.start, period.end, fetchEventsApply]);
+
+  // === Campi numerici Min/Max: marcano come interazione utente ===
+  const onMinInput = (v) => {
+    userTouchedTimeline.current = true;
+    setActivated(true);
+    const val = clamp(parseInt(v || 0, 10), bounds.min, Math.min(bounds.max, period.end));
+    setPeriod(p => ({ ...p, start: val }));
+  };
+  const onMaxInput = (v) => {
+    userTouchedTimeline.current = true;
+    setActivated(true);
+    const val = clamp(parseInt(v || 0, 10), Math.max(bounds.min, period.start), bounds.max);
+    setPeriod(p => ({ ...p, end: val }));
+  };
+
+  // === Applica dai filtri (pulsante Apply & Close) ===
   const onApplyAndClose = useCallback(async () => {
     setActivated(true);
     await fetchEventsApply();
@@ -264,24 +228,19 @@ export default function Page() {
     setFiltersOpen(false);
   }, [fetchEventsApply]);
 
-  const onResetRange = useCallback(() => {
-    setActivated(false);
-    setBounds({ min: ABS_MIN, max: ABS_MAX, source: "default" });
-    setPeriod({ start: ABS_MIN, end: ABS_MAX });
-    setEvents([]); setMarkers([]); setSelected(null); setFocusEvent(null);
-    setCurrentIndex(-1);
-    setIsPlaying(false);
-    setIsPaused(false);
-  }, []);
-
-  /* ===== Tour controls ===== */
-  const [currentIndex, setCurrentIndex] = useState(-1);
+  /* ======== Tour ======== */
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused]   = useState(false);
+  const [isPaused,  setIsPaused ] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(-1);
   const [resumeSignal, setResumeSignal] = useState(0);
-  const [speakSignal, setSpeakSignal]   = useState(0);
+  const [speakSignal,  setSpeakSignal ] = useState(0);
 
-  const listRef = useMemo(() => (markers.length ? markers : events), [markers, events]);
+  const computeOffset = useCallback(() => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth <= 1024;
+    if (!isMobile) return { x: 0, y: 0 };
+    const h = (selected && bottomSheetRef.current) ? bottomSheetRef.current.getBoundingClientRect().height : 0;
+    return { x: 0, y: Math.round(h * 0.55) };
+  }, [selected, bottomSheetRef]);
 
   const setByIndex = useCallback((idx) => {
     const list = listRef;
@@ -297,7 +256,6 @@ export default function Page() {
   const onPlay = useCallback(() => {
     const list = listRef;
     if (!list.length) return;
-
     if (isPaused && selected) {
       setIsPaused(false);
       setIsPlaying(true);
@@ -318,8 +276,6 @@ export default function Page() {
   const onNext  = useCallback(() => { const list=listRef; if (!list.length) return; const i=(currentIndex<0?0:currentIndex+1); setIsPaused(false); setIsPlaying(true); setByIndex(i); setTimeout(()=>setSpeakSignal(s=>s+1),0); }, [listRef,currentIndex,setByIndex]);
   const onPrev  = useCallback(() => { const list=listRef; if (!list.length) return; const i=(currentIndex<0?0:currentIndex-1); setIsPaused(false); setIsPlaying(true); setByIndex(i); setTimeout(()=>setSpeakSignal(s=>s+1),0); }, [listRef,currentIndex,setByIndex]);
 
-  useEffect(() => { if (!activated || listRef.length === 0) { setIsPlaying(false); setIsPaused(false); } }, [activated, listRef.length]);
-
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   return (
@@ -330,30 +286,42 @@ export default function Page() {
         </div>
       </header>
 
+      {/* ===== TIMELINE (Min, Slider, Max, Reset su UNA riga) ===== */}
       <div className="gh-time">
         <label className="gh-mm">
           <span>Min</span>
-          <input type="number" value={period.start} onChange={(e) => {
-            const v = clamp(parseInt(e.target.value || 0, 10), bounds.min, Math.min(bounds.max, period.end));
-            setPeriod(p => ({ ...p, start: v }));
-          }} />
+          <input type="number" value={period.start} onChange={(e) => onMinInput(e.target.value)} />
         </label>
 
-        <RangeSlider
-          min={bounds.min} max={bounds.max}
-          start={period.start} end={period.end}
-          onChange={(s, e) => setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) })}
+        <TimelineSlider
+          min={bounds.min}
+          max={bounds.max}
+          start={period.start}
+          end={period.end}
+          onChange={onTimelineChange}
         />
 
         <label className="gh-mm">
           <span>Max</span>
-          <input type="number" value={period.end} onChange={(e) => {
-            const v = clamp(parseInt(e.target.value || 0, 10), Math.max(bounds.min, period.start), bounds.max);
-            setPeriod(p => ({ ...p, end: v }));
-          }} />
+          <input type="number" value={period.end} onChange={(e) => onMaxInput(e.target.value)} />
         </label>
 
-        <button onClick={onResetRange} className="gh-btn-reset">Reset Range</button>
+        <button
+          onClick={() => {
+            // reset “pulito”: niente fetch finché non tocchi di nuovo la timeline
+            userTouchedTimeline.current = false;
+            setActivated(false);
+            const NOW = new Date().getFullYear();
+            setBounds({ min: -5000, max: NOW, source: "default" });
+            setPeriod({ start: -5000, end: NOW });
+            setEvents([]); setMarkers([]); setSelected(null); setFocusEvent(null);
+            setCurrentIndex(-1); setIsPlaying(false); setIsPaused(false);
+          }}
+          className="gh-btn-reset"
+          title="Ripristina dominio e range iniziali"
+        >
+          Reset Range
+        </button>
       </div>
 
       <div className="gh-main">
@@ -390,7 +358,28 @@ export default function Page() {
               <div className="gh-sheet-title">Filters</div>
               <button className="gh-close" onClick={onApplyAndClose}>Apply & Close</button>
             </div>
+
             <div className="gh-sheet-body">
+              {/* Card timeline (solo visiva) */}
+              <div className="gh-card">
+                <div className="gh-card-title">Timeline (read-only)</div>
+                <div className="gh-card-meta">
+                  <span>{period.start < 0 ? `${Math.abs(period.start)} a.C.` : `${period.start} d.C.`}</span>
+                  <span>→</span>
+                  <span>{period.end < 0 ? `${Math.abs(period.end)} a.C.` : `${period.end} d.C.`}</span>
+                </div>
+                <div className="gh-mini-track">
+                  <div
+                    className="gh-mini-fill"
+                    style={{
+                      left: `${(100*(period.start - bounds.min))/(bounds.max - bounds.min)}%`,
+                      width:`${(100*(period.end   - bounds.min))/(bounds.max - bounds.min) - (100*(period.start - bounds.min))/(bounds.max - bounds.min)}%`
+                    }}
+                  />
+                </div>
+                <div className="gh-note">Card informativa: lo stato è condiviso con lo slider in alto.</div>
+              </div>
+
               <FiltersBar
                 lang={lang} setLang={setLang}
                 q={q} setQ={setQ}
@@ -411,12 +400,12 @@ export default function Page() {
         <div className="inner"><DetailsPanel event={selected} lang={lang} /></div>
       </div>
 
-      {(activated && resultsLen > 0) && (
+      {(activated && (markers.length || events.length)) && (
         <TourControls
           lang={(lang || "it").toLowerCase() === "en" ? "en" : "it"}
           isPlaying={isPlaying}
           selectedEvent={selected}
-          hasResults={resultsLen > 0}
+          hasResults={(markers.length || events.length) > 0}
           resumeSignal={resumeSignal}
           speakSignal={speakSignal}
           onPlay={onPlay}
@@ -425,6 +414,34 @@ export default function Page() {
           onNext={onNext}
         />
       )}
+
+      <style jsx>{`
+        .gh-time {
+          position: sticky; top: 0; z-index: 40;
+          display: grid; grid-template-columns: 140px 1fr 140px 120px;
+          gap: 10px; align-items: center;
+          padding: 10px 14px;
+          background: rgba(255,255,255,0.9);
+          backdrop-filter: saturate(180%) blur(6px);
+          border-bottom: 1px solid #e5e7eb;
+          width: 100%; min-width: 0; overflow: hidden;
+        }
+        .gh-mm { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; min-width: 0; }
+        .gh-mm span { font-size: 12px; font-weight: 700; color: #6b7280; }
+        .gh-mm input {
+          width: 100%; height: 40px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;
+          background: #fff; outline: none;
+        }
+        .gh-mm input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+        .gh-btn-reset { height: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-weight: 700; cursor: pointer; }
+        .gh-btn-reset:hover { background: #f9fafb; }
+
+        .gh-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; background: #fff; margin-bottom: 12px; }
+        .gh-card-title { font-weight: 700; color: #374151; margin-bottom: 6px; }
+        .gh-card-meta { display: flex; gap: 8px; align-items: baseline; color: #4b5563; font-size: 14px; }
+        .gh-mini-track { position: relative; height: 8px; border-radius: 999px; background: #e5e7eb; margin-top: 8px; overflow: hidden; }
+        .gh-mini-fill { position: absolute; top: 0; bottom: 0; background: #3b82f6; }
+      `}</style>
     </div>
   );
 }

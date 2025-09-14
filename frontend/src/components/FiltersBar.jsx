@@ -1,7 +1,15 @@
+// src/components/FiltersBar.jsx
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { getOptions } from "../lib/api";
+
+/**
+ * Modifiche principali:
+ * - RIMOSSE tutte le occorrenze di year_start/year_end nelle getOptions(...)  ⟶ niente conteggi/filtri errati lato backend.
+ * - NIENTE conteggi nelle label delle option (mostriamo solo il nome).
+ * - Debounce per la search invariato; API dei prop invariata.
+ */
 
 export default function FiltersBar({
   lang, setLang,
@@ -10,7 +18,7 @@ export default function FiltersBar({
   country, setCountry,
   location, setLocation,
   group, setGroup,
-  period,                    // { start, end }
+  period,                    // { start, end }  (non usato qui per le opzioni)
   onFiltersChanged
 }) {
   const [continents, setContinents] = useState([]);
@@ -20,16 +28,23 @@ export default function FiltersBar({
 
   const notify = useCallback((kind) => onFiltersChanged?.(kind), [onFiltersChanged]);
 
-  const ys = period?.start ?? null;
-  const ye = period?.end ?? null;
+  /* =============== Debounce per la search =============== */
+  const qRef = useRef(q);
+  useEffect(() => { qRef.current = q; }, [q]);
+  useEffect(() => {
+    const id = setTimeout(() => { notify("q"); }, 350);
+    return () => clearTimeout(id);
+  }, [q, notify]);
 
-  // Bootstrap iniziale
+  /* ================= BOOTSTRAP =================
+     Carico continents e groups SENZA year_start/year_end.
+  */
   useEffect(() => {
     (async () => {
       try {
         const [cts, grs] = await Promise.all([
-          getOptions("continents", { year_start: ys, year_end: ye }),
-          getOptions("groups", { lang: (lang || "it").toUpperCase(), year_start: ys, year_end: ye }),
+          getOptions("continents", {}),
+          getOptions("groups",     { lang: (lang || "it").toUpperCase() }),
         ]);
         setContinents(cts || []);
         setGroups(grs || []);
@@ -38,7 +53,7 @@ export default function FiltersBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Aggiorna GRUPPI quando cambia lingua/filtri/periodo
+  /* ======== AGGIORNA GRUPPI SU CAMBI LINGUA/GEOGRAFIA ======== */
   useEffect(() => {
     (async () => {
       try {
@@ -47,31 +62,29 @@ export default function FiltersBar({
           continent: continent || undefined,
           country:   country   || undefined,
           location:  location  || undefined,
-          year_start: ys, year_end: ye,
+          // niente year_start / year_end
+          q: qRef.current || undefined,
         });
         setGroups(grs || []);
       } catch (e) { console.error(e); }
     })();
-  }, [lang, continent, country, location, ys, ye]);
+  }, [lang, continent, country, location]);
 
-  // Se cambia il PERIODO o i filtri gerarchici → ricarico liste
+  /* ======== RICARICA LISTE GERARCHICHE QUANDO CAMBIANO I PADRI ======== */
   useEffect(() => {
     (async () => {
       try {
         const [cts, cys, locs] = await Promise.all([
-          getOptions("continents", { group: group || undefined, year_start: ys, year_end: ye }),
-          getOptions("countries",  { continent: continent || undefined, group: group || undefined, year_start: ys, year_end: ye }),
-          getOptions("locations",  { continent: continent || undefined, country: country || undefined, group: group || undefined, year_start: ys, year_end: ye }),
+          getOptions("continents", { group: group || undefined, q: qRef.current || undefined }),
+          getOptions("countries",  { continent: continent || undefined, group: group || undefined, q: qRef.current || undefined }),
+          getOptions("locations",  { continent: continent || undefined, country: country || undefined, group: group || undefined, q: qRef.current || undefined }),
         ]);
-        setContinents(cts || []);
-        setCountries(cys || []);
-        setLocations(locs || []);
+        setContinents(cts || []); setCountries(cys || []); setLocations(locs || []);
       } catch (e) { console.error(e); }
     })();
-  }, [ys, ye, continent, country, group]);
+  }, [continent, country, group]);
 
-  // --- HANDLERS ---
-
+  /* ================= HANDLERS ================= */
   const handleLangChange = async (e) => {
     const newLang = e.target.value;
     setLang(newLang);
@@ -81,7 +94,7 @@ export default function FiltersBar({
         continent: continent || undefined,
         country:   country   || undefined,
         location:  location  || undefined,
-        year_start: ys, year_end: ye,
+        q: qRef.current || undefined,
       });
       setGroups(grs || []);
     } catch (err) { console.error(err); }
@@ -91,14 +104,14 @@ export default function FiltersBar({
   const handleGroupChange = async (e) => {
     const newGroup = e.target.value;
     setGroup(newGroup);
-    // Reset gerarchia geo per contestualizzare sul group
+    // reset gerarchia geo
     setContinent(""); setCountry(""); setLocation("");
     try {
       const [cts, cys, locs, grs] = await Promise.all([
-        getOptions("continents", { group: newGroup || undefined, year_start: ys, year_end: ye }),
-        getOptions("countries",  { group: newGroup || undefined, year_start: ys, year_end: ye }),
-        getOptions("locations",  { group: newGroup || undefined, year_start: ys, year_end: ye }),
-        getOptions("groups",     { lang: (lang || "it").toUpperCase(), group: newGroup || undefined, year_start: ys, year_end: ye }),
+        getOptions("continents", { group: newGroup || undefined, q: qRef.current || undefined }),
+        getOptions("countries",  { group: newGroup || undefined, q: qRef.current || undefined }),
+        getOptions("locations",  { group: newGroup || undefined, q: qRef.current || undefined }),
+        getOptions("groups",     { lang: (lang || "it").toUpperCase(), group: newGroup || undefined, q: qRef.current || undefined }),
       ]);
       setContinents(cts || []); setCountries(cys || []); setLocations(locs || []); setGroups(grs || []);
     } catch (err) { console.error(err); }
@@ -111,9 +124,9 @@ export default function FiltersBar({
     setCountry(""); setLocation("");
     try {
       const [cys, locs, grs] = await Promise.all([
-        getOptions("countries", { continent: newCont || undefined, group: group || undefined, year_start: ys, year_end: ye }),
-        getOptions("locations", { continent: newCont || undefined, group: group || undefined, year_start: ys, year_end: ye }),
-        getOptions("groups",    { lang: (lang || "it").toUpperCase(), continent: newCont || undefined, year_start: ys, year_end: ye }),
+        getOptions("countries", { continent: newCont || undefined, group: group || undefined, q: qRef.current || undefined }),
+        getOptions("locations", { continent: newCont || undefined, group: group || undefined, q: qRef.current || undefined }),
+        getOptions("groups",    { lang: (lang || "it").toUpperCase(), continent: newCont || undefined, q: qRef.current || undefined }),
       ]);
       setCountries(cys || []); setLocations(locs || []); setGroups(grs || []);
     } catch (err) { console.error(err); }
@@ -126,8 +139,8 @@ export default function FiltersBar({
     setLocation("");
     try {
       const [locs, grs] = await Promise.all([
-        getOptions("locations", { continent: continent || undefined, country: newCty || undefined, group: group || undefined, year_start: ys, year_end: ye }),
-        getOptions("groups",    { lang: (lang || "it").toUpperCase(), continent: continent || undefined, country: newCty || undefined, year_start: ys, year_end: ye }),
+        getOptions("locations", { continent: continent || undefined, country: newCty || undefined, group: group || undefined, q: qRef.current || undefined }),
+        getOptions("groups",    { lang: (lang || "it").toUpperCase(), continent: continent || undefined, country: newCty || undefined, q: qRef.current || undefined }),
       ]);
       setLocations(locs || []); setGroups(grs || []);
     } catch (err) { console.error(err); }
@@ -143,22 +156,25 @@ export default function FiltersBar({
         continent: continent || undefined,
         country:   country   || undefined,
         location:  newLoc    || undefined,
-        year_start: ys, year_end: ye,
+        q: qRef.current || undefined,
       });
       setGroups(grs || []);
     } catch (err) { console.error(err); }
     notify("location");
   };
 
-  const handleSearchChange = (e) => { setQ(e.target.value); notify("q"); };
+  const handleSearchChange = (e) => {
+    setQ(e.target.value);
+    // la notify la fa il debounce
+  };
 
   const handleReset = async () => {
     const baseLang = (process.env.NEXT_PUBLIC_LANG || "it").toLowerCase();
     setLang(baseLang); setQ(""); setGroup(""); setContinent(""); setCountry(""); setLocation("");
     try {
       const [cts, grs] = await Promise.all([
-        getOptions("continents", { year_start: ys, year_end: ye }),
-        getOptions("groups",     { lang: baseLang.toUpperCase(), year_start: ys, year_end: ye }),
+        getOptions("continents", {}),
+        getOptions("groups",     { lang: baseLang.toUpperCase() }),
       ]);
       setContinents(cts || []); setCountries([]); setLocations([]); setGroups(grs || []);
     } catch (err) { console.error(err); }
@@ -167,54 +183,201 @@ export default function FiltersBar({
 
   return (
     <div className="gh-filters">
-      <select value={lang} onChange={handleLangChange}>
-        <option value="it">Italian</option>
-        <option value="en">English</option>
-      </select>
+      <div className="wrap">
+        <div className="top">
+          <h2>Filters</h2>
+          <button type="button" className="btn" onClick={handleReset}>Reset</button>
+        </div>
 
-      <input type="text" placeholder="Search..." value={q} onChange={handleSearchChange} />
+        <div className="stack">
+          {/* Language */}
+          <div className="card">
+            <label className="label">Language</label>
+            <select aria-label="Language" className="control" value={lang} onChange={handleLangChange}>
+              <option value="it">Italian</option>
+              <option value="en">English</option>
+            </select>
+          </div>
 
-      {/* Group Event - PRIMO */}
-      <select value={group} onChange={handleGroupChange}>
-        <option value="">All Group Events</option>
-        {groups.map(g => (
-          <option key={g.value} value={g.value}>
-            {g.label || g.value}{typeof g.count==="number" ? ` (${g.count})` : ""}
-          </option>
-        ))}
-      </select>
+          {/* Search */}
+          <div className="card">
+            <label className="label">Search</label>
+            <input
+              aria-label="Search"
+              type="text"
+              placeholder="Type to search…"
+              className="control"
+              value={q}
+              onChange={handleSearchChange}
+            />
+            <div className="help">Filter by title/description/tags, case & accent-insensitive.</div>
+          </div>
 
-      {/* Continent */}
-      <select value={continent} onChange={handleContinentChange}>
-        <option value="">All Continents</option>
-        {continents.map(c => (
-          <option key={c.value} value={c.value}>
-            {c.label || c.value}{typeof c.count==="number" ? ` (${c.count})` : ""}
-          </option>
-        ))}
-      </select>
+          {/* Group Event */}
+          <div className="card">
+            <label className="label">Group Event</label>
+            <select aria-label="Group Event" className="control" value={group} onChange={handleGroupChange}>
+              <option value="">All Group Events</option>
+              {groups.map(g => (
+                <option key={g.value} value={g.value}>
+                  {/* SOLO il nome, niente conteggio */}
+                  {g.label || g.value}
+                </option>
+              ))}
+            </select>
+          </div>
 
-      {/* Country */}
-      <select value={country} onChange={handleCountryChange} disabled={!continent && !group}>
-        <option value="">All Countries</option>
-        {countries.map(c => (
-          <option key={c.value} value={c.value}>
-            {c.label || c.value}{typeof c.count==="number" ? ` (${c.count})` : ""}
-          </option>
-        ))}
-      </select>
+          {/* Geography (raggruppata) */}
+          <div className="card">
+            <div className="geoHeader">Geography</div>
+            <div className="geoGrid">
+              <div className="geoField">
+                <label className="label">Continent</label>
+                <select
+                  aria-label="Continent"
+                  className="control"
+                  value={continent}
+                  onChange={handleContinentChange}
+                >
+                  <option value="">All Continents</option>
+                  {continents.map(c => (
+                    <option key={c.value} value={c.value}>
+                      {c.label || c.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      {/* Location */}
-      <select value={location} onChange={handleLocationChange} disabled={(!continent && !group) || (!!continent && !country)}>
-        <option value="">All Locations</option>
-        {locations.map(l => (
-          <option key={l.value} value={l.value}>
-            {l.label || l.value}{typeof l.count==="number" ? ` (${l.count})` : ""}
-          </option>
-        ))}
-      </select>
+              <div className="geoField">
+                <label className="label">Country</label>
+                <select
+                  aria-label="Country"
+                  className="control"
+                  value={country}
+                  onChange={handleCountryChange}
+                  disabled={!continent}
+                >
+                  <option value="">All Countries</option>
+                  {countries.map(c => (
+                    <option key={c.value} value={c.value}>
+                      {c.label || c.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-      <button onClick={handleReset}>Reset</button>
+              <div className="geoField">
+                <label className="label">Location</label>
+                <select
+                  aria-label="Location"
+                  className="control"
+                  value={location}
+                  onChange={handleLocationChange}
+                  disabled={!country}
+                >
+                  <option value="">All Locations</option>
+                  {locations.map(l => (
+                    <option key={l.value} value={l.value}>
+                      {l.label || l.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ====== STYLES (scoped) ====== */}
+      <style jsx>{`
+        .gh-filters {
+          position: sticky;
+          top: 0;
+          z-index: 30;
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: saturate(180%) blur(6px);
+          -webkit-backdrop-filter: saturate(180%) blur(6px);
+          border-bottom: 1px solid #e5e7eb;
+        }
+        .wrap {
+          max-width: 820px;
+          margin: 0 auto;
+          padding: 10px 14px 16px;
+        }
+        .top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 12px;
+        }
+        .top h2 {
+          font-size: 20px;
+          line-height: 1.2;
+          margin: 0;
+          color: #1f2937;
+          font-weight: 800;
+          letter-spacing: 0.2px;
+        }
+        .btn {
+          height: 40px;
+          padding: 0 14px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          background: #ffffff;
+          font-size: 14px;
+          font-weight: 600;
+          color: #374151;
+          box-shadow: 0 1px 1px rgba(0,0,0,0.04);
+          transition: box-shadow .15s ease, background .15s ease;
+          cursor: pointer;
+        }
+        .btn:hover { background: #f9fafb; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+        .stack { display: grid; grid-template-columns: 1fr; gap: 14px; }
+
+        .card {
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          padding: 12px 14px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+          transition: box-shadow .18s ease, transform .18s ease;
+        }
+        .card:hover { box-shadow: 0 6px 18px rgba(16,24,40,0.06); }
+
+        .label {
+          display: block;
+          margin-bottom: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #6b7280;
+          letter-spacing: .2px;
+        }
+        .help {
+          margin-top: 6px;
+          font-size: 11px;
+          color: #9ca3af;
+        }
+        .control {
+          width: 100%;
+          height: 44px;
+          padding: 8px 12px;
+          font-size: 14px;
+          color: #111827;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          background: #fff;
+          outline: none;
+          box-shadow: 0 0 0 0 rgba(59,130,246,0);
+          transition: border-color .15s ease, box-shadow .15s ease;
+          appearance: none;
+        }
+        .control:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+        .control:disabled { opacity: .55; background: #f9fafb; cursor: not-allowed; }
+
+        .geoHeader { font-weight: 700; font-size: 14px; color: #374151; margin: 0 0 8px 0; }
+        .geoGrid   { display: grid; grid-template-columns: 1fr; gap: 10px; }
+      `}</style>
     </div>
   );
 }
