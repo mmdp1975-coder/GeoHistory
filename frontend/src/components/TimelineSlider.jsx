@@ -9,12 +9,19 @@ const stepForLevel = (level) => (level === 0 ? 1000 : level === 1 ? 100 : 10); /
 const levelForSpan = (span) => (span >= 4000 ? 0 : span >= 400 ? 1 : 2);
 const fmt = (y) => (y < 0 ? `${Math.abs(y)} a.C.` : `${y} d.C.`);
 
-export default function TimelineSlider({ min, max, start, end, onChange, compact = false }) {
+/**
+ * Props:
+ * - min, max         → bounds attuali (dominio visibile della timeline)
+ * - start, end       → range selezionato dentro i bounds
+ * - onChange(s,e)    → modifica del range selezionato
+ * - onWiden?()       → richiesta di allargare i bounds (dominio) — se non fornita, fallback: allarga il range
+ * - compact          → stile compatto (mobile)
+ */
+export default function TimelineSlider({ min, max, start, end, onChange, onWiden, compact = false }) {
   const trackRef = useRef(null);
   const [level, setLevel] = useState(levelForSpan(Math.max(1, end - start)));
   useEffect(() => setLevel(levelForSpan(Math.max(1, end - start))), [start, end]);
 
-  // anti-flash: nascondi finché non è montato
   const [ready, setReady] = useState(false);
   useEffect(() => { setReady(true); }, []);
 
@@ -36,7 +43,7 @@ export default function TimelineSlider({ min, max, start, end, onChange, compact
   }, [min, max, level]);
 
   /* drag */
-  const dragging = useRef(null); // "start" | "end" | "move"
+  const dragging = useRef(null);
   const nearerHandle = (clientX) => {
     const sx = pct(start), ex = pct(end);
     const r = trackRef.current.getBoundingClientRect();
@@ -48,14 +55,15 @@ export default function TimelineSlider({ min, max, start, end, onChange, compact
     const val = valFromX(clientX); if (val == null) return;
     const st = stepForLevel(level);
     if (which === "start") {
-      const s = clamp(val, min, end);
+      const s = Math.min(Math.max(val, min), end);
       const e = Math.max(s + st, end);
       onChange?.(s, e);
     } else if (which === "end") {
-      const e = clamp(val, start, max);
+      const e = Math.max(Math.min(val, max), start);
       const s = Math.min(e - st, start);
       onChange?.(s, e);
     } else {
+      // drag su track con SHIFT → pan dell'intervallo
       const mid = (start + end) / 2;
       const dx = val - mid;
       let s = start + dx, e = end + dx;
@@ -81,84 +89,49 @@ export default function TimelineSlider({ min, max, start, end, onChange, compact
     return () => { window.removeEventListener("touchmove", tm); window.removeEventListener("touchend", te); };
   }, [handleAt]);
 
-  /* zoom */
-  const zoom = (dir, pivot = (start + end) / 2) => {
+  /* Allarga DOMINIO (se onWiden) altrimenti allarga range */
+  const widen = () => {
+    if (typeof onWiden === "function") { onWiden(); return; }
+    // fallback: allarga il range del 25% attorno al centro
+    const factor = 1.25;
     const st = stepForLevel(level);
-    const next = clamp(level + dir, 0, 2);
-    if (next === level) return;
-    const factor = dir > 0 ? 0.5 : 2;
-    const half = ((end - start) / 2) * factor;
-    let s = Math.round((pivot - half) / st) * st;
-    let e = Math.round((pivot + half) / st) * st;
+    const c = (start + end) / 2;
+    let half = ((end - start) / 2) * factor;
+    let s = Math.round((c - half) / st) * st;
+    let e = Math.round((c + half) / st) * st;
     if (e <= s) e = s + st;
-    onChange?.(clamp(s, min, max), clamp(e, min, max));
+    s = clamp(s, min, max); e = clamp(e, min, max);
+    if (e - s < st) e = Math.min(max, s + st);
+    onChange?.(s, e);
   };
-  const onWheel = (e) => {
-    if (!trackRef.current) return;
-    e.preventDefault();
-    const r = trackRef.current.getBoundingClientRect();
-    const pivotVal = valFromX(e.clientX ?? (r.left + r.width / 2));
-    e.deltaY < 0 ? zoom(+1, pivotVal ?? ((start + end) / 2)) : zoom(-1, pivotVal ?? ((start + end) / 2));
-  };
+
+  const onWheel = (e) => { e.preventDefault(); widen(); };
   const onKey = (e) => {
     const st = stepForLevel(level);
     if (e.key === "ArrowRight") {
-      if (e.shiftKey) onChange?.(start, clamp(end + st, start + st, max));
-      else if (e.altKey) onChange?.(clamp(start + st, min, end - st), end);
-      else {
-        const s2 = clamp(start + st, min, max - st);
-        const e2 = clamp(end + st, s2 + st, max);
-        onChange?.(s2, e2);
-      }
+      const width = end - start;
+      const s2 = Math.min(Math.max(start + st, min), max - width);
+      const e2 = Math.min(s2 + width, max);
+      onChange?.(s2, e2);
       e.preventDefault();
     } else if (e.key === "ArrowLeft") {
-      if (e.shiftKey) onChange?.(start, clamp(end - st, start + st, max));
-      else if (e.altKey) onChange?.(clamp(start - st, min, end - st), end);
-      else {
-        const e2 = clamp(end - st, min + st, max);
-        const s2 = clamp(start - st, min, e2 - st);
-        onChange?.(s2, e2);
-      }
+      const width = end - start;
+      const s2 = Math.max(Math.min(start - st, max - st), min);
+      const e2 = Math.min(s2 + width, max);
+      onChange?.(s2, e2);
       e.preventDefault();
-    }
+    } else if (e.key === "+") { widen(); e.preventDefault(); }
   };
 
   /* UI sizes */
-  const trackH = compact ? 52 : 56;
-  const fillH  = compact ? 14 : (level === 0 ? 12 : level === 1 ? 14 : 18);
-  const dot    = compact ? 26 : 24;
-
-  /* pan bar solo desktop */
-  const showPan = !compact;
-  const scrollRef = useRef(null);
-  const dragPan = useRef(false);
-  const winW = Math.max(1, end - start);
-  const domW = Math.max(1, max - min);
-  const thumbLeft = (start - min) / domW * 100;
-  const thumbW = winW / domW * 100;
-  const panTo = (clientX) => {
-    if (!scrollRef.current) return;
-    const r = scrollRef.current.getBoundingClientRect();
-    const p = clamp((clientX - r.left) / r.width, 0, 1);
-    const raw = min + p * (max - min) - winW * 0.5;
-    const s = clamp(raw, min, max - winW), e = s + winW;
-    const st = stepForLevel(level);
-    const q = (x) => Math.round(x / st) * st;
-    let S = q(s), E = q(e); if (E <= S) E = S + st;
-    onChange?.(S, E);
-  };
-  useEffect(() => {
-    if (!showPan) return;
-    const mm = (ev) => { if (dragPan.current) panTo(ev.clientX); };
-    const mu = () => { dragPan.current = false; };
-    window.addEventListener("mousemove", mm);
-    window.addEventListener("mouseup", mu);
-    return () => { window.removeEventListener("mousemove", mm); window.removeEventListener("mouseup", mu); };
-  }, [showPan, min, max, start, end, level]);
+  const trackH = compact ? 48 : 56;
+  const fillH  = compact ? 12 : (level === 0 ? 12 : level === 1 ? 14 : 18);
+  const dot    = compact ? 24 : 24;
 
   return (
     <div className={`tl ${ready ? "ready" : ""}`} onWheel={onWheel}>
-      <button className="zm" aria-label="Zoom out" title="Zoom out" onClick={() => zoom(-1)}>−</button>
+      {/* SINISTRA: + allarga dominio */}
+      <button className="zm" aria-label="Allarga visibilità" title="Allarga visibilità" onClick={widen}>+</button>
 
       <div
         className="track"
@@ -210,27 +183,18 @@ export default function TimelineSlider({ min, max, start, end, onChange, compact
         </div>
       </div>
 
-      <button className="zm" aria-label="Zoom in" title="Zoom in" onClick={() => zoom(+1)}>+</button>
-
-      {showPan && (
-        <div className="pan">
-          <button className="pb" onClick={() => onChange?.(clamp(start - stepForLevel(level), min, max - winW), clamp(end - stepForLevel(level), min + winW, max))}>«</button>
-          <div className="ptr" ref={scrollRef} onMouseDown={(e) => { panTo(e.clientX); dragPan.current = true; }}>
-            <div className="pth" style={{ left: `${thumbLeft}%`, width: `${thumbW}%` }} onMouseDown={(e)=>{e.stopPropagation(); dragPan.current=true;}} />
-          </div>
-          <button className="pb" onClick={() => onChange?.(clamp(start + stepForLevel(level), min, max - winW), clamp(end + stepForLevel(level), min + winW, max))}>»</button>
-        </div>
-      )}
+      {/* DESTRA: + allarga dominio */}
+      <button className="zm" aria-label="Allarga visibilità" title="Allarga visibilità" onClick={widen}>+</button>
 
       <style jsx>{`
         .tl { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; gap: 8px; min-width: 0; visibility: hidden; }
-        .tl.ready { visibility: visible; } /* anti-flash */
+        .tl.ready { visibility: visible; }
 
         .zm {
-          height: 40px; width: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
+          height: 36px; width: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
         }
         .track {
-          position: relative; min-height: 52px; display: flex; align-items: center; user-select: none; outline: none; overflow: hidden;
+          position: relative; min-height: 48px; display: flex; align-items: center; user-select: none; outline: none; overflow: hidden;
         }
         .track::before { content:""; position:absolute; left:0; right:0; top:50%; height:8px; transform:translateY(-50%); background:#e5e7eb; border-radius:999px; }
         .fill { position:absolute; border-radius:999px; background:#3b82f6; }
@@ -240,20 +204,13 @@ export default function TimelineSlider({ min, max, start, end, onChange, compact
         .tick.maj { background:#94a3b8; height:20px; }
         .tick .lbl { position:absolute; bottom:22px; transform:translate(-50%,0); font-size:11px; color:#6b7280; background:rgba(255,255,255,.85); padding:0 4px; border-radius:6px; white-space:nowrap; }
 
-        .pan { grid-column:1 / -1; display:grid; grid-template-columns: 40px 1fr 40px; align-items:center; gap:8px; margin-top:6px; }
-        .pb  { height:32px; width:40px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-weight:700; cursor:pointer; }
-        .ptr { position:relative; height:10px; border-radius:999px; background:#e5e7eb; overflow:hidden; cursor:pointer; }
-        .pth { position:absolute; top:0; bottom:0; background:#93c5fd; border:1px solid #3b82f6; border-radius:999px; cursor:grab; touch-action:none; }
-
-        /* --- MOBILE TWEAKS --- */
         @media (max-width: 768px) {
           .tl { gap: 6px; }
-          .zm { height: 38px; width: 38px; }
-          .track { min-height: 56px; }
+          .zm { height: 34px; width: 38px; }
+          .track { min-height: 46px; }
           .tick .lbl { font-size: 10px; bottom: 20px; }
         }
       `}</style>
     </div>
   );
 }
-
