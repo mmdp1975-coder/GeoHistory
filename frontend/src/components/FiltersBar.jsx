@@ -6,7 +6,7 @@ import { getOptions } from "../lib/api";
 
 /**
  * Modifiche principali:
- * - RIMOSSE tutte le occorrenze di year_start/year_end nelle getOptions(...)  ⟶ niente conteggi/filtri errati lato backend.
+ * - RIMOSSE tutte le occorrenze di year_start/year_end nelle getOptions(...)
  * - NIENTE conteggi nelle label delle option (mostriamo solo il nome).
  * - Debounce per la search invariato; API dei prop invariata.
  */
@@ -18,7 +18,7 @@ export default function FiltersBar({
   country, setCountry,
   location, setLocation,
   group, setGroup,
-  period,                    // { start, end }  (non usato qui per le opzioni)
+  period,
   onFiltersChanged
 }) {
   const [continents, setContinents] = useState([]);
@@ -36,9 +36,7 @@ export default function FiltersBar({
     return () => clearTimeout(id);
   }, [q, notify]);
 
-  /* ================= BOOTSTRAP =================
-     Carico continents e groups SENZA year_start/year_end.
-  */
+  /* ================= BOOTSTRAP ================= */
   useEffect(() => {
     (async () => {
       try {
@@ -62,7 +60,6 @@ export default function FiltersBar({
           continent: continent || undefined,
           country:   country   || undefined,
           location:  location  || undefined,
-          // niente year_start / year_end
           q: qRef.current || undefined,
         });
         setGroups(grs || []);
@@ -75,7 +72,7 @@ export default function FiltersBar({
     (async () => {
       try {
         const [cts, cys, locs] = await Promise.all([
-          getOptions("continents", { group: group || undefined, q: qRef.current || undefined }),
+          getOptions("continents", { group: group || undefined, q: qRef.current || undefined } ),
           getOptions("countries",  { continent: continent || undefined, group: group || undefined, q: qRef.current || undefined }),
           getOptions("locations",  { continent: continent || undefined, country: country || undefined, group: group || undefined, q: qRef.current || undefined }),
         ]);
@@ -220,7 +217,6 @@ export default function FiltersBar({
               <option value="">All Group Events</option>
               {groups.map(g => (
                 <option key={g.value} value={g.value}>
-                  {/* SOLO il nome, niente conteggio */}
                   {g.label || g.value}
                 </option>
               ))}

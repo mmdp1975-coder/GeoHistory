@@ -1,3 +1,4 @@
+// src/components/MapView.jsx
 "use client";
 
 import { MapContainer, TileLayer, Marker, Tooltip, useMap } from "react-leaflet";
@@ -37,7 +38,11 @@ function FocusController({ focusEvent, panOffsetPx }) {
   const centerWithOffset = (latlng, offset) => {
     const z = Math.max(map.getZoom(), 5);
     const pt = map.latLngToContainerPoint(latlng, z);
-    const targetPt = L.point(pt.x - (offset?.x || 0), pt.y + (offset?.y || 0));
+    // FIX: sposta il target VERSO L'ALTO sottraendo l'offset Y
+    const targetPt = L.point(
+      pt.x - (offset?.x || 0),
+      pt.y - (offset?.y || 0)
+    );
     const target = map.containerPointToLatLng(targetPt, z);
     map.stop();
     map.flyTo(target, z, { animate: true, duration: 0.75 });
@@ -62,25 +67,34 @@ function FocusController({ focusEvent, panOffsetPx }) {
   return null;
 }
 
-/* ===== FitController: inquadra tutti i marker quando cambia fitSignal ===== */
+/* ===== FitController: inquadra i marker su fitSignal ===== */
 function FitController({ markers, fitSignal, fitPadding }) {
   const map = useMap();
   const lastSignal = useRef(0);
 
   useEffect(() => {
-    if (!markers || !markers.length) return;
     if (fitSignal === lastSignal.current) return;
     lastSignal.current = fitSignal;
 
-    const latlngs = markers
+    const pts = (markers || [])
       .filter(ev => Number.isFinite(ev.latitude) && Number.isFinite(ev.longitude))
       .map(ev => [ev.latitude, ev.longitude]);
 
-    if (!latlngs.length) return;
+    if (!pts.length) return;
 
-    const bounds = L.latLngBounds(latlngs);
-    const pad = fitPadding || { top: 12, right: 12, bottom: 12, left: 12 };
     map.stop();
+
+    if (pts.length === 1) {
+      const [lat, lon] = pts[0];
+      const current = map.getZoom();
+      const targetZ = Math.max(current, 5);
+      map.flyTo([lat, lon], targetZ, { animate: true, duration: 0.6 });
+      return;
+    }
+
+    // più marker: fitBounds con padding
+    const bounds = L.latLngBounds(pts);
+    const pad = fitPadding || { top: 12, right: 12, bottom: 12, left: 12 };
     map.fitBounds(bounds, {
       paddingTopLeft: L.point(pad.left, pad.top),
       paddingBottomRight: L.point(pad.right, pad.bottom),
@@ -182,5 +196,3 @@ export default function MapView({
     </MapContainer>
   );
 }
-
-
