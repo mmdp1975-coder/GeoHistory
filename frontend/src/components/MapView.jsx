@@ -38,11 +38,7 @@ function FocusController({ focusEvent, panOffsetPx }) {
   const centerWithOffset = (latlng, offset) => {
     const z = Math.max(map.getZoom(), 5);
     const pt = map.latLngToContainerPoint(latlng, z);
-    // FIX: sposta il target VERSO L'ALTO sottraendo l'offset Y
-    const targetPt = L.point(
-      pt.x - (offset?.x || 0),
-      pt.y - (offset?.y || 0)
-    );
+    const targetPt = L.point(pt.x - (offset?.x || 0), pt.y - (offset?.y || 0));
     const target = map.containerPointToLatLng(targetPt, z);
     map.stop();
     map.flyTo(target, z, { animate: true, duration: 0.75 });
@@ -55,7 +51,6 @@ function FocusController({ focusEvent, panOffsetPx }) {
     centerWithOffset(latlng, panOffsetPx);
   }, [focusEvent]); // eslint-disable-line
 
-  // Se cambia l’offset per lo stesso evento (es. apre/chiude sheet o resize), ricentra
   useEffect(() => {
     if (!focusEvent || last.current.id !== focusEvent.id) return;
     const latlng = L.latLng(focusEvent.latitude, focusEvent.longitude);
@@ -92,7 +87,6 @@ function FitController({ markers, fitSignal, fitPadding }) {
       return;
     }
 
-    // più marker: fitBounds con padding
     const bounds = L.latLngBounds(pts);
     const pad = fitPadding || { top: 12, right: 12, bottom: 12, left: 12 };
     map.fitBounds(bounds, {
@@ -102,6 +96,21 @@ function FitController({ markers, fitSignal, fitPadding }) {
     });
   }, [markers, fitSignal, fitPadding, map]);
 
+  return null;
+}
+
+/* ===== ResetController: reset vista al centro/zoom di default ===== */
+const DEFAULT_CENTER = [20, 0];
+const DEFAULT_ZOOM = 2;
+function ResetController({ resetSignal }) {
+  const map = useMap();
+  const last = useRef(0);
+  useEffect(() => {
+    if (!resetSignal || resetSignal === last.current) return;
+    last.current = resetSignal;
+    map.stop();
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true });
+  }, [resetSignal, map]);
   return null;
 }
 
@@ -165,13 +174,12 @@ export default function MapView({
   panOffsetPx = { x: 0, y: 0 },
   fitSignal = 0,
   fitPadding = { top: 12, right: 12, bottom: 12, left: 12 },
+  resetSignal = 0, // 👈 nuovo: per reset vista
 }) {
-  const center = [20, 0];
-
   return (
     <MapContainer
-      center={center}
-      zoom={2}
+      center={DEFAULT_CENTER}
+      zoom={DEFAULT_ZOOM}
       minZoom={2}
       worldCopyJump
       style={{ height: "100%", width: "100%" }}
@@ -192,7 +200,14 @@ export default function MapView({
       <MarkersLayer markers={markers} selectedId={selectedId} onSelect={onSelect} />
       <FocusController focusEvent={focusEvent} panOffsetPx={panOffsetPx} />
       <FitController markers={markers} fitSignal={fitSignal} fitPadding={fitPadding} />
+      <ResetController resetSignal={resetSignal} />
       <ScaleController />
+
+      <style jsx global>{`
+        .gh-marker { transform: scale(var(--mk-scale, 1)); transition: transform .18s ease; }
+        .gh-marker .gh-emoji { font-size: 20px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.25)); }
+        .gh-marker.active .gh-emoji { font-size: 24px; }
+      `}</style>
     </MapContainer>
   );
 }

@@ -5,17 +5,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /* utils */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const stepForLevel = (level) => (level === 0 ? 1000 : level === 1 ? 100 : 10); // millenni, secoli, decenni
-const levelForSpan = (span) => (span >= 4000 ? 0 : span >= 400 ? 1 : 2);
+// livelli: 0=1000y, 1=100y, 2=10y, 3=1y
+const stepForLevel = (level) => (level === 0 ? 1000 : level === 1 ? 100 : level === 2 ? 10 : 1);
+const levelForSpan = (span) => (span >= 4000 ? 0 : span >= 400 ? 1 : span >= 80 ? 2 : 3);
 const fmt = (y) => (y < 0 ? `${Math.abs(y)} a.C.` : `${y} d.C.`);
 
 /**
  * Props:
- * - min, max         → bounds attuali (dominio visibile della timeline)
- * - start, end       → range selezionato dentro i bounds
- * - onChange(s,e)    → modifica del range selezionato
- * - onWiden?()       → richiesta di allargare i bounds (dominio) — se non fornita, fallback: allarga il range
- * - compact          → stile compatto (mobile)
+ * - min, max
+ * - start, end
+ * - onChange(s,e)
+ * - onWiden?(side) → espande i bounds mantenendo il range (side: 'left'|'right'|null)
+ * - compact
  */
 export default function TimelineSlider({ min, max, start, end, onChange, onWiden, compact = false }) {
   const trackRef = useRef(null);
@@ -26,9 +27,11 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
   useEffect(() => { setReady(true); }, []);
 
   const tickEvery = stepForLevel(level);
+
   const ticks = useMemo(() => {
     const first = Math.floor(min / tickEvery) * tickEvery;
-    const arr = []; for (let t = first; t <= max; t += tickEvery) arr.push(t);
+    const arr = [];
+    for (let t = first; t <= max; t += tickEvery) arr.push(t);
     return arr;
   }, [min, max, tickEvery]);
 
@@ -43,14 +46,31 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
   }, [min, max, level]);
 
   /* drag */
-  const dragging = useRef(null);
+  const dragging = useRef(null); // 'start' | 'end' | 'move' | null
+  const [draggingSide, setDraggingSide] = useState(null);
+
   const nearerHandle = (clientX) => {
     const sx = pct(start), ex = pct(end);
     const r = trackRef.current.getBoundingClientRect();
     const x = ((clientX - r.left) / r.width) * 100;
     return Math.abs(x - sx) <= Math.abs(x - ex) ? "start" : "end";
   };
-  const beginDrag = (clientX, mode = null) => { dragging.current = mode || nearerHandle(clientX); handleAt(clientX, dragging.current); };
+
+  const maybeAutoWiden = useCallback((s, e) => {
+    if (typeof onWiden !== "function") return;
+    const leftGap  = (s - min) / (max - min);
+    const rightGap = (max - e) / (max - min);
+    if (leftGap < 0.12)  onWiden("left");
+    if (rightGap < 0.12) onWiden("right");
+  }, [min, max, onWiden]);
+
+  const beginDrag = (clientX, mode = null) => {
+    const side = mode || nearerHandle(clientX);
+    dragging.current = side;
+    setDraggingSide(side);
+    handleAt(clientX, side);
+  };
+
   const handleAt = (clientX, which) => {
     const val = valFromX(clientX); if (val == null) return;
     const st = stepForLevel(level);
@@ -58,12 +78,14 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
       const s = Math.min(Math.max(val, min), end);
       const e = Math.max(s + st, end);
       onChange?.(s, e);
+      maybeAutoWiden(s, e);
     } else if (which === "end") {
       const e = Math.max(Math.min(val, max), start);
       const s = Math.min(e - st, start);
       onChange?.(s, e);
+      maybeAutoWiden(s, e);
     } else {
-      // drag su track con SHIFT → pan dell'intervallo
+      // SHIFT + drag → pan dell’intervallo
       const mid = (start + end) / 2;
       const dx = val - mid;
       let s = start + dx, e = end + dx;
@@ -72,40 +94,31 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
       const q = (x) => Math.round(x / st) * st;
       s = q(s); e = q(e); if (e <= s) e = s + st;
       onChange?.(s, e);
+      maybeAutoWiden(s, e);
     }
   };
+
   useEffect(() => {
     const mm = (ev) => { if (dragging.current) handleAt(ev.clientX, dragging.current); };
-    const mu = () => { dragging.current = null; };
+    const mu = () => { dragging.current = null; setDraggingSide(null); };
     window.addEventListener("mousemove", mm);
     window.addEventListener("mouseup", mu);
     return () => { window.removeEventListener("mousemove", mm); window.removeEventListener("mouseup", mu); };
   }, [handleAt]);
+
   useEffect(() => {
     const tm = (ev) => { if (!dragging.current) return; const t = ev.touches[0]; if (t) handleAt(t.clientX, dragging.current); };
-    const te = () => { dragging.current = null; };
+    const te = () => { dragging.current = null; setDraggingSide(null); };
     window.addEventListener("touchmove", tm, { passive: false });
     window.addEventListener("touchend", te);
     return () => { window.removeEventListener("touchmove", tm); window.removeEventListener("touchend", te); };
   }, [handleAt]);
 
-  /* Allarga DOMINIO (se onWiden) altrimenti allarga range */
-  const widen = () => {
-    if (typeof onWiden === "function") { onWiden(); return; }
-    // fallback: allarga il range del 25% attorno al centro
-    const factor = 1.25;
-    const st = stepForLevel(level);
-    const c = (start + end) / 2;
-    let half = ((end - start) / 2) * factor;
-    let s = Math.round((c - half) / st) * st;
-    let e = Math.round((c + half) / st) * st;
-    if (e <= s) e = s + st;
-    s = clamp(s, min, max); e = clamp(e, min, max);
-    if (e - s < st) e = Math.min(max, s + st);
-    onChange?.(s, e);
-  };
+  /* Allarga DOMINIO (bottoni < >) mantenendo il range */
+  const widenLeft  = () => { if (typeof onWiden === "function") onWiden("left");  };
+  const widenRight = () => { if (typeof onWiden === "function") onWiden("right"); };
 
-  const onWheel = (e) => { e.preventDefault(); widen(); };
+  const onWheel = (e) => { e.preventDefault(); if (e.deltaY > 0) widenRight(); else widenLeft(); };
   const onKey = (e) => {
     const st = stepForLevel(level);
     if (e.key === "ArrowRight") {
@@ -114,24 +127,32 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
       const e2 = Math.min(s2 + width, max);
       onChange?.(s2, e2);
       e.preventDefault();
+      maybeAutoWiden(s2, e2);
     } else if (e.key === "ArrowLeft") {
       const width = end - start;
       const s2 = Math.max(Math.min(start - st, max - st), min);
       const e2 = Math.min(s2 + width, max);
       onChange?.(s2, e2);
       e.preventDefault();
-    } else if (e.key === "+") { widen(); e.preventDefault(); }
+      maybeAutoWiden(s2, e2);
+    } else if (e.key === "+") { widenRight(); e.preventDefault(); }
   };
 
   /* UI sizes */
-  const trackH = compact ? 48 : 56;
-  const fillH  = compact ? 12 : (level === 0 ? 12 : level === 1 ? 14 : 18);
-  const dot    = compact ? 24 : 24;
+  const trackH = compact ? 38 : 46;
+  const fillH  = 3;            // linea blu molto sottile
+  const dot    = compact ? 20 : 20;
+
+  const moving = draggingSide !== null;
 
   return (
     <div className={`tl ${ready ? "ready" : ""}`} onWheel={onWheel}>
-      {/* SINISTRA: + allarga dominio */}
-      <button className="zm" aria-label="Allarga visibilità" title="Allarga visibilità" onClick={widen}>+</button>
+      {/* SINISTRA: chevron moderno */}
+      <button className="zm" aria-label="Expand timeline (left)" title="Expand timeline" onClick={widenLeft}>
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
 
       <div
         className="track"
@@ -147,7 +168,7 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
         style={{ height: `${trackH}px` }}
       >
         <div
-          className="fill"
+          className={`fill ${moving ? "moving" : ""} ${draggingSide ? `side-${draggingSide}` : ""}`}
           style={{
             left: `${(100*(start-min))/(max-min)}%`,
             width: `${(100*(end-start))/(max-min)}%`,
@@ -156,14 +177,14 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
           }}
         />
         <button
-          className="hdl"
+          className={`hdl ${draggingSide === "start" ? "active" : ""}`}
           style={{ left: `${(100*(start-min))/(max-min)}%`, width: `${dot}px`, height: `${dot}px` }}
           aria-label="Start"
           onMouseDown={(e) => { e.stopPropagation(); beginDrag(e.clientX, "start"); }}
           onTouchStart={(e) => { e.stopPropagation(); const t = e.touches[0]; if (t) beginDrag(t.clientX, "start"); }}
         />
         <button
-          className="hdl"
+          className={`hdl ${draggingSide === "end" ? "active" : ""}`}
           style={{ left: `${(100*(end-min))/(max-min)}%`, width: `${dot}px`, height: `${dot}px` }}
           aria-label="End"
           onMouseDown={(e) => { e.stopPropagation(); beginDrag(e.clientX, "end"); }}
@@ -173,7 +194,9 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
         <div className="ticks">
           {ticks.map((t) => {
             const p = (100 * (t - min)) / (max - min);
-            const major = (level === 0) || (level === 1 ? (t % 500 === 0) : (t % 100 === 0));
+            const major = level >= 3 ? (t % (tickEvery * 5) === 0) :
+                           level === 2 ? (t % 100 === 0) :
+                           level === 1 ? (t % 500 === 0) : true;
             return (
               <div key={t} className={`tick ${major ? "maj" : "min"}`} style={{ left: `${p}%` }}>
                 {!compact && major && <span className="lbl">{fmt(t)}</span>}
@@ -183,32 +206,49 @@ export default function TimelineSlider({ min, max, start, end, onChange, onWiden
         </div>
       </div>
 
-      {/* DESTRA: + allarga dominio */}
-      <button className="zm" aria-label="Allarga visibilità" title="Allarga visibilità" onClick={widen}>+</button>
+      {/* DESTRA: chevron moderno */}
+      <button className="zm" aria-label="Expand timeline (right)" title="Expand timeline" onClick={widenRight}>
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
 
       <style jsx>{`
         .tl { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; gap: 8px; min-width: 0; visibility: hidden; }
         .tl.ready { visibility: visible; }
 
         .zm {
-          height: 36px; width: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-size: 18px; font-weight: 700; cursor: pointer;
+          height: 30px; width: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff;
+          font-size: 18px; font-weight: 800; cursor: pointer; color:#111827;
         }
         .track {
-          position: relative; min-height: 48px; display: flex; align-items: center; user-select: none; outline: none; overflow: hidden;
+          position: relative; min-height: 38px; display: flex; align-items: center; user-select: none; outline: none; overflow: hidden;
         }
-        .track::before { content:""; position:absolute; left:0; right:0; top:50%; height:8px; transform:translateY(-50%); background:#e5e7eb; border-radius:999px; }
-        .fill { position:absolute; border-radius:999px; background:#3b82f6; }
-        .hdl { position:absolute; top:50%; transform:translate(-50%,-50%); border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.2); background:#111827; cursor:grab; touch-action:none; }
-        .ticks { position:absolute; inset:0; pointer-events:none; }
-        .tick { position:absolute; bottom:0; width:1px; background:#cbd5e1; height:14px; transform:translateX(-0.5px); }
-        .tick.maj { background:#94a3b8; height:20px; }
-        .tick .lbl { position:absolute; bottom:22px; transform:translate(-50%,0); font-size:11px; color:#6b7280; background:rgba(255,255,255,.85); padding:0 4px; border-radius:6px; white-space:nowrap; }
+        .track::before { content:""; position:absolute; left:0; right:0; top:50%; height:3px; transform:translateY(-50%); background:#e5e7eb; border-radius:999px; }
+        .fill {
+          position:absolute; border-radius:999px; background:#3b82f6;
+          transition: box-shadow 120ms ease, transform 120ms ease, background 120ms ease;
+        }
+        .fill.moving { box-shadow: 0 0 0 2px rgba(59,130,246,0.18), 0 0 0 1px #3b82f6 inset; }
+        .fill.moving.side-start { transform-origin: left center; }
+        .fill.moving.side-end { transform-origin: right center; }
 
-        @media (max-width: 768px) {
-          .tl { gap: 6px; }
-          .zm { height: 34px; width: 38px; }
-          .track { min-height: 46px; }
-          .tick .lbl { font-size: 10px; bottom: 20px; }
+        .hdl {
+          position:absolute; top:50%; transform:translate(-50%,-50%);
+          border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.25);
+          background:#111827; cursor:grab; touch-action:none; transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+        }
+        .hdl.active { transform: translate(-50%,-50%) scale(1.15); box-shadow: 0 0 0 3px rgba(17,24,39,0.18); background:#0f172a; }
+
+        .ticks { position:absolute; inset:0; pointer-events:none; }
+        .tick { position:absolute; bottom:0; width:1px; background:#cbd5e1; height:10px; transform:translateX(-0.5px); }
+        .tick.maj { height:14px; background:#94a3b8; }
+        /* Etichette leggibili sopra la timeline */
+        .lbl {
+          position:absolute; top:-24px; transform:translateX(-50%);
+          font-size:11px; color:#374151; white-space:nowrap; z-index:2;
+          background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:1px 6px;
+          box-shadow:0 1px 2px rgba(0,0,0,0.04);
         }
       `}</style>
     </div>

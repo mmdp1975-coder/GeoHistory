@@ -79,7 +79,7 @@ const eraIsBC = (era) => String(era || "").trim().toUpperCase() === "BC";
 function fmtYearByEra(y, era, lang = "it") {
   if (y === undefined || y === null) return "";
   const it = (lang || "it").toLowerCase() === "it";
-  if (it) return eraIsBC(era) ? `${y} a.c.` : `${y} d.c.`;
+  if (it) return eraIsBC(era) ? `${y} a.C.` : `${y} d.C.`;
   return eraIsBC(era) ? `${y} BC` : `${y} AD`;
 }
 function fmtRangeByEra(from, to, era, lang = "it") {
@@ -101,7 +101,7 @@ export default function Page(){
   const [location, setLocation] = useState("");
   const [group, setGroup] = useState("");
 
-  // 🔒 Non caricare all'avvio
+  // non caricare all'avvio
   const [activated, setActivated] = useState(false);
 
   const ABS_MIN = -5000;
@@ -111,10 +111,10 @@ export default function Page(){
   const [bounds, setBounds] = useState({ min: ABS_MIN, max: ABS_MAX });
   const [period, setPeriod] = useState({ start: ABS_MIN, end: ABS_MAX });
 
-  // Dataset completo dell'ultimo Apply (senza filtro per periodo)
+  // dataset completo dell’ultimo Apply (no filtro periodo)
   const [allEvents, setAllEvents] = useState([]);
 
-  // Vista corrente (filtrata per periodo)
+  // vista corrente
   const [events, setEvents] = useState([]);
   const [markers, setMarkers] = useState([]);
 
@@ -137,7 +137,7 @@ export default function Page(){
     return () => window.removeEventListener("resize", q);
   }, []);
 
-  // Lista “corrente” per il tour: markers (se presenti) altrimenti events
+  // lista per il tour
   const listRef = useMemo(() => (markers.length ? markers : events), [markers, events]);
 
   /* ------------ FETCH: SOLO su Apply & Close ------------ */
@@ -148,10 +148,8 @@ export default function Page(){
       limit: 20000
     });
 
-    // Normalizza TUTTO (senza filtrare per periodo)
     const full = (rows || []).map(r => normalizeRow(r, lang));
 
-    // Auto-bounds/period sul Group selezionato
     if (group && full.length) {
       const { min, max } = rangeFromRows(full, ABS_MIN, ABS_MAX);
       setBounds({ min, max });
@@ -163,12 +161,9 @@ export default function Page(){
       setBounds({ min: ABS_MIN, max: ABS_MAX });
     }
 
-    // Salva dataset completo per i filtri locali
     setAllEvents(full);
 
-    // Applica subito il filtro temporale corrente alla vista
     const filtered = filterByPeriod(full, period.start, period.end)
-      // ✅ ORDINAMENTO CRONOLOGICO
       .sort((a,b) => {
         const as = (a.__start ?? 0), bs = (b.__start ?? 0);
         if (as !== bs) return as - bs;
@@ -190,11 +185,10 @@ export default function Page(){
     setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) });
   }, [bounds.min, bounds.max]);
 
-  // Quando cambia il periodo, se siamo attivi, ricalcola la vista dagli allEvents (locale)
+  // auto-aggiorna lista quando cambia il periodo
   useEffect(() => {
     if (!activated) return;
     const filtered = filterByPeriod(allEvents, period.start, period.end)
-      // ✅ ORDINAMENTO CRONOLOGICO
       .sort((a,b) => {
         const as = (a.__start ?? 0), bs = (b.__start ?? 0);
         if (as !== bs) return as - bs;
@@ -209,7 +203,7 @@ export default function Page(){
     setFitSignal(v => v + 1);
   }, [activated, period.start, period.end, allEvents]);
 
-  // input manuale min/max: idem, solo locale
+  // input manuali (se li reinserirai in futuro)
   const onMinInput = (v) => {
     const val = clamp(parseInt(v || 0, 10), bounds.min, Math.min(bounds.max, period.end));
     setPeriod(p => ({ ...p, start: val }));
@@ -219,24 +213,38 @@ export default function Page(){
     setPeriod(p => ({ ...p, end: val }));
   };
 
-  // Allarga DOMINIO visibile (bottoni + della timeline)
-  const onWidenBounds = useCallback(() => {
-    const factor = 1.25;
-    const c = (period.start + period.end) / 2;
-    const spanB = (bounds.max - bounds.min) * factor;
+  // ===== espansione bounds (usata dai bottoni < > e dall’auto-widen in drag) =====
+  const onWidenBounds = useCallback((side = null) => {
+    const factor = 1.25; // espandi del 25%
+    const curSpan = (bounds.max - bounds.min);
+    const addSpan = Math.max(1, Math.round(curSpan * (factor - 1)));
+    let newMin = bounds.min;
+    let newMax = bounds.max;
 
-    let newMin = Math.round(c - spanB / 2);
-    let newMax = Math.round(c + spanB / 2);
+    if (side === "left") {
+      newMin = bounds.min - addSpan;
+    } else if (side === "right") {
+      newMax = bounds.max + addSpan;
+    } else {
+      newMin = bounds.min - Math.floor(addSpan / 2);
+      newMax = bounds.max + Math.ceil(addSpan / 2);
+    }
 
-    if (newMin < ABS_MIN) { newMin = ABS_MIN; newMax = Math.max(newMin + 1, newMax); }
-    if (newMax > ABS_MAX) { newMax = ABS_MAX; newMin = Math.min(newMax - 1, newMin); }
-
+    // garantisci sempre che il periodo corrente sia incluso
     newMin = Math.min(newMin, period.start);
     newMax = Math.max(newMax, period.end);
+
+    // clamp a limiti globali
+    const GMIN = -5000, GMAX = new Date().getFullYear();
+    if (newMin < GMIN) newMin = GMIN;
+    if (newMax > GMAX) newMax = GMAX;
+    if (newMax <= newMin) newMax = newMin + 1;
 
     setBounds({ min: newMin, max: newMax });
   }, [bounds.min, bounds.max, period.start, period.end]);
 
+  /* ===== reset totale: timeline + markers + mappa (zoom/centro) ===== */
+  const [mapResetSignal, setMapResetSignal] = useState(0);
   const doReset = () => {
     const NOW = new Date().getFullYear();
     setActivated(false);
@@ -244,29 +252,29 @@ export default function Page(){
     setEvents([]); setMarkers([]); setSelected(null); setFocusEvent(null);
     setBounds({ min: -5000, max: NOW });
     setPeriod({ start: -5000, end: NOW });
+    setFitSignal(v => v + 1);
+    setMapResetSignal(v => v + 1);
+    setFiltersOpen(false);
     try { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); } catch {}
   };
 
-  // Selezione da mappa
   const onSelectEvent = useCallback((ev) => {
     setSelected(ev);
     const h = (bottomSheetRef.current?.getBoundingClientRect()?.height || 0);
     setPanOffsetPx({ x: 0, y: Math.round(h * 0.45) });
     setFocusEvent(ev);
     setFitSignal(v => v + 1);
-    if (isPlayingRef.current) setSpeakSignal(v => v + 1);
   }, []);
 
-  // Padding mappa
   const detailsWidthDesktop = 420;
   const bottomH = (bottomSheetRef.current?.getBoundingClientRect()?.height || 0);
   const fitPadding = isMobile
     ? { top: 24, right: 24, bottom: Math.min(260, Math.round(bottomH * 1.1) + 32), left: 24 }
     : { top: 24, right: detailsWidthDesktop + 24, bottom: 24, left: 24 };
 
-  /* ========== TOUR state & handlers ========== */
   const hasResults = activated && (markers.length || events.length) > 0;
 
+  /* ========== TOUR state & handlers ========== */
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -342,13 +350,17 @@ export default function Page(){
         </div>
       </header>
 
-      {/* TIMELINE DESKTOP */}
+      {/* TIMELINE DESKTOP — testi periodo sopra la timeline */}
       {mounted && !isMobile && (
         <div className="gh-time">
-          <label className="gh-mm">
-            <span>Min</span>
-            <input type="number" value={period.start} onChange={(e) => onMinInput(e.target.value)} />
-          </label>
+          <div className="gh-time-top">
+            <div className="gh-time-range">
+              <span>{period.start < 0 ? `${Math.abs(period.start)} a.C.` : `${period.start} d.C.`}</span>
+              <span>→</span>
+              <span>{period.end < 0 ? `${Math.abs(period.end)} a.C.` : `${period.end} d.C.`}</span>
+            </div>
+            <button className="gh-btn-reset" onClick={doReset}>Reset Range</button>
+          </div>
 
           <TimelineSlider
             min={bounds.min}
@@ -356,31 +368,23 @@ export default function Page(){
             start={period.start}
             end={period.end}
             onChange={onTimelineChange}
-            onWiden={onWidenBounds}
+            onWiden={onWidenBounds}   // usato da bottoni < > e auto-widen in drag
             compact={false}
           />
-
-          <label className="gh-mm">
-            <span>Max</span>
-            <input type="number" value={period.end} onChange={(e) => onMaxInput(e.target.value)} />
-          </label>
-
-          <button className="gh-btn-reset" onClick={doReset}>Reset Range</button>
         </div>
       )}
 
-      {/* TIMELINE MOBILE */}
+      {/* TIMELINE MOBILE — stesso layout (testi sopra) */}
       {mounted && isMobile && (
         <div className="gh-time-m">
-          <div className="gh-time-m-row">
-            <div className="gh-time-m-range">
+          <div className="gh-time-top">
+            <div className="gh-time-range">
               <span>{period.start < 0 ? `${Math.abs(period.start)} a.C.` : `${period.start} d.C.`}</span>
               <span>→</span>
               <span>{period.end < 0 ? `${Math.abs(period.end)} a.C.` : `${period.end} d.C.`}</span>
             </div>
-            <button className="gh-btn-reset-m" onClick={doReset}>Reset</button>
+            <button className="gh-btn-reset" onClick={doReset}>Reset</button>
           </div>
-
           <div className="gh-time-m-slider">
             <TimelineSlider
               min={bounds.min}
@@ -406,7 +410,8 @@ export default function Page(){
             panOffsetPx={panOffsetPx}
             fitSignal={fitSignal}
             fitPadding={fitPadding}
-            isSpeaking={isPlaying}   // 🔔 per il “pulse” del marker durante la lettura
+            resetSignal={mapResetSignal}
+            isSpeaking={isPlaying}
           />
         </section>
 
@@ -481,7 +486,7 @@ export default function Page(){
         </div>
       )}
 
-      {/* FAB Filters */}
+      {/* FAB Filters — rotondo, nero, leggermente più grande, testo centrato */}
       <button
         className="gh-fab"
         onClick={() => setFiltersOpen(true)}
@@ -540,44 +545,35 @@ export default function Page(){
       )}
 
       <style jsx>{`
-        /* ROOT height fixes per mobile */
         :global(html), :global(body), :global(#__next) { height: 100%; }
         .gh-app { min-height: 100svh; background: #fff; color: #111827; }
 
-        /* HEADER */
         .gh-header { position: sticky; top: 0; z-index: 60; height: 56px; background: #fff; border-bottom: 1px solid #e5e7eb; }
         .gh-logo { position: relative; width: 200px; height: 100%; }
 
-        /* TIMELINE — DESKTOP */
         .gh-time {
           position: sticky; top: 56px; z-index: 55;
           background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px);
           border-bottom: 1px solid #e5e7eb;
-          display: grid; grid-template-columns: 140px 1fr 140px 120px;
-          align-items: center; gap: 10px; padding: 10px 14px; min-height: 62px;
+          display: grid; grid-template-rows: auto auto; gap: 6px;
+          padding: 10px 14px; min-height: 84px;
         }
-        .gh-mm { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 8px; }
-        .gh-mm span { font-size: 12px; font-weight: 700; color: #6b7280; }
-        .gh-mm input { height: 40px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px; }
-        .gh-mm input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
-        .gh-btn-reset { height: 40px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-weight: 700; }
+        .gh-time-top { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
+        .gh-time-range { display: flex; gap: 6px; align-items: baseline; color: #374151; font-size: 13px; font-weight: 700; }
+        .gh-btn-reset { height: 36px; padding: 0 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-weight: 700; }
 
-        /* TIMELINE — MOBILE */
         .gh-time-m {
           position: sticky; top: 56px; z-index: 55;
           background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px);
           border-bottom: 1px solid #e5e7eb;
           padding: 8px 10px 10px; display: grid; gap: 8px;
         }
-        .gh-time-m-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-        .gh-time-m-range { display: flex; gap: 6px; align-items: baseline; color: #374151; font-size: 13px; font-weight: 600; }
-        .gh-btn-reset-m { height: 32px; padding: 0 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-weight: 700; }
+        .gh-time-m .gh-time-top { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
         .gh-time-m-slider { padding-bottom: 0; }
 
-        /* MAIN (usa 100svh per evitare bug barra indirizzi mobile) */
-        .gh-main { display: grid; grid-template-columns: 1fr 420px; height: calc(100svh - 56px - 62px); }
+        .gh-main { display: grid; grid-template-columns: 1fr 420px; height: calc(100svh - 56px - 84px); }
         @media (max-width: 768px){
-          .gh-main { grid-template-columns: 1fr; height: calc(100svh - 56px - 96px); } /* timeline mobile ~96px */
+          .gh-main { grid-template-columns: 1fr; height: calc(100svh - 56px - 96px); }
         }
         .gh-map-panel { position: relative; min-height: 0; }
         .gh-details { border-left: 1px solid #e5e7eb; overflow: auto; background: #fff; }
@@ -590,7 +586,6 @@ export default function Page(){
         .gh-desk-desc p { font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-wrap; user-select: text; }
         .gh-desk-wiki a { color:#2563eb; text-decoration: underline; }
 
-        /* MOBILE bottom-sheet */
         .gh-mob-sheet {
           position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200;
           background: #fff; border-top: 1px solid #e5e7eb;
@@ -607,20 +602,17 @@ export default function Page(){
         .gh-mob-desc { padding: 4px 12px 10px; overflow: auto; color:#1f2937; }
         .gh-mob-wiki a { color:#2563eb; text-decoration: underline; }
 
-        /* TOUR */
-        .gh-tour-inline { position: sticky; top: calc(56px + 62px); z-index: 54; background: transparent; }
+        .gh-tour-inline { position: sticky; top: calc(56px + 84px); z-index: 54; }
         .gh-tour-fixed { position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 1250; }
 
-        /* FAB Filters — rotondo */
+        /* FAB Filters — rotondo, nero, più grande, testo centrato */
         .gh-fab {
-          position: fixed; right: 16px; bottom: 16px; z-index: 1000;
-          width: 84px; height: 84px; border-radius: 50%; border: 0; background: #000; color: #fff;
-          font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center;
-          line-height: 1.1; text-align: center; box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+          position: fixed; right: 14px; bottom: 14px; z-index: 1000;
+          width: 56px; height: 56px; border-radius: 999px; border: 1px solid #0b0b0b;
+          background: #111827; color: #fff; display: grid; place-items: center;
+          box-shadow: 0 6px 16px rgba(0,0,0,0.18); font-size: 11px; font-weight: 800; letter-spacing: .02em;
         }
-        .gh-fab:hover { filter: brightness(1.05); }
 
-        /* Overlay/Sheet filtri */
         .gh-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1100; display: flex; align-items: flex-end; }
         .gh-sheet { width: 100%; max-height: 85vh; background: #fff; border-top-left-radius: 14px; border-top-right-radius: 14px; overflow: hidden; }
         .gh-sheet-header { display:flex; align-items:center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
