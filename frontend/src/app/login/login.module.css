@@ -1,0 +1,197 @@
+/* src/app/login/login.module.css */
+
+/* Wrapper pagina */
+.page {
+  position: relative;
+  min-height: 100vh;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: #0f172a; /* slate-900 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* Sfondo marmo + velo */
+.bg {
+  position: fixed;
+  inset: 0;
+  background-image: url("/bg/login-map.jpg");
+  background-size: cover;
+  background-position: center;
+  opacity: .55;
+  z-index: 0;
+}
+.veil {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.12), rgba(255,255,255,0.0), rgba(0,0,0,0.18));
+  z-index: 0;
+}
+
+/* Card centrale (stretta per far stare la tagline in 3 righe) */
+.card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 520px;
+  background: rgba(255,255,255,0.96);
+  border: 1px solid #e5e7eb;
+  border-radius: 22px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06);
+  padding: 22px 22px 18px;
+}
+
+/* Logo */
+.brandLogo {
+  display: block;
+  width: 280px;
+  max-width: 100%;
+  height: auto;
+  margin: 4px auto 8px auto;
+}
+
+/* Tagline */
+.tagline {
+  text-align: center;
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: #334155; /* slate-600 */
+  margin: 2px auto 10px auto;
+}
+.tagline strong {
+  display: block;
+  font-weight: 800;
+  font-size: 20px;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+/* Separatore */
+.separator {
+  width: 100%;
+  height: 3px;
+  background: #111827;
+  opacity: 0.2;
+  border-radius: 2px;
+  margin: 8px 0 12px 0;
+}
+
+/* Titolo form */
+.card h2 {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 10px 0;
+}
+
+/* Form */
+.form {
+  display: grid;
+  gap: 12px;
+}
+.field { display: grid; gap: 6px; }
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937; /* gray-800 */
+}
+.input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  outline: none;
+}
+.input:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 3px rgba(17,24,39,0.15);
+}
+
+/* >>> Forgot password sotto il campo password, allineato a destra */
+.forgot {
+  text-align: right;
+  margin-top: 4px;
+}
+.forgot a {
+  font-size: 13px;
+  color: #334155;
+  text-decoration: underline;
+}
+
+/* Errori */
+.error {
+  margin-top: 2px;
+  font-size: 13.5px;
+  color: #b91c1c;
+}
+
+/* Pulsante primario */
+.button {
+  width: 100%;
+  border: none;
+  background: #000000;
+  color: white;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+.button:disabled { opacity: .65; cursor: default; }
+
+/* Divider "Oppure accedi con" */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 8px;
+}
+.line {
+  flex: 1;
+  height: 1px;
+  background: #cbd5e1;
+}
+.divTxt {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+/* Social */
+.socials {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.socialBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.socialBtn:hover { box-shadow: 0 6px 14px rgba(0,0,0,0.07); }
+.socialIcon { width: 22px; height: 22px; }
+
+/* Bottom link */
+.bottom {
+  text-align: center;
+  font-size: 14px;
+  color: #334155;
+}
+.bottom a { font-weight: 700; }
+
+/* Mobile */
+@media (max-width: 420px) {
+  .card { padding: 18px 16px 14px; max-width: 94vw; }
+  .brandLogo { width: 230px; }
+  .tagline { font-size: 14px; }
+}

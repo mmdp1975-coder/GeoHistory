@@ -1,0 +1,70 @@
+{
+  "version": "1.1",
+  "personas": {
+    "student": {
+      "label_it": "Studente",
+      "sub_levels": {
+        "primary":  { "label_it": "Elementari", "timeline_mode": "mini",   "curiosities": 1, "connections": 1 },
+        "middle":   { "label_it": "Medie",      "timeline_mode": "standard","curiosities": 2, "connections": 1 },
+        "high":     { "label_it": "Superiori",  "timeline_mode": "rich",    "curiosities": 3, "connections": 2 }
+      },
+      "sections": {
+        "scelta_iniziale": ["Tema: Antichi Egizi", "Tema: Roma", "Tema: Medioevo"],
+        "orientamento":    { "type": "mini_tour", "steps": 3, "show_help": true },
+        "evento_singolo":  { "card": "simple", "show_date_range": true, "show_image": true },
+        "curiosita":       { "enabled": true },
+        "raccolta":        { "enabled": true, "name_it": "Il mio quaderno" },
+        "creazione":       { "type": "note_only", "public_allowed": false },
+        "followup":        { "quiz": true, "resume": true }
+      }
+    },
+    "enthusiast": {
+      "label_it": "Appassionato",
+      "sections": {
+        "scelta_iniziale": ["Cerca", "Temi popolari"],
+        "orientamento":    { "type": "map_timeline", "timeline_mode": "standard", "quick_filters": true },
+        "evento_singolo":  { "card": "standard", "show_wikipedia": true, "show_date_range": true },
+        "curiosita":       { "enabled": true, "related_count": 3, "map_mini": true },
+        "raccolta":        { "enabled": true, "collections": true, "tags": true },
+        "creazione":       { "type": "duplicate_private", "public_allowed": false },
+        "followup":        { "resume": true, "suggest_topic": true, "share_collection": true }
+      }
+    },
+    "researcher": {
+      "label_it": "Ricercatore / Contributor",
+      "sections": {
+        "scelta_iniziale": ["Ricerca avanzata", "Timeline comparativa", "Dataset"],
+        "orientamento":    { "type": "compare_timeline", "advanced_filters": true, "export": true },
+        "evento_singolo":  { "card": "extended", "sources": true, "citations": true, "coords": true, "show_date_range": true },
+        "curiosita":       { "enabled": true, "graph_connections": true, "smart_suggestions": true },
+        "raccolta":        { "enabled": true, "folders": true, "descriptions": true, "export_csv": true },
+        "creazione":       { "type": "create_edit", "public_allowed": "by_request" },
+        "followup":        { "publication_status": true, "export_citations": true, "next_tasks": true }
+      }
+    },
+    "moderator": {
+      "label_it": "Moderatore",
+      "sections": {
+        "scelta_iniziale": ["Coda richieste", "Segnalazioni"],
+        "orientamento":    { "type": "mod_panel", "filters": ["stato", "autore", "tema"] },
+        "evento_singolo":  { "card": "moderation", "diff": true, "checklist": true, "log": true },
+        "curiosita":       { "enabled": true, "anomaly_patterns": true },
+        "raccolta":        { "enabled": false },
+        "creazione":       { "type": "validate_reject", "comments": true },
+        "followup":        { "mod_report": true, "guidelines": true, "assign_to_admin": true }
+      }
+    },
+    "admin": {
+      "label_it": "Admin",
+      "sections": {
+        "scelta_iniziale": ["Utenti", "Ruoli", "Contenuti", "Sistema"],
+        "orientamento":    { "type": "kpi_top", "errors": true, "moderation_queue": true },
+        "evento_singolo":  { "card": "admin", "history": true, "permissions": true },
+        "curiosita":       { "enabled": true, "global_consistency": true },
+        "raccolta":        { "enabled": "manage_spaces" },
+        "creazione":       { "type": "all", "system_settings": true },
+        "followup":        { "audit_log": true, "backup_export": true, "landing_settings": true }
+      }
+    }
+  }
+}

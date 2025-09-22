@@ -1,15 +1,16 @@
-// src/app/page.js
+// src/app/explore/page.js
 "use client";
 
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import FiltersBar from "../components/FiltersBar";
-import { getEvents } from "../lib/api";
-import TourControls from "../components/TourControls";
-import TimelineSlider from "../components/TimelineSlider";
 
-const MapView = dynamic(() => import("../components/MapView"), { ssr: false });
+import FiltersBar from "@/components/FiltersBar";
+import { getEvents } from "@/lib/api";
+import TourControls from "@/components/TourControls";
+import TimelineSlider from "@/components/TimelineSlider";
+
+const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
 
 /* ------------ utils ------------ */
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -185,7 +186,6 @@ export default function Page(){
     setPeriod({ start: clamp(s, bounds.min, bounds.max), end: clamp(e, bounds.min, bounds.max) });
   }, [bounds.min, bounds.max]);
 
-  // auto-aggiorna lista quando cambia il periodo
   useEffect(() => {
     if (!activated) return;
     const filtered = filterByPeriod(allEvents, period.start, period.end)
@@ -203,7 +203,6 @@ export default function Page(){
     setFitSignal(v => v + 1);
   }, [activated, period.start, period.end, allEvents]);
 
-  // input manuali (se li reinserirai in futuro)
   const onMinInput = (v) => {
     const val = clamp(parseInt(v || 0, 10), bounds.min, Math.min(bounds.max, period.end));
     setPeriod(p => ({ ...p, start: val }));
@@ -213,28 +212,19 @@ export default function Page(){
     setPeriod(p => ({ ...p, end: val }));
   };
 
-  // ===== espansione bounds (usata dai bottoni < > e dall’auto-widen in drag) =====
   const onWidenBounds = useCallback((side = null) => {
-    const factor = 1.25; // espandi del 25%
+    const factor = 1.25;
     const curSpan = (bounds.max - bounds.min);
     const addSpan = Math.max(1, Math.round(curSpan * (factor - 1)));
     let newMin = bounds.min;
     let newMax = bounds.max;
 
-    if (side === "left") {
-      newMin = bounds.min - addSpan;
-    } else if (side === "right") {
-      newMax = bounds.max + addSpan;
-    } else {
-      newMin = bounds.min - Math.floor(addSpan / 2);
-      newMax = bounds.max + Math.ceil(addSpan / 2);
-    }
+    if (side === "left") newMin = bounds.min - addSpan;
+    else if (side === "right") newMax = bounds.max + addSpan;
+    else { newMin = bounds.min - Math.floor(addSpan / 2); newMax = bounds.max + Math.ceil(addSpan / 2); }
 
-    // garantisci sempre che il periodo corrente sia incluso
     newMin = Math.min(newMin, period.start);
     newMax = Math.max(newMax, period.end);
-
-    // clamp a limiti globali
     const GMIN = -5000, GMAX = new Date().getFullYear();
     if (newMin < GMIN) newMin = GMIN;
     if (newMax > GMAX) newMax = GMAX;
@@ -243,7 +233,6 @@ export default function Page(){
     setBounds({ min: newMin, max: newMax });
   }, [bounds.min, bounds.max, period.start, period.end]);
 
-  /* ===== reset totale: timeline + markers + mappa (zoom/centro) ===== */
   const [mapResetSignal, setMapResetSignal] = useState(0);
   const doReset = () => {
     const NOW = new Date().getFullYear();
@@ -274,7 +263,6 @@ export default function Page(){
 
   const hasResults = activated && (markers.length || events.length) > 0;
 
-  /* ========== TOUR state & handlers ========== */
   const [isPlaying, setIsPlaying] = useState(false);
   const isPlayingRef = useRef(false);
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -330,7 +318,6 @@ export default function Page(){
     if (isPlayingRef.current) setSpeakSignal(v => v + 1);
   };
 
-  /* ===================== RENDER ===================== */
   const whenSelected = (() => {
     if (!selected) return "";
     const era = selected.__era || "AD";
@@ -350,7 +337,7 @@ export default function Page(){
         </div>
       </header>
 
-      {/* TIMELINE DESKTOP — testi periodo sopra la timeline */}
+      {/* TIMELINE DESKTOP */}
       {mounted && !isMobile && (
         <div className="gh-time">
           <div className="gh-time-top">
@@ -368,13 +355,13 @@ export default function Page(){
             start={period.start}
             end={period.end}
             onChange={onTimelineChange}
-            onWiden={onWidenBounds}   // usato da bottoni < > e auto-widen in drag
+            onWiden={onWidenBounds}
             compact={false}
           />
         </div>
       )}
 
-      {/* TIMELINE MOBILE — stesso layout (testi sopra) */}
+      {/* TIMELINE MOBILE */}
       {mounted && isMobile && (
         <div className="gh-time-m">
           <div className="gh-time-top">
@@ -409,13 +396,14 @@ export default function Page(){
             focusEvent={focusEvent}
             panOffsetPx={panOffsetPx}
             fitSignal={fitSignal}
-            fitPadding={fitPadding}
+            fitPadding={isMobile
+              ? { top: 24, right: 24, bottom: 260, left: 24 }
+              : { top: 24, right: 444, bottom: 24, left: 24 }}
             resetSignal={mapResetSignal}
             isSpeaking={isPlaying}
           />
         </section>
 
-        {/* DESKTOP details */}
         {!isMobile && selected && (
           <aside className={`gh-details ${isPlaying ? "gh-speaking" : ""}`} ref={bottomSheetRef}>
             <div className="gh-desk-reading">
@@ -441,7 +429,6 @@ export default function Page(){
         )}
       </div>
 
-      {/* MOBILE bottom-sheet details */}
       {isMobile && selected && (
         <div className={`gh-mob-sheet ${isPlaying ? "gh-speaking" : ""}`} role="dialog" aria-label="Event details" ref={bottomSheetRef}>
           <div className="gh-mob-handle" />
@@ -468,7 +455,6 @@ export default function Page(){
         </div>
       )}
 
-      {/* TOUR CONTROLS */}
       {hasResults && (
         <div className={isMobile ? "gh-tour-fixed" : "gh-tour-inline"}>
           <TourControls
@@ -486,13 +472,7 @@ export default function Page(){
         </div>
       )}
 
-      {/* FAB Filters — rotondo, nero, leggermente più grande, testo centrato */}
-      <button
-        className="gh-fab"
-        onClick={() => setFiltersOpen(true)}
-        aria-label="Open Filters"
-        title="Open Filters"
-      >
+      <button className="gh-fab" onClick={() => setFiltersOpen(true)} aria-label="Open Filters" title="Open Filters">
         Filters
       </button>
 
@@ -547,34 +527,17 @@ export default function Page(){
       <style jsx>{`
         :global(html), :global(body), :global(#__next) { height: 100%; }
         .gh-app { min-height: 100svh; background: #fff; color: #111827; }
-
         .gh-header { position: sticky; top: 0; z-index: 60; height: 56px; background: #fff; border-bottom: 1px solid #e5e7eb; }
         .gh-logo { position: relative; width: 200px; height: 100%; }
-
-        .gh-time {
-          position: sticky; top: 56px; z-index: 55;
-          background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px);
-          border-bottom: 1px solid #e5e7eb;
-          display: grid; grid-template-rows: auto auto; gap: 6px;
-          padding: 10px 14px; min-height: 84px;
-        }
+        .gh-time { position: sticky; top: 56px; z-index: 55; background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px); border-bottom: 1px solid #e5e7eb; display: grid; grid-template-rows: auto auto; gap: 6px; padding: 10px 14px; min-height: 84px; }
         .gh-time-top { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
         .gh-time-range { display: flex; gap: 6px; align-items: baseline; color: #374151; font-size: 13px; font-weight: 700; }
         .gh-btn-reset { height: 36px; padding: 0 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; font-weight: 700; }
-
-        .gh-time-m {
-          position: sticky; top: 56px; z-index: 55;
-          background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px);
-          border-bottom: 1px solid #e5e7eb;
-          padding: 8px 10px 10px; display: grid; gap: 8px;
-        }
+        .gh-time-m { position: sticky; top: 56px; z-index: 55; background: rgba(255,255,255,0.96); backdrop-filter: saturate(180%) blur(6px); border-bottom: 1px solid #e5e7eb; padding: 8px 10px 10px; display: grid; gap: 8px; }
         .gh-time-m .gh-time-top { display:flex; align-items:center; justify-content: space-between; gap: 10px; }
         .gh-time-m-slider { padding-bottom: 0; }
-
         .gh-main { display: grid; grid-template-columns: 1fr 420px; height: calc(100svh - 56px - 84px); }
-        @media (max-width: 768px){
-          .gh-main { grid-template-columns: 1fr; height: calc(100svh - 56px - 96px); }
-        }
+        @media (max-width: 768px){ .gh-main { grid-template-columns: 1fr; height: calc(100svh - 56px - 96px); } }
         .gh-map-panel { position: relative; min-height: 0; }
         .gh-details { border-left: 1px solid #e5e7eb; overflow: auto; background: #fff; }
         .gh-desk-reading { padding: 12px; }
@@ -583,36 +546,17 @@ export default function Page(){
         .gh-speaking .gh-desk-title { background: #fff7ed; box-shadow: 0 0 0 2px #fdba74 inset; border-radius: 8px; padding: 4px 6px; }
         .gh-desk-meta { display:flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
         .meta-chip { font-size: 12px; color:#374151; background:#f3f4f6; border:1px solid #e5e7eb; border-radius: 999px; padding: 2px 8px; }
-        .gh-desk-desc p { font-size: 14px; line-height: 1.55; margin: 0; white-space: pre-wrap; user-select: text; }
-        .gh-desk-wiki a { color:#2563eb; text-decoration: underline; }
-
-        .gh-mob-sheet {
-          position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200;
-          background: #fff; border-top: 1px solid #e5e7eb;
-          border-top-left-radius: 14px; border-top-right-radius: 14px;
-          max-height: 45vh; height: min(45vh, 48%); box-shadow: 0 -10px 24px rgba(0,0,0,0.1);
-          display: grid; grid-template-rows: 6px auto 1fr; padding-bottom: env(safe-area-inset-bottom, 8px);
-        }
+        .gh-mob-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200; background: #fff; border-top: 1px solid #e5e7eb; border-top-left-radius: 14px; border-top-right-radius: 14px; max-height: 45vh; height: min(45vh, 48%); box-shadow: 0 -10px 24px rgba(0,0,0,0.1); display: grid; grid-template-rows: 6px auto 1fr; padding-bottom: env(safe-area-inset-bottom, 8px); }
         .gh-mob-handle { width: 44px; height: 4px; background: #e5e7eb; border-radius: 999px; margin: 8px auto 4px; }
         .gh-mob-header { display:flex; align-items:center; justify-content: space-between; padding: 6px 12px; }
         .gh-mob-title { font-weight: 800; font-size: 15px; color: #111827; line-height: 1.2; padding-right: 8px; }
         .gh-mob-close { height: 30px; width: 30px; border: 1px solid #e5e7eb; border-radius: 8px; background:#fff; font-size: 18px; font-weight: 700; }
         .gh-mob-meta { display:flex; gap: 6px; flex-wrap: wrap; padding: 0 12px 4px; }
-        .gh-speaking .gh-mob-title { background: #fff7ed; box-shadow: 0 0 0 2px #fdba74 inset; border-radius: 8px; padding: 2px 4px; }
         .gh-mob-desc { padding: 4px 12px 10px; overflow: auto; color:#1f2937; }
         .gh-mob-wiki a { color:#2563eb; text-decoration: underline; }
-
         .gh-tour-inline { position: sticky; top: calc(56px + 84px); z-index: 54; }
         .gh-tour-fixed { position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 1250; }
-
-        /* FAB Filters — rotondo, nero, più grande, testo centrato */
-        .gh-fab {
-          position: fixed; right: 14px; bottom: 14px; z-index: 1000;
-          width: 56px; height: 56px; border-radius: 999px; border: 1px solid #0b0b0b;
-          background: #111827; color: #fff; display: grid; place-items: center;
-          box-shadow: 0 6px 16px rgba(0,0,0,0.18); font-size: 11px; font-weight: 800; letter-spacing: .02em;
-        }
-
+        .gh-fab { position: fixed; right: 14px; bottom: 14px; z-index: 1000; width: 56px; height: 56px; border-radius: 999px; border: 1px solid #0b0b0b; background: #111827; color: #fff; display: grid; place-items: center; box-shadow: 0 6px 16px rgba(0,0,0,0.18); font-size: 11px; font-weight: 800; letter-spacing: .02em; }
         .gh-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 1100; display: flex; align-items: flex-end; }
         .gh-sheet { width: 100%; max-height: 85vh; background: #fff; border-top-left-radius: 14px; border-top-right-radius: 14px; overflow: hidden; }
         .gh-sheet-header { display:flex; align-items:center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; }
@@ -627,3 +571,4 @@ export default function Page(){
     </div>
   );
 }
+

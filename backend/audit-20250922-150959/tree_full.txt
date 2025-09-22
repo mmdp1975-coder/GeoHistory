@@ -1,0 +1,2172 @@
+﻿Folder PATH listing for volume Local Disk
+Volume serial number is B84C-D958
+C:.
+|   .env
+|   index.js
+|   package-lock.json
+|   package.json
+|   
++---audit-20250922-150959
+|       tree_full.txt
+|       
+\---node_modules
+    |   .package-lock.json
+    |   
+    +---.bin
+    |       crc32
+    |       crc32.cmd
+    |       crc32.ps1
+    |       mime
+    |       mime.cmd
+    |       mime.ps1
+    |       xlsx
+    |       xlsx.cmd
+    |       xlsx.ps1
+    |       
+    +---@supabase
+    |   +---auth-js
+    |   |   |   LICENSE
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   +---dist
+    |   |   |   +---main
+    |   |   |   |   |   AuthAdminApi.d.ts
+    |   |   |   |   |   AuthAdminApi.d.ts.map
+    |   |   |   |   |   AuthAdminApi.js
+    |   |   |   |   |   AuthAdminApi.js.map
+    |   |   |   |   |   AuthClient.d.ts
+    |   |   |   |   |   AuthClient.d.ts.map
+    |   |   |   |   |   AuthClient.js
+    |   |   |   |   |   AuthClient.js.map
+    |   |   |   |   |   GoTrueAdminApi.d.ts
+    |   |   |   |   |   GoTrueAdminApi.d.ts.map
+    |   |   |   |   |   GoTrueAdminApi.js
+    |   |   |   |   |   GoTrueAdminApi.js.map
+    |   |   |   |   |   GoTrueClient.d.ts
+    |   |   |   |   |   GoTrueClient.d.ts.map
+    |   |   |   |   |   GoTrueClient.js
+    |   |   |   |   |   GoTrueClient.js.map
+    |   |   |   |   |   index.d.ts
+    |   |   |   |   |   index.d.ts.map
+    |   |   |   |   |   index.js
+    |   |   |   |   |   index.js.map
+    |   |   |   |   |   
+    |   |   |   |   \---lib
+    |   |   |   |           base64url.d.ts
+    |   |   |   |           base64url.d.ts.map
+    |   |   |   |           base64url.js
+    |   |   |   |           base64url.js.map
+    |   |   |   |           constants.d.ts
+    |   |   |   |           constants.d.ts.map
+    |   |   |   |           constants.js
+    |   |   |   |           constants.js.map
+    |   |   |   |           error-codes.d.ts
+    |   |   |   |           error-codes.d.ts.map
+    |   |   |   |           error-codes.js
+    |   |   |   |           error-codes.js.map
+    |   |   |   |           errors.d.ts
+    |   |   |   |           errors.d.ts.map
+    |   |   |   |           errors.js
+    |   |   |   |           errors.js.map
+    |   |   |   |           fetch.d.ts
+    |   |   |   |           fetch.d.ts.map
+    |   |   |   |           fetch.js
+    |   |   |   |           fetch.js.map
+    |   |   |   |           helpers.d.ts
+    |   |   |   |           helpers.d.ts.map
+    |   |   |   |           helpers.js
+    |   |   |   |           helpers.js.map
+    |   |   |   |           local-storage.d.ts
+    |   |   |   |           local-storage.d.ts.map
+    |   |   |   |           local-storage.js
+    |   |   |   |           local-storage.js.map
+    |   |   |   |           locks.d.ts
+    |   |   |   |           locks.d.ts.map
+    |   |   |   |           locks.js
+    |   |   |   |           locks.js.map
+    |   |   |   |           polyfills.d.ts
+    |   |   |   |           polyfills.d.ts.map
+    |   |   |   |           polyfills.js
+    |   |   |   |           polyfills.js.map
+    |   |   |   |           solana.d.ts
+    |   |   |   |           solana.d.ts.map
+    |   |   |   |           solana.js
+    |   |   |   |           solana.js.map
+    |   |   |   |           types.d.ts
+    |   |   |   |           types.d.ts.map
+    |   |   |   |           types.js
+    |   |   |   |           types.js.map
+    |   |   |   |           version.d.ts
+    |   |   |   |           version.d.ts.map
+    |   |   |   |           version.js
+    |   |   |   |           version.js.map
+    |   |   |   |           
+    |   |   |   \---module
+    |   |   |       |   AuthAdminApi.d.ts
+    |   |   |       |   AuthAdminApi.d.ts.map
+    |   |   |       |   AuthAdminApi.js
+    |   |   |       |   AuthAdminApi.js.map
+    |   |   |       |   AuthClient.d.ts
+    |   |   |       |   AuthClient.d.ts.map
+    |   |   |       |   AuthClient.js
+    |   |   |       |   AuthClient.js.map
+    |   |   |       |   GoTrueAdminApi.d.ts
+    |   |   |       |   GoTrueAdminApi.d.ts.map
+    |   |   |       |   GoTrueAdminApi.js
+    |   |   |       |   GoTrueAdminApi.js.map
+    |   |   |       |   GoTrueClient.d.ts
+    |   |   |       |   GoTrueClient.d.ts.map
+    |   |   |       |   GoTrueClient.js
+    |   |   |       |   GoTrueClient.js.map
+    |   |   |       |   index.d.ts
+    |   |   |       |   index.d.ts.map
+    |   |   |       |   index.js
+    |   |   |       |   index.js.map
+    |   |   |       |   
+    |   |   |       \---lib
+    |   |   |               base64url.d.ts
+    |   |   |               base64url.d.ts.map
+    |   |   |               base64url.js
+    |   |   |               base64url.js.map
+    |   |   |               constants.d.ts
+    |   |   |               constants.d.ts.map
+    |   |   |               constants.js
+    |   |   |               constants.js.map
+    |   |   |               error-codes.d.ts
+    |   |   |               error-codes.d.ts.map
+    |   |   |               error-codes.js
+    |   |   |               error-codes.js.map
+    |   |   |               errors.d.ts
+    |   |   |               errors.d.ts.map
+    |   |   |               errors.js
+    |   |   |               errors.js.map
+    |   |   |               fetch.d.ts
+    |   |   |               fetch.d.ts.map
+    |   |   |               fetch.js
+    |   |   |               fetch.js.map
+    |   |   |               helpers.d.ts
+    |   |   |               helpers.d.ts.map
+    |   |   |               helpers.js
+    |   |   |               helpers.js.map
+    |   |   |               local-storage.d.ts
+    |   |   |               local-storage.d.ts.map
+    |   |   |               local-storage.js
+    |   |   |               local-storage.js.map
+    |   |   |               locks.d.ts
+    |   |   |               locks.d.ts.map
+    |   |   |               locks.js
+    |   |   |               locks.js.map
+    |   |   |               polyfills.d.ts
+    |   |   |               polyfills.d.ts.map
+    |   |   |               polyfills.js
+    |   |   |               polyfills.js.map
+    |   |   |               solana.d.ts
+    |   |   |               solana.d.ts.map
+    |   |   |               solana.js
+    |   |   |               solana.js.map
+    |   |   |               types.d.ts
+    |   |   |               types.d.ts.map
+    |   |   |               types.js
+    |   |   |               types.js.map
+    |   |   |               version.d.ts
+    |   |   |               version.d.ts.map
+    |   |   |               version.js
+    |   |   |               version.js.map
+    |   |   |               
+    |   |   \---src
+    |   |       |   AuthAdminApi.ts
+    |   |       |   AuthClient.ts
+    |   |       |   GoTrueAdminApi.ts
+    |   |       |   GoTrueClient.ts
+    |   |       |   index.ts
+    |   |       |   
+    |   |       \---lib
+    |   |               base64url.ts
+    |   |               constants.ts
+    |   |               error-codes.ts
+    |   |               errors.ts
+    |   |               fetch.ts
+    |   |               helpers.ts
+    |   |               local-storage.ts
+    |   |               locks.ts
+    |   |               polyfills.ts
+    |   |               solana.ts
+    |   |               types.ts
+    |   |               version.ts
+    |   |               
+    |   +---functions-js
+    |   |   |   LICENSE
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   +---dist
+    |   |   |   +---main
+    |   |   |   |       FunctionsClient.d.ts
+    |   |   |   |       FunctionsClient.d.ts.map
+    |   |   |   |       FunctionsClient.js
+    |   |   |   |       FunctionsClient.js.map
+    |   |   |   |       helper.d.ts
+    |   |   |   |       helper.d.ts.map
+    |   |   |   |       helper.js
+    |   |   |   |       helper.js.map
+    |   |   |   |       index.d.ts
+    |   |   |   |       index.d.ts.map
+    |   |   |   |       index.js
+    |   |   |   |       index.js.map
+    |   |   |   |       types.d.ts
+    |   |   |   |       types.d.ts.map
+    |   |   |   |       types.js
+    |   |   |   |       types.js.map
+    |   |   |   |       version.d.ts
+    |   |   |   |       version.d.ts.map
+    |   |   |   |       version.js
+    |   |   |   |       version.js.map
+    |   |   |   |       
+    |   |   |   \---module
+    |   |   |           FunctionsClient.d.ts
+    |   |   |           FunctionsClient.d.ts.map
+    |   |   |           FunctionsClient.js
+    |   |   |           FunctionsClient.js.map
+    |   |   |           helper.d.ts
+    |   |   |           helper.d.ts.map
+    |   |   |           helper.js
+    |   |   |           helper.js.map
+    |   |   |           index.d.ts
+    |   |   |           index.d.ts.map
+    |   |   |           index.js
+    |   |   |           index.js.map
+    |   |   |           types.d.ts
+    |   |   |           types.d.ts.map
+    |   |   |           types.js
+    |   |   |           types.js.map
+    |   |   |           version.d.ts
+    |   |   |           version.d.ts.map
+    |   |   |           version.js
+    |   |   |           version.js.map
+    |   |   |           
+    |   |   \---src
+    |   |           edge-runtime.d.ts
+    |   |           FunctionsClient.ts
+    |   |           helper.ts
+    |   |           index.ts
+    |   |           types.ts
+    |   |           version.ts
+    |   |           
+    |   +---node-fetch
+    |   |   |   browser.js
+    |   |   |   LICENSE.md
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   \---lib
+    |   |           index.es.js
+    |   |           index.js
+    |   |           index.mjs
+    |   |           
+    |   +---postgrest-js
+    |   |   |   LICENSE
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   +---dist
+    |   |   |   +---cjs
+    |   |   |   |   |   constants.d.ts
+    |   |   |   |   |   constants.d.ts.map
+    |   |   |   |   |   constants.js
+    |   |   |   |   |   constants.js.map
+    |   |   |   |   |   index.d.ts
+    |   |   |   |   |   index.d.ts.map
+    |   |   |   |   |   index.js
+    |   |   |   |   |   index.js.map
+    |   |   |   |   |   PostgrestBuilder.d.ts
+    |   |   |   |   |   PostgrestBuilder.d.ts.map
+    |   |   |   |   |   PostgrestBuilder.js
+    |   |   |   |   |   PostgrestBuilder.js.map
+    |   |   |   |   |   PostgrestClient.d.ts
+    |   |   |   |   |   PostgrestClient.d.ts.map
+    |   |   |   |   |   PostgrestClient.js
+    |   |   |   |   |   PostgrestClient.js.map
+    |   |   |   |   |   PostgrestError.d.ts
+    |   |   |   |   |   PostgrestError.d.ts.map
+    |   |   |   |   |   PostgrestError.js
+    |   |   |   |   |   PostgrestError.js.map
+    |   |   |   |   |   PostgrestFilterBuilder.d.ts
+    |   |   |   |   |   PostgrestFilterBuilder.d.ts.map
+    |   |   |   |   |   PostgrestFilterBuilder.js
+    |   |   |   |   |   PostgrestFilterBuilder.js.map
+    |   |   |   |   |   PostgrestQueryBuilder.d.ts
+    |   |   |   |   |   PostgrestQueryBuilder.d.ts.map
+    |   |   |   |   |   PostgrestQueryBuilder.js
+    |   |   |   |   |   PostgrestQueryBuilder.js.map
+    |   |   |   |   |   PostgrestTransformBuilder.d.ts
+    |   |   |   |   |   PostgrestTransformBuilder.d.ts.map
+    |   |   |   |   |   PostgrestTransformBuilder.js
+    |   |   |   |   |   PostgrestTransformBuilder.js.map
+    |   |   |   |   |   types.d.ts
+    |   |   |   |   |   types.d.ts.map
+    |   |   |   |   |   types.js
+    |   |   |   |   |   types.js.map
+    |   |   |   |   |   version.d.ts
+    |   |   |   |   |   version.d.ts.map
+    |   |   |   |   |   version.js
+    |   |   |   |   |   version.js.map
+    |   |   |   |   |   
+    |   |   |   |   \---select-query-parser
+    |   |   |   |           parser.d.ts
+    |   |   |   |           parser.d.ts.map
+    |   |   |   |           parser.js
+    |   |   |   |           parser.js.map
+    |   |   |   |           result.d.ts
+    |   |   |   |           result.d.ts.map
+    |   |   |   |           result.js
+    |   |   |   |           result.js.map
+    |   |   |   |           types.d.ts
+    |   |   |   |           types.d.ts.map
+    |   |   |   |           types.js
+    |   |   |   |           types.js.map
+    |   |   |   |           utils.d.ts
+    |   |   |   |           utils.d.ts.map
+    |   |   |   |           utils.js
+    |   |   |   |           utils.js.map
+    |   |   |   |           
+    |   |   |   \---esm
+    |   |   |           wrapper.mjs
+    |   |   |           
+    |   |   \---src
+    |   |       |   constants.ts
+    |   |       |   index.ts
+    |   |       |   PostgrestBuilder.ts
+    |   |       |   PostgrestClient.ts
+    |   |       |   PostgrestError.ts
+    |   |       |   PostgrestFilterBuilder.ts
+    |   |       |   PostgrestQueryBuilder.ts
+    |   |       |   PostgrestTransformBuilder.ts
+    |   |       |   types.ts
+    |   |       |   version.ts
+    |   |       |   
+    |   |       \---select-query-parser
+    |   |               parser.ts
+    |   |               result.ts
+    |   |               types.ts
+    |   |               utils.ts
+    |   |               
+    |   +---realtime-js
+    |   |   |   LICENSE.md
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   +---dist
+    |   |   |   +---main
+    |   |   |   |   |   index.d.ts
+    |   |   |   |   |   index.d.ts.map
+    |   |   |   |   |   index.js
+    |   |   |   |   |   index.js.map
+    |   |   |   |   |   RealtimeChannel.d.ts
+    |   |   |   |   |   RealtimeChannel.d.ts.map
+    |   |   |   |   |   RealtimeChannel.js
+    |   |   |   |   |   RealtimeChannel.js.map
+    |   |   |   |   |   RealtimeClient.d.ts
+    |   |   |   |   |   RealtimeClient.d.ts.map
+    |   |   |   |   |   RealtimeClient.js
+    |   |   |   |   |   RealtimeClient.js.map
+    |   |   |   |   |   RealtimePresence.d.ts
+    |   |   |   |   |   RealtimePresence.d.ts.map
+    |   |   |   |   |   RealtimePresence.js
+    |   |   |   |   |   RealtimePresence.js.map
+    |   |   |   |   |   
+    |   |   |   |   \---lib
+    |   |   |   |           constants.d.ts
+    |   |   |   |           constants.d.ts.map
+    |   |   |   |           constants.js
+    |   |   |   |           constants.js.map
+    |   |   |   |           push.d.ts
+    |   |   |   |           push.d.ts.map
+    |   |   |   |           push.js
+    |   |   |   |           push.js.map
+    |   |   |   |           serializer.d.ts
+    |   |   |   |           serializer.d.ts.map
+    |   |   |   |           serializer.js
+    |   |   |   |           serializer.js.map
+    |   |   |   |           timer.d.ts
+    |   |   |   |           timer.d.ts.map
+    |   |   |   |           timer.js
+    |   |   |   |           timer.js.map
+    |   |   |   |           transformers.d.ts
+    |   |   |   |           transformers.d.ts.map
+    |   |   |   |           transformers.js
+    |   |   |   |           transformers.js.map
+    |   |   |   |           version.d.ts
+    |   |   |   |           version.d.ts.map
+    |   |   |   |           version.js
+    |   |   |   |           version.js.map
+    |   |   |   |           websocket-factory.d.ts
+    |   |   |   |           websocket-factory.d.ts.map
+    |   |   |   |           websocket-factory.js
+    |   |   |   |           websocket-factory.js.map
+    |   |   |   |           
+    |   |   |   \---module
+    |   |   |       |   index.d.ts
+    |   |   |       |   index.d.ts.map
+    |   |   |       |   index.js
+    |   |   |       |   index.js.map
+    |   |   |       |   RealtimeChannel.d.ts
+    |   |   |       |   RealtimeChannel.d.ts.map
+    |   |   |       |   RealtimeChannel.js
+    |   |   |       |   RealtimeChannel.js.map
+    |   |   |       |   RealtimeClient.d.ts
+    |   |   |       |   RealtimeClient.d.ts.map
+    |   |   |       |   RealtimeClient.js
+    |   |   |       |   RealtimeClient.js.map
+    |   |   |       |   RealtimePresence.d.ts
+    |   |   |       |   RealtimePresence.d.ts.map
+    |   |   |       |   RealtimePresence.js
+    |   |   |       |   RealtimePresence.js.map
+    |   |   |       |   
+    |   |   |       \---lib
+    |   |   |               constants.d.ts
+    |   |   |               constants.d.ts.map
+    |   |   |               constants.js
+    |   |   |               constants.js.map
+    |   |   |               push.d.ts
+    |   |   |               push.d.ts.map
+    |   |   |               push.js
+    |   |   |               push.js.map
+    |   |   |               serializer.d.ts
+    |   |   |               serializer.d.ts.map
+    |   |   |               serializer.js
+    |   |   |               serializer.js.map
+    |   |   |               timer.d.ts
+    |   |   |               timer.d.ts.map
+    |   |   |               timer.js
+    |   |   |               timer.js.map
+    |   |   |               transformers.d.ts
+    |   |   |               transformers.d.ts.map
+    |   |   |               transformers.js
+    |   |   |               transformers.js.map
+    |   |   |               version.d.ts
+    |   |   |               version.d.ts.map
+    |   |   |               version.js
+    |   |   |               version.js.map
+    |   |   |               websocket-factory.d.ts
+    |   |   |               websocket-factory.d.ts.map
+    |   |   |               websocket-factory.js
+    |   |   |               websocket-factory.js.map
+    |   |   |               
+    |   |   \---src
+    |   |       |   index.ts
+    |   |       |   RealtimeChannel.ts
+    |   |       |   RealtimeClient.ts
+    |   |       |   RealtimePresence.ts
+    |   |       |   
+    |   |       \---lib
+    |   |               constants.ts
+    |   |               push.ts
+    |   |               serializer.ts
+    |   |               timer.ts
+    |   |               transformers.ts
+    |   |               version.ts
+    |   |               websocket-factory.ts
+    |   |               
+    |   +---storage-js
+    |   |   |   LICENSE
+    |   |   |   package.json
+    |   |   |   README.md
+    |   |   |   
+    |   |   +---dist
+    |   |   |   +---main
+    |   |   |   |   |   index.d.ts
+    |   |   |   |   |   index.d.ts.map
+    |   |   |   |   |   index.js
+    |   |   |   |   |   index.js.map
+    |   |   |   |   |   StorageClient.d.ts
+    |   |   |   |   |   StorageClient.d.ts.map
+    |   |   |   |   |   StorageClient.js
+    |   |   |   |   |   StorageClient.js.map
+    |   |   |   |   |   
+    |   |   |   |   +---lib
+    |   |   |   |   |       constants.d.ts
+    |   |   |   |   |       constants.d.ts.map
+    |   |   |   |   |       constants.js
+    |   |   |   |   |       constants.js.map
+    |   |   |   |   |       errors.d.ts
+    |   |   |   |   |       errors.d.ts.map
+    |   |   |   |   |       errors.js
+    |   |   |   |   |       errors.js.map
+    |   |   |   |   |       fetch.d.ts
+    |   |   |   |   |       fetch.d.ts.map
+    |   |   |   |   |       fetch.js
+    |   |   |   |   |       fetch.js.map
+    |   |   |   |   |       helpers.d.ts
+    |   |   |   |   |       helpers.d.ts.map
+    |   |   |   |   |       helpers.js
+    |   |   |   |   |       helpers.js.map
+    |   |   |   |   |       index.d.ts
+    |   |   |   |   |       index.d.ts.map
+    |   |   |   |   |       index.js
+    |   |   |   |   |       index.js.map
+    |   |   |   |   |       types.d.ts
+    |   |   |   |   |       types.d.ts.map
+    |   |   |   |   |       types.js
+    |   |   |   |   |       types.js.map
+    |   |   |   |   |       version.d.ts
+    |   |   |   |   |       version.d.ts.map
+    |   |   |   |   |       version.js
+    |   |   |   |   |       version.js.map
+    |   |   |   |   |       
+    |   |   |   |   \---packages
+    |   |   |   |           StorageBucketApi.d.ts
+    |   |   |   |           StorageBucketApi.d.ts.map
+    |   |   |   |           StorageBucketApi.js
+    |   |   |   |           StorageBucketApi.js.map
+    |   |   |   |           StorageFileApi.d.ts
+    |   |   |   |           StorageFileApi.d.ts.map
+    |   |   |   |           StorageFileApi.js
+    |   |   |   |           StorageFileApi.js.map
+    |   |   |   |           
+    |   |   |   +---module
+    |   |   |   |   |   index.d.ts
+    |   |   |   |   |   index.d.ts.map
+    |   |   |   |   |   index.js
+    |   |   |   |   |   index.js.map
+    |   |   |   |   |   StorageClient.d.ts
+    |   |   |   |   |   StorageClient.d.ts.map
+    |   |   |   |   |   StorageClient.js
+    |   |   |   |   |   StorageClient.js.map
+    |   |   |   |   |   
+    |   |   |   |   +---lib
+    |   |   |   |   |       constants.d.ts
+    |   |   |   |   |       constants.d.ts.map
+    |   |   |   |   |       constants.js
+    |   |   |   |   |       constants.js.map
+    |   |   |   |   |       errors.d.ts
+    |   |   |   |   |       errors.d.ts.map
+    |   |   |   |   |       errors.js
+    |   |   |   |   |       errors.js.map
+    |   |   |   |   |       fetch.d.ts
+    |   |   |   |   |       fetch.d.ts.map
+    |   |   |   |   |       fetch.js
+    |   |   |   |   |       fetch.js.map
+    |   |   |   |   |       helpers.d.ts
+    |   |   |   |   |       helpers.d.ts.map
+    |   |   |   |   |       helpers.js
+    |   |   |   |   |       helpers.js.map
+    |   |   |   |   |       index.d.ts
+    |   |   |   |   |       index.d.ts.map
+    |   |   |   |   |       index.js
+    |   |   |   |   |       index.js.map
+    |   |   |   |   |       types.d.ts
+    |   |   |   |   |       types.d.ts.map
+    |   |   |   |   |       types.js
+    |   |   |   |   |       types.js.map
+    |   |   |   |   |       version.d.ts
+    |   |   |   |   |       version.d.ts.map
+    |   |   |   |   |       version.js
+    |   |   |   |   |       version.js.map
+    |   |   |   |   |       
+    |   |   |   |   \---packages
+    |   |   |   |           StorageBucketApi.d.ts
+    |   |   |   |           StorageBucketApi.d.ts.map
+    |   |   |   |           StorageBucketApi.js
+    |   |   |   |           StorageBucketApi.js.map
+    |   |   |   |           StorageFileApi.d.ts
+    |   |   |   |           StorageFileApi.d.ts.map
+    |   |   |   |           StorageFileApi.js
+    |   |   |   |           StorageFileApi.js.map
+    |   |   |   |           
+    |   |   |   \---umd
+    |   |   |           supabase.js
+    |   |   |           
+    |   |   \---src
+    |   |       |   index.ts
+    |   |       |   StorageClient.ts
+    |   |       |   
+    |   |       +---lib
+    |   |       |       constants.ts
+    |   |       |       errors.ts
+    |   |       |       fetch.ts
+    |   |       |       helpers.ts
+    |   |       |       index.ts
+    |   |       |       types.ts
+    |   |       |       version.ts
+    |   |       |       
+    |   |       \---packages
+    |   |               StorageBucketApi.ts
+    |   |               StorageFileApi.ts
+    |   |               
+    |   \---supabase-js
+    |       |   LICENSE
+    |       |   package.json
+    |       |   README.md
+    |       |   
+    |       +---dist
+    |       |   +---main
+    |       |   |   |   index.d.ts
+    |       |   |   |   index.d.ts.map
+    |       |   |   |   index.js
+    |       |   |   |   index.js.map
+    |       |   |   |   SupabaseClient.d.ts
+    |       |   |   |   SupabaseClient.d.ts.map
+    |       |   |   |   SupabaseClient.js
+    |       |   |   |   SupabaseClient.js.map
+    |       |   |   |   
+    |       |   |   \---lib
+    |       |   |           constants.d.ts
+    |       |   |           constants.d.ts.map
+    |       |   |           constants.js
+    |       |   |           constants.js.map
+    |       |   |           fetch.d.ts
+    |       |   |           fetch.d.ts.map
+    |       |   |           fetch.js
+    |       |   |           fetch.js.map
+    |       |   |           helpers.d.ts
+    |       |   |           helpers.d.ts.map
+    |       |   |           helpers.js
+    |       |   |           helpers.js.map
+    |       |   |           SupabaseAuthClient.d.ts
+    |       |   |           SupabaseAuthClient.d.ts.map
+    |       |   |           SupabaseAuthClient.js
+    |       |   |           SupabaseAuthClient.js.map
+    |       |   |           types.d.ts
+    |       |   |           types.d.ts.map
+    |       |   |           types.js
+    |       |   |           types.js.map
+    |       |   |           version.d.ts
+    |       |   |           version.d.ts.map
+    |       |   |           version.js
+    |       |   |           version.js.map
+    |       |   |           
+    |       |   +---module
+    |       |   |   |   index.d.ts
+    |       |   |   |   index.d.ts.map
+    |       |   |   |   index.js
+    |       |   |   |   index.js.map
+    |       |   |   |   SupabaseClient.d.ts
+    |       |   |   |   SupabaseClient.d.ts.map
+    |       |   |   |   SupabaseClient.js
+    |       |   |   |   SupabaseClient.js.map
+    |       |   |   |   
+    |       |   |   \---lib
+    |       |   |           constants.d.ts
+    |       |   |           constants.d.ts.map
+    |       |   |           constants.js
+    |       |   |           constants.js.map
+    |       |   |           fetch.d.ts
+    |       |   |           fetch.d.ts.map
+    |       |   |           fetch.js
+    |       |   |           fetch.js.map
+    |       |   |           helpers.d.ts
+    |       |   |           helpers.d.ts.map
+    |       |   |           helpers.js
+    |       |   |           helpers.js.map
+    |       |   |           SupabaseAuthClient.d.ts
+    |       |   |           SupabaseAuthClient.d.ts.map
+    |       |   |           SupabaseAuthClient.js
+    |       |   |           SupabaseAuthClient.js.map
+    |       |   |           types.d.ts
+    |       |   |           types.d.ts.map
+    |       |   |           types.js
+    |       |   |           types.js.map
+    |       |   |           version.d.ts
+    |       |   |           version.d.ts.map
+    |       |   |           version.js
+    |       |   |           version.js.map
+    |       |   |           
+    |       |   \---umd
+    |       |           supabase.js
+    |       |           
+    |       \---src
+    |           |   index.ts
+    |           |   SupabaseClient.ts
+    |           |   
+    |           \---lib
+    |                   constants.ts
+    |                   fetch.ts
+    |                   helpers.ts
+    |                   SupabaseAuthClient.ts
+    |                   types.ts
+    |                   version.ts
+    |                   
+    +---@types
+    |   +---node
+    |   |   |   assert.d.ts
+    |   |   |   async_hooks.d.ts
+    |   |   |   buffer.buffer.d.ts
+    |   |   |   buffer.d.ts
+    |   |   |   child_process.d.ts
+    |   |   |   cluster.d.ts
+    |   |   |   console.d.ts
+    |   |   |   constants.d.ts
+    |   |   |   crypto.d.ts
+    |   |   |   dgram.d.ts
+    |   |   |   diagnostics_channel.d.ts
+    |   |   |   dns.d.ts
+    |   |   |   dom-events.d.ts
+    |   |   |   domain.d.ts
+    |   |   |   events.d.ts
+    |   |   |   fs.d.ts
+    |   |   |   globals.d.ts
+    |   |   |   globals.typedarray.d.ts
+    |   |   |   http.d.ts
+    |   |   |   http2.d.ts
+    |   |   |   https.d.ts
+    |   |   |   index.d.ts
+    |   |   |   inspector.d.ts
+    |   |   |   LICENSE
+    |   |   |   module.d.ts
+    |   |   |   net.d.ts
+    |   |   |   os.d.ts
+    |   |   |   package.json
+    |   |   |   path.d.ts
+    |   |   |   perf_hooks.d.ts
+    |   |   |   process.d.ts
+    |   |   |   punycode.d.ts
+    |   |   |   querystring.d.ts
+    |   |   |   readline.d.ts
+    |   |   |   README.md
+    |   |   |   repl.d.ts
+    |   |   |   sea.d.ts
+    |   |   |   sqlite.d.ts
+    |   |   |   stream.d.ts
+    |   |   |   string_decoder.d.ts
+    |   |   |   test.d.ts
+    |   |   |   timers.d.ts
+    |   |   |   tls.d.ts
+    |   |   |   trace_events.d.ts
+    |   |   |   tty.d.ts
+    |   |   |   url.d.ts
+    |   |   |   util.d.ts
+    |   |   |   v8.d.ts
+    |   |   |   vm.d.ts
+    |   |   |   wasi.d.ts
+    |   |   |   worker_threads.d.ts
+    |   |   |   zlib.d.ts
+    |   |   |   
+    |   |   +---assert
+    |   |   |       strict.d.ts
+    |   |   |       
+    |   |   +---compatibility
+    |   |   |       iterators.d.ts
+    |   |   |       
+    |   |   +---dns
+    |   |   |       promises.d.ts
+    |   |   |       
+    |   |   +---fs
+    |   |   |       promises.d.ts
+    |   |   |       
+    |   |   +---readline
+    |   |   |       promises.d.ts
+    |   |   |       
+    |   |   +---stream
+    |   |   |       consumers.d.ts
+    |   |   |       promises.d.ts
+    |   |   |       web.d.ts
+    |   |   |       
+    |   |   +---timers
+    |   |   |       promises.d.ts
+    |   |   |       
+    |   |   +---ts5.6
+    |   |   |   |   buffer.buffer.d.ts
+    |   |   |   |   globals.typedarray.d.ts
+    |   |   |   |   index.d.ts
+    |   |   |   |   
+    |   |   |   \---compatibility
+    |   |   |           float16array.d.ts
+    |   |   |           
+    |   |   \---ts5.7
+    |   |       |   index.d.ts
+    |   |       |   
+    |   |       \---compatibility
+    |   |               float16array.d.ts
+    |   |               
+    |   +---phoenix
+    |   |       index.d.ts
+    |   |       LICENSE
+    |   |       package.json
+    |   |       README.md
+    |   |       
+    |   \---ws
+    |           index.d.mts
+    |           index.d.ts
+    |           LICENSE
+    |           package.json
+    |           README.md
+    |           
+    +---accepts
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---adler-32
+    |   |   adler32.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           tslint.json
+    |           
+    +---array-flatten
+    |       array-flatten.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---body-parser
+    |   |   HISTORY.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   SECURITY.md
+    |   |   
+    |   +---lib
+    |   |   |   read.js
+    |   |   |   
+    |   |   \---types
+    |   |           json.js
+    |   |           raw.js
+    |   |           text.js
+    |   |           urlencoded.js
+    |   |           
+    |   \---node_modules
+    |       +---debug
+    |       |   |   .coveralls.yml
+    |       |   |   .eslintrc
+    |       |   |   .npmignore
+    |       |   |   .travis.yml
+    |       |   |   CHANGELOG.md
+    |       |   |   component.json
+    |       |   |   karma.conf.js
+    |       |   |   LICENSE
+    |       |   |   Makefile
+    |       |   |   node.js
+    |       |   |   package.json
+    |       |   |   README.md
+    |       |   |   
+    |       |   \---src
+    |       |           browser.js
+    |       |           debug.js
+    |       |           index.js
+    |       |           inspector-log.js
+    |       |           node.js
+    |       |           
+    |       \---ms
+    |               index.js
+    |               license.md
+    |               package.json
+    |               readme.md
+    |               
+    +---bytes
+    |       History.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       Readme.md
+    |       
+    +---call-bind-apply-helpers
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   actualApply.d.ts
+    |   |   actualApply.js
+    |   |   applyBind.d.ts
+    |   |   applyBind.js
+    |   |   CHANGELOG.md
+    |   |   functionApply.d.ts
+    |   |   functionApply.js
+    |   |   functionCall.d.ts
+    |   |   functionCall.js
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   reflectApply.d.ts
+    |   |   reflectApply.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---call-bound
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---cfb
+    |   |   cfb.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   xlscfb.flow.js
+    |   |   
+    |   +---dist
+    |   |       cfb.js
+    |   |       cfb.min.js
+    |   |       cfb.min.map
+    |   |       LICENSE
+    |   |       xlscfb.js
+    |   |       
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           
+    +---codepage
+    |   |   cptable.js
+    |   |   cputils.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---bits
+    |   |       10000.js
+    |   |       10001.js
+    |   |       10002.js
+    |   |       10003.js
+    |   |       10004.js
+    |   |       10005.js
+    |   |       10006.js
+    |   |       10007.js
+    |   |       10008.js
+    |   |       10010.js
+    |   |       10017.js
+    |   |       10021.js
+    |   |       10029.js
+    |   |       10079.js
+    |   |       10081.js
+    |   |       10082.js
+    |   |       1010.js
+    |   |       1026.js
+    |   |       1047.js
+    |   |       1132.js
+    |   |       1140.js
+    |   |       1141.js
+    |   |       1142.js
+    |   |       1143.js
+    |   |       1144.js
+    |   |       1145.js
+    |   |       1146.js
+    |   |       1147.js
+    |   |       1148.js
+    |   |       1149.js
+    |   |       1250.js
+    |   |       1251.js
+    |   |       1252.js
+    |   |       1253.js
+    |   |       1254.js
+    |   |       1255.js
+    |   |       1256.js
+    |   |       1257.js
+    |   |       1258.js
+    |   |       1361.js
+    |   |       20000.js
+    |   |       20001.js
+    |   |       20002.js
+    |   |       20003.js
+    |   |       20004.js
+    |   |       20005.js
+    |   |       20105.js
+    |   |       20106.js
+    |   |       20107.js
+    |   |       20108.js
+    |   |       20261.js
+    |   |       20269.js
+    |   |       20273.js
+    |   |       20277.js
+    |   |       20278.js
+    |   |       20280.js
+    |   |       20284.js
+    |   |       20285.js
+    |   |       20290.js
+    |   |       20297.js
+    |   |       20420.js
+    |   |       20423.js
+    |   |       20424.js
+    |   |       20833.js
+    |   |       20838.js
+    |   |       20866.js
+    |   |       20871.js
+    |   |       20880.js
+    |   |       20905.js
+    |   |       20924.js
+    |   |       20932.js
+    |   |       20936.js
+    |   |       20949.js
+    |   |       21025.js
+    |   |       21027.js
+    |   |       21866.js
+    |   |       28591.js
+    |   |       28592.js
+    |   |       28593.js
+    |   |       28594.js
+    |   |       28595.js
+    |   |       28596.js
+    |   |       28597.js
+    |   |       28598.js
+    |   |       28599.js
+    |   |       28600.js
+    |   |       28601.js
+    |   |       28603.js
+    |   |       28604.js
+    |   |       28605.js
+    |   |       28606.js
+    |   |       29001.js
+    |   |       37.js
+    |   |       38598.js
+    |   |       437.js
+    |   |       47451.js
+    |   |       500.js
+    |   |       50220.js
+    |   |       50221.js
+    |   |       50222.js
+    |   |       50225.js
+    |   |       50227.js
+    |   |       51932.js
+    |   |       51936.js
+    |   |       51949.js
+    |   |       52936.js
+    |   |       54936.js
+    |   |       57002.js
+    |   |       57003.js
+    |   |       57004.js
+    |   |       57005.js
+    |   |       57006.js
+    |   |       57007.js
+    |   |       57008.js
+    |   |       57009.js
+    |   |       57010.js
+    |   |       57011.js
+    |   |       620.js
+    |   |       708.js
+    |   |       720.js
+    |   |       737.js
+    |   |       775.js
+    |   |       808.js
+    |   |       850.js
+    |   |       852.js
+    |   |       855.js
+    |   |       857.js
+    |   |       858.js
+    |   |       860.js
+    |   |       861.js
+    |   |       862.js
+    |   |       863.js
+    |   |       864.js
+    |   |       865.js
+    |   |       866.js
+    |   |       869.js
+    |   |       870.js
+    |   |       872.js
+    |   |       874.js
+    |   |       875.js
+    |   |       895.js
+    |   |       932.js
+    |   |       936.js
+    |   |       949.js
+    |   |       950.js
+    |   |       
+    |   +---dist
+    |   |       cpexcel.full.js
+    |   |       sbcs.full.js
+    |   |       
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           tslint.json
+    |           
+    +---content-disposition
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---content-type
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---cookie
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       SECURITY.md
+    |       
+    +---cookie-signature
+    |       .npmignore
+    |       History.md
+    |       index.js
+    |       package.json
+    |       Readme.md
+    |       
+    +---cors
+    |   |   CONTRIBUTING.md
+    |   |   HISTORY.md
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---lib
+    |           index.js
+    |           
+    +---crc-32
+    |   |   crc32.js
+    |   |   crc32c.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---bin
+    |   |       crc32.njs
+    |   |       
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           tslint.json
+    |           
+    +---depd
+    |   |   History.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   Readme.md
+    |   |   
+    |   \---lib
+    |       \---browser
+    |               index.js
+    |               
+    +---destroy
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---dotenv
+    |   |   CHANGELOG.md
+    |   |   config.d.ts
+    |   |   config.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README-es.md
+    |   |   README.md
+    |   |   SECURITY.md
+    |   |   
+    |   \---lib
+    |           cli-options.js
+    |           env-options.js
+    |           main.d.ts
+    |           main.js
+    |           
+    +---dunder-proto
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   get.d.ts
+    |   |   get.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   set.d.ts
+    |   |   set.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           get.js
+    |           index.js
+    |           set.js
+    |           
+    +---ee-first
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---encodeurl
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---es-define-property
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---es-errors
+    |   |   .eslintrc
+    |   |   CHANGELOG.md
+    |   |   eval.d.ts
+    |   |   eval.js
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   range.d.ts
+    |   |   range.js
+    |   |   README.md
+    |   |   ref.d.ts
+    |   |   ref.js
+    |   |   syntax.d.ts
+    |   |   syntax.js
+    |   |   tsconfig.json
+    |   |   type.d.ts
+    |   |   type.js
+    |   |   uri.d.ts
+    |   |   uri.js
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---es-object-atoms
+    |   |   .eslintrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   isObject.d.ts
+    |   |   isObject.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   RequireObjectCoercible.d.ts
+    |   |   RequireObjectCoercible.js
+    |   |   ToObject.d.ts
+    |   |   ToObject.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---escape-html
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       Readme.md
+    |       
+    +---etag
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---express
+    |   |   History.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   Readme.md
+    |   |   
+    |   +---lib
+    |   |   |   application.js
+    |   |   |   express.js
+    |   |   |   request.js
+    |   |   |   response.js
+    |   |   |   utils.js
+    |   |   |   view.js
+    |   |   |   
+    |   |   +---middleware
+    |   |   |       init.js
+    |   |   |       query.js
+    |   |   |       
+    |   |   \---router
+    |   |           index.js
+    |   |           layer.js
+    |   |           route.js
+    |   |           
+    |   \---node_modules
+    |       +---debug
+    |       |   |   .coveralls.yml
+    |       |   |   .eslintrc
+    |       |   |   .npmignore
+    |       |   |   .travis.yml
+    |       |   |   CHANGELOG.md
+    |       |   |   component.json
+    |       |   |   karma.conf.js
+    |       |   |   LICENSE
+    |       |   |   Makefile
+    |       |   |   node.js
+    |       |   |   package.json
+    |       |   |   README.md
+    |       |   |   
+    |       |   \---src
+    |       |           browser.js
+    |       |           debug.js
+    |       |           index.js
+    |       |           inspector-log.js
+    |       |           node.js
+    |       |           
+    |       \---ms
+    |               index.js
+    |               license.md
+    |               package.json
+    |               readme.md
+    |               
+    +---finalhandler
+    |   |   HISTORY.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   SECURITY.md
+    |   |   
+    |   \---node_modules
+    |       +---debug
+    |       |   |   .coveralls.yml
+    |       |   |   .eslintrc
+    |       |   |   .npmignore
+    |       |   |   .travis.yml
+    |       |   |   CHANGELOG.md
+    |       |   |   component.json
+    |       |   |   karma.conf.js
+    |       |   |   LICENSE
+    |       |   |   Makefile
+    |       |   |   node.js
+    |       |   |   package.json
+    |       |   |   README.md
+    |       |   |   
+    |       |   \---src
+    |       |           browser.js
+    |       |           debug.js
+    |       |           index.js
+    |       |           inspector-log.js
+    |       |           node.js
+    |       |           
+    |       \---ms
+    |               index.js
+    |               license.md
+    |               package.json
+    |               readme.md
+    |               
+    +---forwarded
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---frac
+    |   |   frac.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---dist
+    |   |       frac.js
+    |   |       frac.min.js
+    |   |       frac.min.map
+    |   |       LICENSE
+    |   |       
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           tslint.json
+    |           
+    +---fresh
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---function-bind
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   implementation.js
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       SECURITY.md
+    |   |       
+    |   \---test
+    |           .eslintrc
+    |           index.js
+    |           
+    +---get-intrinsic
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           GetIntrinsic.js
+    |           
+    +---get-proto
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   Object.getPrototypeOf.d.ts
+    |   |   Object.getPrototypeOf.js
+    |   |   package.json
+    |   |   README.md
+    |   |   Reflect.getPrototypeOf.d.ts
+    |   |   Reflect.getPrototypeOf.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---gopd
+    |   |   .eslintrc
+    |   |   CHANGELOG.md
+    |   |   gOPD.d.ts
+    |   |   gOPD.js
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---has-symbols
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   shams.d.ts
+    |   |   shams.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |       |   index.js
+    |       |   tests.js
+    |       |   
+    |       \---shams
+    |               core-js.js
+    |               get-own-property-symbols.js
+    |               
+    +---hasown
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   \---.github
+    |           FUNDING.yml
+    |           
+    +---http-errors
+    |   |   HISTORY.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---node_modules
+    +---iconv-lite
+    |   |   Changelog.md
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---encodings
+    |   |   |   dbcs-codec.js
+    |   |   |   dbcs-data.js
+    |   |   |   index.js
+    |   |   |   internal.js
+    |   |   |   sbcs-codec.js
+    |   |   |   sbcs-data-generated.js
+    |   |   |   sbcs-data.js
+    |   |   |   utf16.js
+    |   |   |   utf7.js
+    |   |   |   
+    |   |   \---tables
+    |   |           big5-added.json
+    |   |           cp936.json
+    |   |           cp949.json
+    |   |           cp950.json
+    |   |           eucjp.json
+    |   |           gb18030-ranges.json
+    |   |           gbk-added.json
+    |   |           shiftjis.json
+    |   |           
+    |   \---lib
+    |           bom-handling.js
+    |           extend-node.js
+    |           index.d.ts
+    |           index.js
+    |           streams.js
+    |           
+    +---inherits
+    |       inherits.js
+    |       inherits_browser.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---ipaddr.js
+    |   |   ipaddr.min.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---lib
+    |           ipaddr.js
+    |           ipaddr.js.d.ts
+    |           
+    +---math-intrinsics
+    |   |   .eslintrc
+    |   |   abs.d.ts
+    |   |   abs.js
+    |   |   CHANGELOG.md
+    |   |   floor.d.ts
+    |   |   floor.js
+    |   |   isFinite.d.ts
+    |   |   isFinite.js
+    |   |   isInteger.d.ts
+    |   |   isInteger.js
+    |   |   isNaN.d.ts
+    |   |   isNaN.js
+    |   |   isNegativeZero.d.ts
+    |   |   isNegativeZero.js
+    |   |   LICENSE
+    |   |   max.d.ts
+    |   |   max.js
+    |   |   min.d.ts
+    |   |   min.js
+    |   |   mod.d.ts
+    |   |   mod.js
+    |   |   package.json
+    |   |   pow.d.ts
+    |   |   pow.js
+    |   |   README.md
+    |   |   round.d.ts
+    |   |   round.js
+    |   |   sign.d.ts
+    |   |   sign.js
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   +---constants
+    |   |       maxArrayLength.d.ts
+    |   |       maxArrayLength.js
+    |   |       maxSafeInteger.d.ts
+    |   |       maxSafeInteger.js
+    |   |       maxValue.d.ts
+    |   |       maxValue.js
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---media-typer
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---merge-descriptors
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---methods
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---mime
+    |   |   .npmignore
+    |   |   CHANGELOG.md
+    |   |   cli.js
+    |   |   LICENSE
+    |   |   mime.js
+    |   |   package.json
+    |   |   README.md
+    |   |   types.json
+    |   |   
+    |   \---src
+    |           build.js
+    |           test.js
+    |           
+    +---mime-db
+    |       db.json
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---mime-types
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---ms
+    |       index.js
+    |       license.md
+    |       package.json
+    |       readme.md
+    |       
+    +---negotiator
+    |   |   HISTORY.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---lib
+    |           charset.js
+    |           encoding.js
+    |           language.js
+    |           mediaType.js
+    |           
+    +---object-assign
+    |       index.js
+    |       license
+    |       package.json
+    |       readme.md
+    |       
+    +---object-inspect
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package-support.json
+    |   |   package.json
+    |   |   readme.markdown
+    |   |   test-core-js.js
+    |   |   util.inspect.js
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   +---example
+    |   |       all.js
+    |   |       circular.js
+    |   |       fn.js
+    |   |       inspect.js
+    |   |       
+    |   \---test
+    |       |   bigint.js
+    |       |   circular.js
+    |       |   deep.js
+    |       |   element.js
+    |       |   err.js
+    |       |   fakes.js
+    |       |   fn.js
+    |       |   global.js
+    |       |   has.js
+    |       |   holes.js
+    |       |   indent-option.js
+    |       |   inspect.js
+    |       |   lowbyte.js
+    |       |   number.js
+    |       |   quoteStyle.js
+    |       |   toStringTag.js
+    |       |   undef.js
+    |       |   values.js
+    |       |   
+    |       \---browser
+    |               dom.js
+    |               
+    +---on-finished
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---parseurl
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---path-to-regexp
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       Readme.md
+    |       
+    +---proxy-addr
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---qs
+    |   |   .editorconfig
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   LICENSE.md
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   +---dist
+    |   |       qs.js
+    |   |       
+    |   +---lib
+    |   |       formats.js
+    |   |       index.js
+    |   |       parse.js
+    |   |       stringify.js
+    |   |       utils.js
+    |   |       
+    |   \---test
+    |           empty-keys-cases.js
+    |           parse.js
+    |           stringify.js
+    |           utils.js
+    |           
+    +---range-parser
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---raw-body
+    |       HISTORY.md
+    |       index.d.ts
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       SECURITY.md
+    |       
+    +---safe-buffer
+    |       index.d.ts
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---safer-buffer
+    |       dangerous.js
+    |       LICENSE
+    |       package.json
+    |       Porting-Buffer.md
+    |       Readme.md
+    |       safer.js
+    |       tests.js
+    |       
+    +---send
+    |   |   HISTORY.md
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   SECURITY.md
+    |   |   
+    |   \---node_modules
+    |       +---debug
+    |       |   |   .coveralls.yml
+    |       |   |   .eslintrc
+    |       |   |   .npmignore
+    |       |   |   .travis.yml
+    |       |   |   CHANGELOG.md
+    |       |   |   component.json
+    |       |   |   karma.conf.js
+    |       |   |   LICENSE
+    |       |   |   Makefile
+    |       |   |   node.js
+    |       |   |   package.json
+    |       |   |   README.md
+    |       |   |   
+    |       |   +---node_modules
+    |       |   |   \---ms
+    |       |   |           index.js
+    |       |   |           license.md
+    |       |   |           package.json
+    |       |   |           readme.md
+    |       |   |           
+    |       |   \---src
+    |       |           browser.js
+    |       |           debug.js
+    |       |           index.js
+    |       |           inspector-log.js
+    |       |           node.js
+    |       |           
+    |       \---encodeurl
+    |               HISTORY.md
+    |               index.js
+    |               LICENSE
+    |               package.json
+    |               README.md
+    |               
+    +---serve-static
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---setprototypeof
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---test
+    |           index.js
+    |           
+    +---side-channel
+    |   |   .editorconfig
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---side-channel-list
+    |   |   .editorconfig
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   list.d.ts
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---side-channel-map
+    |   |   .editorconfig
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---side-channel-weakmap
+    |   |   .editorconfig
+    |   |   .eslintrc
+    |   |   .nycrc
+    |   |   CHANGELOG.md
+    |   |   index.d.ts
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   tsconfig.json
+    |   |   
+    |   +---.github
+    |   |       FUNDING.yml
+    |   |       
+    |   \---test
+    |           index.js
+    |           
+    +---ssf
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   ssf.flow.js
+    |   |   ssf.js
+    |   |   
+    |   \---types
+    |           index.d.ts
+    |           tsconfig.json
+    |           
+    +---statuses
+    |       codes.json
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---toidentifier
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---tr46
+    |   |   .npmignore
+    |   |   index.js
+    |   |   package.json
+    |   |   
+    |   \---lib
+    |           .gitkeep
+    |           mappingTable.json
+    |           
+    +---type-is
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---undici-types
+    |       agent.d.ts
+    |       api.d.ts
+    |       balanced-pool.d.ts
+    |       cache-interceptor.d.ts
+    |       cache.d.ts
+    |       client-stats.d.ts
+    |       client.d.ts
+    |       connector.d.ts
+    |       content-type.d.ts
+    |       cookies.d.ts
+    |       diagnostics-channel.d.ts
+    |       dispatcher.d.ts
+    |       env-http-proxy-agent.d.ts
+    |       errors.d.ts
+    |       eventsource.d.ts
+    |       fetch.d.ts
+    |       formdata.d.ts
+    |       global-dispatcher.d.ts
+    |       global-origin.d.ts
+    |       h2c-client.d.ts
+    |       handlers.d.ts
+    |       header.d.ts
+    |       index.d.ts
+    |       interceptors.d.ts
+    |       LICENSE
+    |       mock-agent.d.ts
+    |       mock-call-history.d.ts
+    |       mock-client.d.ts
+    |       mock-errors.d.ts
+    |       mock-interceptor.d.ts
+    |       mock-pool.d.ts
+    |       package.json
+    |       patch.d.ts
+    |       pool-stats.d.ts
+    |       pool.d.ts
+    |       proxy-agent.d.ts
+    |       readable.d.ts
+    |       README.md
+    |       retry-agent.d.ts
+    |       retry-handler.d.ts
+    |       util.d.ts
+    |       utility.d.ts
+    |       webidl.d.ts
+    |       websocket.d.ts
+    |       
+    +---unpipe
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---utils-merge
+    |       .npmignore
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---vary
+    |       HISTORY.md
+    |       index.js
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       
+    +---webidl-conversions
+    |   |   LICENSE.md
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---lib
+    |           index.js
+    |           
+    +---whatwg-url
+    |   |   LICENSE.txt
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---lib
+    |           public-api.js
+    |           URL-impl.js
+    |           url-state-machine.js
+    |           URL.js
+    |           utils.js
+    |           
+    +---wmf
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   
+    |   \---dist
+    |           wmf.js
+    |           wmf.js.map
+    |           wmf.node.js
+    |           wmf.node.js.map
+    |           
+    +---word
+    |       CONTRIBUTING.md
+    |       LICENSE
+    |       package.json
+    |       README.md
+    |       word.js
+    |       
+    +---ws
+    |   |   browser.js
+    |   |   index.js
+    |   |   LICENSE
+    |   |   package.json
+    |   |   README.md
+    |   |   wrapper.mjs
+    |   |   
+    |   \---lib
+    |           buffer-util.js
+    |           constants.js
+    |           event-target.js
+    |           extension.js
+    |           limiter.js
+    |           permessage-deflate.js
+    |           receiver.js
+    |           sender.js
+    |           stream.js
+    |           subprotocol.js
+    |           validation.js
+    |           websocket-server.js
+    |           websocket.js
+    |           
+    \---xlsx
+        |   bower.json
+        |   CHANGELOG.md
+        |   formats.png
+        |   legend.png
+        |   LICENSE
+        |   package.json
+        |   README.md
+        |   xlsx.js
+        |   xlsx.mjs
+        |   xlsxworker.js
+        |   
+        +---bin
+        |       xlsx.njs
+        |       
+        +---dist
+        |       cpexcel.full.mjs
+        |       cpexcel.js
+        |       LICENSE
+        |       shim.min.js
+        |       xlsx.core.min.js
+        |       xlsx.core.min.map
+        |       xlsx.extendscript.js
+        |       xlsx.full.min.js
+        |       xlsx.full.min.map
+        |       xlsx.mini.min.js
+        |       xlsx.mini.min.map
+        |       xlsx.zahl.js
+        |       xlsx.zahl.mjs
+        |       
+        \---types
+                index.d.ts
+                tsconfig.json
+                

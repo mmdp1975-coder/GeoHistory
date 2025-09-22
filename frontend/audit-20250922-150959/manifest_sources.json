@@ -1,0 +1,485 @@
+﻿[
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\.env",
+        "Name":  ".env",
+        "Extension":  ".env",
+        "Length":  302,
+        "LastWriteTimeUtc":  "\/Date(1758405843180)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\next-env.d.ts",
+        "Name":  "next-env.d.ts",
+        "Extension":  ".ts",
+        "Length":  233,
+        "LastWriteTimeUtc":  "\/Date(1758346759904)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\next.config.js",
+        "Name":  "next.config.js",
+        "Extension":  ".js",
+        "Length":  125,
+        "LastWriteTimeUtc":  "\/Date(1756756614000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\package-lock.json",
+        "Name":  "package-lock.json",
+        "Extension":  ".json",
+        "Length":  37331,
+        "LastWriteTimeUtc":  "\/Date(1758491308691)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\package.json",
+        "Name":  "package.json",
+        "Extension":  ".json",
+        "Length":  659,
+        "LastWriteTimeUtc":  "\/Date(1758491308647)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\tsconfig.json",
+        "Name":  "tsconfig.json",
+        "Extension":  ".json",
+        "Length":  582,
+        "LastWriteTimeUtc":  "\/Date(1758346759903)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\scripts\\authFixConfirmAndSetPasswords.ts",
+        "Name":  "authFixConfirmAndSetPasswords.ts",
+        "Extension":  ".ts",
+        "Length":  2173,
+        "LastWriteTimeUtc":  "\/Date(1758462285203)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\scripts\\seedTestUsers.ts",
+        "Name":  "seedTestUsers.ts",
+        "Extension":  ".ts",
+        "Length":  5264,
+        "LastWriteTimeUtc":  "\/Date(1758458640522)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\middleware.ts",
+        "Name":  "middleware.ts",
+        "Extension":  ".ts",
+        "Length":  896,
+        "LastWriteTimeUtc":  "\/Date(1758543336689)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\layout.js",
+        "Name":  "layout.js",
+        "Extension":  ".js",
+        "Length":  729,
+        "LastWriteTimeUtc":  "\/Date(1758348753608)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  130,
+        "LastWriteTimeUtc":  "\/Date(1758488815982)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\admin\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  223,
+        "LastWriteTimeUtc":  "\/Date(1758439940554)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\dbcheck\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  1343,
+        "LastWriteTimeUtc":  "\/Date(1757017696000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\diag\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  2490,
+        "LastWriteTimeUtc":  "\/Date(1756987298000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\events\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  6034,
+        "LastWriteTimeUtc":  "\/Date(1756987224000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\events\\bounds\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  4044,
+        "LastWriteTimeUtc":  "\/Date(1756987254000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\health\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  1993,
+        "LastWriteTimeUtc":  "\/Date(1756846706000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\options\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  3686,
+        "LastWriteTimeUtc":  "\/Date(1757448632000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\api\\ping\\route.js",
+        "Name":  "route.js",
+        "Extension":  ".js",
+        "Length":  248,
+        "LastWriteTimeUtc":  "\/Date(1756986126000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\dashboard\\admin\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1047,
+        "LastWriteTimeUtc":  "\/Date(1758539690810)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\dashboard\\enthusiast\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1052,
+        "LastWriteTimeUtc":  "\/Date(1758539625698)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\dashboard\\moderator\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1114,
+        "LastWriteTimeUtc":  "\/Date(1758539651516)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\dashboard\\researcher\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1067,
+        "LastWriteTimeUtc":  "\/Date(1758539596947)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\dashboard\\student\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1072,
+        "LastWriteTimeUtc":  "\/Date(1758539561554)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\explore\\page.js",
+        "Name":  "page.js",
+        "Extension":  ".js",
+        "Length":  26244,
+        "LastWriteTimeUtc":  "\/Date(1758488775791)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\fan\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  228,
+        "LastWriteTimeUtc":  "\/Date(1758440151594)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\forgot-password\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  4609,
+        "LastWriteTimeUtc":  "\/Date(1758351308344)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\home\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  2324,
+        "LastWriteTimeUtc":  "\/Date(1758440383898)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\landing\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1274,
+        "LastWriteTimeUtc":  "\/Date(1758489772450)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\landing\\route.ts",
+        "Name":  "route.ts",
+        "Extension":  ".ts",
+        "Length":  852,
+        "LastWriteTimeUtc":  "\/Date(1758491438825)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\landing\\sections\\SectionSceltaIniziale.tsx",
+        "Name":  "SectionSceltaIniziale.tsx",
+        "Extension":  ".tsx",
+        "Length":  794,
+        "LastWriteTimeUtc":  "\/Date(1758373037783)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\landing\\[persona]\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  4726,
+        "LastWriteTimeUtc":  "\/Date(1758489798248)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\login\\layout.tsx",
+        "Name":  "layout.tsx",
+        "Extension":  ".tsx",
+        "Length":  918,
+        "LastWriteTimeUtc":  "\/Date(1758477267780)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\login\\login.module.css",
+        "Name":  "login.module.css",
+        "Extension":  ".css",
+        "Length":  3839,
+        "LastWriteTimeUtc":  "\/Date(1758542310586)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\login\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  6423,
+        "LastWriteTimeUtc":  "\/Date(1758543299760)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\login\\redirect\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  1319,
+        "LastWriteTimeUtc":  "\/Date(1758539511215)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\moderation\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  224,
+        "LastWriteTimeUtc":  "\/Date(1758440008756)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\post-auth\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  987,
+        "LastWriteTimeUtc":  "\/Date(1758516355696)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\profile\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  4169,
+        "LastWriteTimeUtc":  "\/Date(1758367817332)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\register\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  11816,
+        "LastWriteTimeUtc":  "\/Date(1758361476920)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\research\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  218,
+        "LastWriteTimeUtc":  "\/Date(1758440114505)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\students\\high\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  255,
+        "LastWriteTimeUtc":  "\/Date(1758440469555)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\students\\middle\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  261,
+        "LastWriteTimeUtc":  "\/Date(1758440486084)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\app\\students\\primary\\page.tsx",
+        "Name":  "page.tsx",
+        "Extension":  ".tsx",
+        "Length":  257,
+        "LastWriteTimeUtc":  "\/Date(1758440507675)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\DashboardShell.tsx",
+        "Name":  "DashboardShell.tsx",
+        "Extension":  ".tsx",
+        "Length":  3823,
+        "LastWriteTimeUtc":  "\/Date(1758539467308)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\DetailsPanel.jsx",
+        "Name":  "DetailsPanel.jsx",
+        "Extension":  ".jsx",
+        "Length":  3289,
+        "LastWriteTimeUtc":  "\/Date(1757965596147)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\FiltersBar.jsx",
+        "Name":  "FiltersBar.jsx",
+        "Extension":  ".jsx",
+        "Length":  13769,
+        "LastWriteTimeUtc":  "\/Date(1757965628193)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\MapView.jsx",
+        "Name":  "MapView.jsx",
+        "Extension":  ".jsx",
+        "Length":  8061,
+        "LastWriteTimeUtc":  "\/Date(1758051116586)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\RoleBadge.tsx",
+        "Name":  "RoleBadge.tsx",
+        "Extension":  ".tsx",
+        "Length":  890,
+        "LastWriteTimeUtc":  "\/Date(1758539430096)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\TimelineSlider.jsx",
+        "Name":  "TimelineSlider.jsx",
+        "Extension":  ".jsx",
+        "Length":  11150,
+        "LastWriteTimeUtc":  "\/Date(1758059663821)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\TourControls.tsx",
+        "Name":  "TourControls.tsx",
+        "Extension":  ".tsx",
+        "Length":  1977,
+        "LastWriteTimeUtc":  "\/Date(1757625999104)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\common\\LandingHeader.tsx",
+        "Name":  "LandingHeader.tsx",
+        "Extension":  ".tsx",
+        "Length":  1898,
+        "LastWriteTimeUtc":  "\/Date(1758490202218)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionCreazione.tsx",
+        "Name":  "SectionCreazione.tsx",
+        "Extension":  ".tsx",
+        "Length":  4892,
+        "LastWriteTimeUtc":  "\/Date(1758382329442)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionCuriosita.tsx",
+        "Name":  "SectionCuriosita.tsx",
+        "Extension":  ".tsx",
+        "Length":  4697,
+        "LastWriteTimeUtc":  "\/Date(1758381524749)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionEventoSingolo.tsx",
+        "Name":  "SectionEventoSingolo.tsx",
+        "Extension":  ".tsx",
+        "Length":  11367,
+        "LastWriteTimeUtc":  "\/Date(1758382641848)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionFollowup.tsx",
+        "Name":  "SectionFollowup.tsx",
+        "Extension":  ".tsx",
+        "Length":  2544,
+        "LastWriteTimeUtc":  "\/Date(1758382367293)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionImpostazioni.tsx",
+        "Name":  "SectionImpostazioni.tsx",
+        "Extension":  ".tsx",
+        "Length":  5942,
+        "LastWriteTimeUtc":  "\/Date(1758490233142)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionOrientamento.tsx",
+        "Name":  "SectionOrientamento.tsx",
+        "Extension":  ".tsx",
+        "Length":  3706,
+        "LastWriteTimeUtc":  "\/Date(1758374104582)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionRaccolta.tsx",
+        "Name":  "SectionRaccolta.tsx",
+        "Extension":  ".tsx",
+        "Length":  5775,
+        "LastWriteTimeUtc":  "\/Date(1758381827946)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\components\\landing\\sections\\SectionSceltaIniziale.tsx",
+        "Name":  "SectionSceltaIniziale.tsx",
+        "Extension":  ".tsx",
+        "Length":  805,
+        "LastWriteTimeUtc":  "\/Date(1758373413397)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\config\\persona-landing.config.json",
+        "Name":  "persona-landing.config.json",
+        "Extension":  ".json",
+        "Length":  3869,
+        "LastWriteTimeUtc":  "\/Date(1758372827383)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\api.js",
+        "Name":  "api.js",
+        "Extension":  ".js",
+        "Length":  9203,
+        "LastWriteTimeUtc":  "\/Date(1757872187733)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\audio.ts",
+        "Name":  "audio.ts",
+        "Extension":  ".ts",
+        "Length":  3159,
+        "LastWriteTimeUtc":  "\/Date(1757625976072)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\postLoginRedirect.ts",
+        "Name":  "postLoginRedirect.ts",
+        "Extension":  ".ts",
+        "Length":  2692,
+        "LastWriteTimeUtc":  "\/Date(1758543267780)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\supabaseBrowserClient.ts",
+        "Name":  "supabaseBrowserClient.ts",
+        "Extension":  ".ts",
+        "Length":  312,
+        "LastWriteTimeUtc":  "\/Date(1758491390134)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\supabaseClient.ts",
+        "Name":  "supabaseClient.ts",
+        "Extension":  ".ts",
+        "Length":  300,
+        "LastWriteTimeUtc":  "\/Date(1758539432596)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\lib\\supabaseServerClient.ts",
+        "Name":  "supabaseServerClient.ts",
+        "Extension":  ".ts",
+        "Length":  743,
+        "LastWriteTimeUtc":  "\/Date(1758491403526)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\styles\\globals.css",
+        "Name":  "globals.css",
+        "Extension":  ".css",
+        "Length":  5597,
+        "LastWriteTimeUtc":  "\/Date(1756937694000)\/"
+    },
+    {
+        "FullName":  "C:\\GeoHistory\\frontend\\src\\types\\event.ts",
+        "Name":  "event.ts",
+        "Extension":  ".ts",
+        "Length":  916,
+        "LastWriteTimeUtc":  "\/Date(1757624555896)\/"
+    }
+]
