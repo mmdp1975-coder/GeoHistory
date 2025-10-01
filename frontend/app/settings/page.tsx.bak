@@ -8,7 +8,7 @@ export default function SettingsPage() {
       </header>
       <section className="max-w-6xl mx-auto p-6">
         <h1 className="text-2xl font-bold mb-2">Impostazioni</h1>
-        <p className="text-sm text-gray-600">Placeholder â€” qui aggiungeremo le preferenze utente.</p>
+        <p className="text-sm text-gray-600">Placeholder — qui aggiungeremo le preferenze utente.</p>
       </section>
     </main>
   );

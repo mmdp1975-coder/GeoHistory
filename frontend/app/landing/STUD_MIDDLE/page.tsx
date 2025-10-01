@@ -5,10 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 /** --------------------------------------------------------------------
- *  THEME (STUDENT • MIDDLE)
+ *  THEME (STUDENT â€¢ MIDDLE)
  *  ------------------------------------------------------------------*/
 const theme = {
-  label: "STUDENT • MIDDLE",
+  label: "STUDENT â€¢ MIDDLE",
   from: "from-indigo-600",
   via: "via-indigo-500",
   to: "to-indigo-400",

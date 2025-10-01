@@ -1,4 +1,4 @@
-﻿// app/login/register/page.tsx
+ï»¿// app/login/register/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -39,7 +39,7 @@ export default function RegisterPage() {
     setLoading(false);
 
     if (!user) {
-      alert("Registrazione avviata. Controlla la mail per confermare l’account.");
+      alert("Registrazione avviata. Controlla la mail per confermare lâ€™account.");
       return;
     }
 
