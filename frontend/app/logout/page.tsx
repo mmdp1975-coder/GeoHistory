@@ -1,26 +1,28 @@
-// app/logout/page.tsx
 "use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import supabase from "../../lib/supabaseBrowserClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 
 export default function LogoutPage() {
   const router = useRouter();
 
   useEffect(() => {
-    (async () => {
+    const doLogout = async () => {
       try {
         await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Logout error:", err);
       } finally {
         router.replace("/login");
       }
-    })();
+    };
+    doLogout();
   }, [router]);
 
   return (
-    <main className="min-h-screen grid place-items-center">
+    <div className="min-h-screen flex items-center justify-center">
       <p>Logging out…</p>
-    </main>
+    </div>
   );
 }
