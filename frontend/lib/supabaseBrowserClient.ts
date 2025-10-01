@@ -1,13 +1,30 @@
-import { createClient } from "@supabase/supabase-js";
+// frontend/lib/supabaseBrowserClient.ts
+"use client";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  // Log esplicito in build/runtime per individuare env mancanti su Vercel
-  console.warn(
-    "[Supabase] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
-  );
+/**
+ * Client Supabase per il BROWSER.
+ * Usa le chiavi pubbliche. Non mettere qui la service-role key.
+ */
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // Evita crash di build; i dettagli appariranno in console runtime
+  // (su Vercel setta le env in Project Settings → Environment Variables)
+  // eslint-disable-next-line no-console
+  console.warn("[supabaseBrowserClient] Missing NEXT_PUBLIC_* env vars");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase: SupabaseClient<any, any, any, any, any> = createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY
+);
+
+/**
+ * Shim per compatibilità con importazioni legacy:
+ * permette sia `import { supabase } from "..."`
+ * sia `import supabase from "..."`.
+ */
+export default supabase;
