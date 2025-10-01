@@ -46,7 +46,7 @@ function candidatePaths(defaultPath?: string | null, code?: string | null): stri
   return Array.from(new Set(arr));
 }
 
-/** Verifica il primo path che risponde 200/OK con HEAD, altrimenti ritorna lâ€™ultimo fallback */
+/** Verifica il primo path che risponde 200/OK con HEAD, altrimenti ritorna l’ultimo fallback */
 async function pickFirstExisting(paths: string[]): Promise<string> {
   for (const p of paths) {
     try {
@@ -121,7 +121,7 @@ export default function LoginPage() {
         },
       });
       if (error) throw error;
-      // Il callback torna su /login: lâ€™utente reinvia le credenziali o viene giÃ  autenticato
+      // Il callback torna su /login: l’utente reinvia le credenziali o viene già autenticato
     } catch (e: any) {
       setErr(e?.message ?? "Social sign-in failed.");
       setLoading(false);
@@ -173,7 +173,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                placeholder="••••••••"
                 required
               />
               <button
@@ -205,7 +205,7 @@ export default function LoginPage() {
           <div className={styles.field}>
             <div className={styles.actions}>
               <button className={styles.btnPrimary} disabled={loading} type="submit">
-                {loading ? "Signing inâ€¦" : "Sign in"}
+                {loading ? "Signing in…" : "Sign in"}
               </button>
 
               <div className={styles.links}>
