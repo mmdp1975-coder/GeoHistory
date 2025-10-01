@@ -354,13 +354,18 @@ export default function GroupEventModulePage() {
     if (debug) console.log("[GE] Markers placed:", markersRef.current.length);
 
     if (pts.length) {
-      const bounds = pts.reduce(
+      // TIPIZZAZIONE ESPLICITA del reduce + initialValue coerente
+      const bounds = pts.reduce<[[number, number], [number, number]]>(
         (b, c) => [
           [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
           [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
         ],
-        [pts[0], pts[0]] as [[number, number], [number, number]]
+        [
+          [pts[0][0], pts[0][1]],
+          [pts[0][0], pts[0][1]],
+        ]
       );
+
       try {
         map.fitBounds(bounds as any, { padding: 72, duration: 700 });
       } catch (e) {
