@@ -1,4 +1,4 @@
-// frontend/app/module/group_event/page.tsx
+// frontend/app/module/group_event/page_inner.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,11 +8,13 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { supabase } from "@/lib/supabaseBrowserClient";
 
 /* =========================================================================
-   SCHEMA (confermato)
-   - group_events: id, title, pitch, cover_url, description, ...
-   - event_group_event: (event_id, group_event_id)
+   SCHEMA (confermato dal tuo DB)
    - events_list: id, latitude, longitude, exact_date, year_from, year_to, location, ...
+   - event_group_event: event_id → group_event_id
    - event_translations: event_id, lang, title, description, description_short, wikipedia_url
+   - event_type_map: event_id, type_code
+   - event_types: code (PK), icon, icon_name
+   - group_events: id, title, pitch, cover_url, description, ...
    ========================================================================= */
 
 type AnyObj = Record<string, any>;
@@ -59,6 +61,32 @@ const OSM_STYLE: any = {
   },
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
+
+/* ============================
+   ICON LIB MODERNA (inline SVG)
+   keywords → <svg> string
+   ============================ */
+const MODERN_ICONS: Record<string, string> = {
+  // generici
+  "pin": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
+  "battle": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9l-1-1 7-7 1 1-7 7z"/><path d="M3 21l6-6"/><path d="M3 17l4 4"/></svg>`,
+  "castle": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l3-2 3 2 3-2 3 2 3-2 3 2v14"/><path d="M3 14h18"/><path d="M8 22v-6h8v6"/></svg>`,
+  "museum": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M21 10v9H3V10"/><path d="M7 21v-8m5 8v-8m5 8v-8"/></svg>`,
+  "ship": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19s3 2 9 2 9-2 9-2"/><path d="M5 18l2-7h10l2 7"/><path d="M7 11V6h10v5"/></svg>`,
+  "church": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M8 8h8"/><path d="M6 22V12l6-4 6 4v10"/><path d="M10 22v-6h4v6"/></svg>`,
+  "monument": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4l3 6-5 5-5-5 3-6z"/><path d="M4 21h16"/></svg>`,
+  "dig": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M7 22v-7l4-4 4 4v7"/></svg>`,
+  "person": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/></svg>`,
+};
+
+/* Normalizza un testo in parola-chiave per l’icon lib */
+function normalizeIconKey(s?: string | null): string | null {
+  if (!s) return null;
+  const k = s.toLowerCase().trim();
+  // rimuovo spazi/punteggiatura
+  const key = k.replace(/[^a-z0-9_-]+/g, "");
+  return key || null;
+}
 
 export default function GroupEventModulePage() {
   const router = useRouter();
@@ -142,33 +170,30 @@ export default function GroupEventModulePage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [noGeoBanner, setNoGeoBanner] = useState(false);
 
+  // Icona risolta per evento: { event_id → { raw, keyword } }
+  const [iconByEventId, setIconByEventId] = useState<Map<string, { raw: string; keyword: string | null }>>(new Map());
+
   // ----- Mappa & stato -----
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // ---- INIT MAP: forzata client-only + retry fino a container pronto ----
+  // ---- INIT MAP ----
   useEffect(() => {
     let cancelled = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 40; // ~40 frame
+    const MAX_ATTEMPTS = 40;
 
     function tryInit() {
       if (cancelled) return;
-      if (typeof window === "undefined") {
-        if (debug) console.warn("[GE] window undefined, skip");
-        return;
-      }
-      if (mapRef.current) {
-        if (debug) console.log("[GE] mapRef esiste già");
-        return;
-      }
+      if (typeof window === "undefined") return;
+      if (mapRef.current) return;
+
       const container = document.getElementById("gehj-map");
       if (!container) {
         attempts++;
         if (attempts <= MAX_ATTEMPTS) {
-          if (debug) console.log("[GE] container non trovato, retry", attempts);
           requestAnimationFrame(tryInit);
         } else {
           console.error("[GE] container mappa non trovato dopo i retry");
@@ -176,7 +201,6 @@ export default function GroupEventModulePage() {
         return;
       }
 
-      // forza dimensioni utili
       (container as HTMLDivElement).style.minHeight = "60vh";
       (container as HTMLDivElement).style.height = "100%";
       (container as HTMLDivElement).style.width = "100%";
@@ -197,18 +221,10 @@ export default function GroupEventModulePage() {
         map.addControl(new maplibregl.NavigationControl(), "top-right");
         mapRef.current = map;
         setMapReady(true);
-        if (debug) console.log("[GE] Map created ✓ (style:", apiKey ? "MapTiler" : "OSM", ")");
 
-        map.on("load", () => {
-          setMapLoaded(true);
-          if (debug) console.log("[GE] Map loaded ✓");
-        });
+        map.on("load", () => setMapLoaded(true));
+        map.on("error", (e) => console.error("[GE] Map error:", e));
 
-        map.on("error", (e) => {
-          console.error("[GE] Map error:", e);
-        });
-
-        // resize safe
         const ro = new ResizeObserver(() => {
           try {
             map.resize();
@@ -220,14 +236,13 @@ export default function GroupEventModulePage() {
       }
     }
 
-    // parte il ciclo di retry
     requestAnimationFrame(tryInit);
     return () => {
       cancelled = true;
     };
-  }, [debug]);
+  }, []);
 
-  // ---- Fetch dati ----
+  // ---- Fetch dati + chain type_map → types (icone) ----
   useEffect(() => {
     if (!gid) return;
     let active = true;
@@ -236,7 +251,6 @@ export default function GroupEventModulePage() {
       try {
         setLoading(true);
         setErr(null);
-        if (debug) console.log("[GE] Fetch start", { gid });
 
         // 1) group_event
         const { data: geRows, error: geErr } = await supabase
@@ -269,7 +283,7 @@ export default function GroupEventModulePage() {
               location: e.location ?? null,
             })) || [];
 
-        // 3) translations (prefer it)
+        // 3) translations (prefer IT > fallback)
         const ids = cores.map((c) => c.id);
         const trMap = new Map<
           string,
@@ -302,16 +316,54 @@ export default function GroupEventModulePage() {
 
         vms.sort((a, b) => a.order_key - b.order_key);
 
+        // 4) event_type_map → event_types (icon/icon_name/code)
+        const iconMap = new Map<string, { raw: string; keyword: string | null }>();
+        if (ids.length) {
+          const { data: etmRows, error: etmErr } = await supabase
+            .from("event_type_map")
+            .select("event_id, type_code")
+            .in("event_id", ids);
+          if (etmErr) throw etmErr;
+
+          const typeCodes = Array.from(
+            new Set((etmRows ?? []).map((r: any) => String(r.type_code)).filter(Boolean))
+          );
+
+          let typeInfo = new Map<string, { raw?: string | null; name?: string | null }>();
+          if (typeCodes.length) {
+            const { data: teRows, error: teErr } = await supabase
+              .from("event_types")
+              .select("code, icon, icon_name")
+              .in("code", typeCodes);
+            if (teErr) throw teErr;
+            (teRows ?? []).forEach((t: any) => {
+              typeInfo.set(String(t.code), { raw: t.icon ?? null, name: t.icon_name ?? null });
+            });
+          }
+
+          // compongo: prima icona disponibile per evento (icon → icon_name → type_code keyword)
+          (etmRows ?? []).forEach((m: any) => {
+            const evId = String(m.event_id);
+            if (iconMap.has(evId)) return; // già risolto
+            const code = m?.type_code ? String(m.type_code) : null;
+            if (!code) return;
+            const t = typeInfo.get(code);
+            const raw = (t?.raw && t.raw.trim())
+              ? t.raw.trim()
+              : (t?.name && t.name.trim())
+              ? t.name.trim()
+              : code.trim();
+            iconMap.set(evId, { raw, keyword: normalizeIconKey(raw) || normalizeIconKey(code) });
+          });
+        }
+
         if (active) {
           setGe(geData);
           setRows(vms);
+          setIconByEventId(iconMap);
           setSelectedIndex(0);
           setNoGeoBanner(!vms.some((v) => v.latitude !== null && v.longitude !== null));
-          if (debug)
-            console.log("[GE] Fetch ok", {
-              events: vms.length,
-              withCoords: vms.filter((v) => v.latitude !== null && v.longitude !== null).length,
-            });
+          if (debug) console.log("[GE] icons resolved:", iconMap.size);
         }
       } catch (e: any) {
         if (active) setErr(e?.message ?? "Unknown error");
@@ -321,40 +373,143 @@ export default function GroupEventModulePage() {
       }
     })();
 
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [gid, debug]);
 
-  // ---- Markers + fit (dopo mappa pronta) ----
+  // ---- MARKERS con raggiera + icone moderne + selezione grande ----
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    // pulizia
+    // pulizia precedente
     (markersRef.current || []).forEach((m) => m.remove());
     markersRef.current = [];
 
+    type GroupItem = { row: EventVM; idx: number };
+    const groups = new Map<string, GroupItem[]>();
     const pts: [number, number][] = [];
 
     rows.forEach((ev, idx) => {
       if (ev.latitude === null || ev.longitude === null) return;
-      const el = document.createElement("div");
-      el.className =
-        "rounded-full border border-black/30 bg-amber-400/95 text-black text-[11px] font-bold px-2 py-1 shadow cursor-pointer";
-      el.textContent = `${idx + 1}`;
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([ev.longitude, ev.latitude])
-        .addTo(map);
-      el.addEventListener("click", () => setSelectedIndex(idx));
-      markersRef.current.push(marker);
+      const key = `${ev.longitude.toFixed(6)},${ev.latitude.toFixed(6)}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push({ row: ev, idx });
       pts.push([ev.longitude, ev.latitude]);
     });
 
-    if (debug) console.log("[GE] Markers placed:", markersRef.current.length);
+    // helpers
+    const isUrlIcon = (s: string) => {
+      const t = s.toLowerCase();
+      return t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/") ||
+             t.endsWith(".png") || t.endsWith(".svg") || t.endsWith(".jpg") || t.endsWith(".jpeg") || t.endsWith(".webp");
+    };
+    const isEmojiish = (s: string) => {
+      // euristica semplice: pochi caratteri, contiene surrogate/emoji o simboli
+      return s.trim().length <= 4;
+    };
 
+    function makeMarkerEl(ev: EventVM, idx: number) {
+      const iconInfo = iconByEventId.get(ev.id);
+      const raw = iconInfo?.raw ?? "";
+      const keyword = iconInfo?.keyword ?? null;
+
+      const isSelected = idx === selectedIndex;
+
+      const wrap = document.createElement("div");
+      wrap.className = "relative rounded-full bg-white/95 backdrop-blur ring-1 ring-black/15 shadow-[0_2px_8px_rgba(0,0,0,0.15)] cursor-pointer transition-all duration-200 ease-out";
+      wrap.style.width = isSelected ? "44px" : "34px";
+      wrap.style.height = isSelected ? "44px" : "34px";
+      wrap.style.display = "grid";
+      wrap.style.placeItems = "center";
+      if (isSelected) {
+        wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
+        wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)"; // amber-500/45
+      }
+
+      if (raw) {
+        if (isUrlIcon(raw)) {
+          const img = document.createElement("img");
+          img.src = raw;
+          img.alt = "icon";
+          img.style.width = isSelected ? "30px" : "24px";
+          img.style.height = isSelected ? "30px" : "24px";
+          img.style.objectFit = "contain";
+          img.referrerPolicy = "no-referrer";
+          wrap.appendChild(img);
+          return wrap;
+        }
+        if (isEmojiish(raw) && !MODERN_ICONS[keyword || ""]) {
+          const span = document.createElement("span");
+          span.textContent = raw;
+          span.style.fontSize = isSelected ? "22px" : "18px";
+          span.style.lineHeight = "1";
+          wrap.appendChild(span);
+          return wrap;
+        }
+      }
+
+      // SVG moderno da keyword oppure default "pin"
+      const svgHtml = (keyword && MODERN_ICONS[keyword]) || MODERN_ICONS["pin"];
+      const holder = document.createElement("div");
+      holder.innerHTML = svgHtml;
+      const svg = holder.firstChild as SVGElement | null;
+      if (svg) {
+        svg.setAttribute("width", isSelected ? "26" : "22");
+        svg.setAttribute("height", isSelected ? "26" : "22");
+        (svg as any).style.color = "#111827"; // text-gray-900
+        wrap.appendChild(svg);
+      } else {
+        // fallback numerico ultimo-resort
+        const span = document.createElement("span");
+        span.textContent = String(idx + 1);
+        span.style.fontSize = isSelected ? "14px" : "12px";
+        span.style.fontWeight = "700";
+        wrap.appendChild(span);
+      }
+
+      return wrap;
+    }
+
+    const BASE_R = 22; // raggio in px per la raggiera
+
+    for (const [_key, items] of groups) {
+      const n = items.length;
+
+      if (n === 1) {
+        const { row, idx } = items[0];
+        const el = makeMarkerEl(row, idx);
+        const marker = new maplibregl.Marker({ element: el, offset: [0, 0] })
+          .setLngLat([row.longitude as number, row.latitude as number])
+          .addTo(map);
+        el.addEventListener("click", () => setSelectedIndex(idx));
+        markersRef.current.push(marker);
+        continue;
+      }
+
+      const radius = Math.min(38, BASE_R + Math.floor(n / 4) * 6);
+      const angleStep = (2 * Math.PI) / n;
+      const centerLngLat: [number, number] = [
+        items[0].row.longitude as number,
+        items[0].row.latitude as number,
+      ];
+
+      for (let i = 0; i < n; i++) {
+        const { row, idx } = items[i];
+        const angle = i * angleStep;
+        const dx = Math.round(radius * Math.cos(angle));
+        const dy = Math.round(radius * Math.sin(angle));
+
+        const el = makeMarkerEl(row, idx);
+        const marker = new maplibregl.Marker({ element: el, offset: [dx, dy] })
+          .setLngLat(centerLngLat)
+          .addTo(map);
+        el.addEventListener("click", () => setSelectedIndex(idx));
+        markersRef.current.push(marker);
+      }
+    }
+
+    // Fit sui punti (coordinate reali)
     if (pts.length) {
-      // TIPIZZAZIONE ESPLICITA del reduce + initialValue coerente
       const bounds = pts.reduce<[[number, number], [number, number]]>(
         (b, c) => [
           [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
@@ -365,20 +520,20 @@ export default function GroupEventModulePage() {
           [pts[0][0], pts[0][1]],
         ]
       );
-
       try {
-        map.fitBounds(bounds as any, { padding: 72, duration: 700 });
+        map.fitBounds(bounds as any, { padding: 84, duration: 800 });
       } catch (e) {
-        if (debug) console.log("[GE] fitBounds error:", e);
+        console.log("[GE] fitBounds error:", e);
       }
     } else {
       try {
-        map.flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 500 });
+        map.flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
       } catch {}
     }
-  }, [rows, mapReady, debug]);
+  // ridisegno anche quando cambia la selezione → marker selezionato più grande
+  }, [rows, mapReady, iconByEventId, selectedIndex]);
 
-  // ---- Player ----
+  // ---- Player auto-advance ----
   useEffect(() => {
     let t: any = null;
     if (isPlaying && rows.length > 0) {
@@ -407,7 +562,7 @@ export default function GroupEventModulePage() {
       router.back();
       return;
     }
-    router.push(landingHref || "/module/favourites");
+    router.push(landingHref || "/landing");
   }
 
   // ---- Render ----
@@ -415,138 +570,163 @@ export default function GroupEventModulePage() {
   const geSubtitle = (ge?.pitch ?? "").toString();
   const geCover = ge?.cover_url ?? null;
 
-  if (loading) return <div className="p-6 text-sm text-gray-600">Loading Journey…</div>;
-
-  if (err)
+  if (loading) {
     return (
-      <div className="p-6">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 shadow-sm">
-          <div className="mb-1 font-semibold">Error</div>
-          <div>{err}</div>
-        </div>
-        <div className="mt-4">
-          <button onClick={onBack} className="rounded-lg border bg-white px-3 py-1.5 hover:bg-gray-50">
-            ← Back
-          </button>
+      <div className="flex h-[100dvh] items-center justify-center bg-gradient-to-b from-amber-50 via-white to-white">
+        <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow backdrop-blur">
+          Loading Journey…
         </div>
       </div>
     );
+  }
+
+  if (err) {
+    return (
+      <div className="min-h-[100dvh] bg-gradient-to-b from-rose-50 via-white to-white p-6">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-red-200 bg-white/70 p-5 text-red-800 shadow backdrop-blur">
+          <div className="mb-1 text-base font-semibold">Error</div>
+          <div className="text-sm">{err}</div>
+          <div className="mt-4">
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition"
+            >
+              <span aria-hidden>←</span> Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-[100dvh] flex-col">
-      {/* HEADER (estetica) */}
-      <header className="w-full border-b bg-gradient-to-r from-amber-50 via-white to-white">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
+    <div className="flex h-[100dvh] flex-col bg-[radial-gradient(1200px_600px_at_20%_-10%,#fff7e6,transparent),linear-gradient(to_bottom,#ffffff,60%,#fafafa)]">
+      {/* HEADER */}
+      <header className="sticky top-0 z-10 w-full border-b border-black/5 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-2 py-2">
+          {/* LOGO GEOHISTORY */}
+          <a
+            href={landingHref || "/landing"}
+            className="flex shrink-0 items-center"
+            title="GeoHistory Journey"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png"
+              alt="GeoHistory"
+              className="h-10 w-auto object-contain"
+            />
+          </a>
+
+          {/* Cover + titolo */}
           {geCover ? (
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-black/10 shadow-sm">
+            <div className="relative hidden h-10 w-10 overflow-hidden rounded-xl ring-1 ring-black/10 shadow-sm md:block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={geCover} alt={geTitle} className="h-full w-full object-cover" />
             </div>
           ) : (
-            <div className="h-14 w-14 shrink-0 rounded-xl bg-amber-100 ring-1 ring-black/10" />
+            <div className="hidden h-10 w-10 rounded-xl bg-amber-100 ring-1 ring-black/10 md:block" />
           )}
+
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold leading-tight">{geTitle}</h1>
-            {geSubtitle ? <p className="line-clamp-2 text-sm text-gray-600">{geSubtitle}</p> : null}
+            <h1 className="truncate text-[17px] font-semibold leading-tight text-gray-900">{geTitle}</h1>
+            {geSubtitle ? <p className="line-clamp-1 text-[13px] text-gray-600">{geSubtitle}</p> : null}
           </div>
+
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={onBack}
-              className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/70 px-3 py-1.5 text-sm text-gray-800 shadow-sm hover:bg-white transition focus:outline-none focus:ring-2 focus:ring-amber-500/40"
               title="Back"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Back
+              ← Back
             </button>
           </div>
         </div>
-      </header>
 
-      {/* DEBUG BAR (se &debug=1) */}
-      {debug && (
-        <div className="border-b bg-yellow-50 px-4 py-2 text-xs text-yellow-900">
-          <div className="mx-auto max-w-7xl flex flex-wrap gap-x-6 gap-y-1">
-            <div><b>gid:</b> {gid || "—"}</div>
-            <div><b>events:</b> {rows.length}</div>
-            <div><b>withCoords:</b> {rows.filter(r => r.latitude !== null && r.longitude !== null).length}</div>
-            <div><b>mapReady:</b> {String(mapReady)}</div>
-            <div><b>mapLoaded:</b> {String(mapLoaded)}</div>
-            <div><b>markers:</b> {(markersRef.current || []).length}</div>
-            <div><b>landingHref:</b> {landingHref || "—"}</div>
+        {debug && (
+          <div className="border-t border-amber-200/60 bg-amber-50/70 px-4 py-2 text-xs text-amber-900">
+            <div className="mx-auto max-w-7xl flex flex-wrap gap-x-6 gap-y-1">
+              <div><b>gid:</b> {gid || "—"}</div>
+              <div><b>events:</b> {rows.length}</div>
+              <div><b>withCoords:</b> {rows.filter(r => r.latitude !== null && r.longitude !== null).length}</div>
+              <div><b>mapReady:</b> {String(mapReady)}</div>
+              <div><b>mapLoaded:</b> {String(mapLoaded)}</div>
+              <div><b>markers:</b> {(markersRef.current || []).length}</div>
+              <div><b>landingHref:</b> {landingHref || "—"}</div>
+              <div><b>icons by event:</b> {iconByEventId.size}</div>
+              <div><b>selectedIndex:</b> {selectedIndex}</div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </header>
 
       {/* BODY */}
       <div className="grid flex-1 grid-cols-12 gap-0">
         {/* MAP */}
-        <div className="relative col-span-12 border-r lg:col-span-8">
+        <div className="relative col-span-12 border-r border-black/5 lg:col-span-8">
           <div id="gehj-map" className="absolute inset-0" />
           {noGeoBanner && (
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800 shadow">
+            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs text-amber-900 shadow backdrop-blur">
               Nessun evento geolocalizzato per questo Journey
             </div>
           )}
-          {/* Player */}
-          <div className="absolute left-0 right-0 bottom-0 border-t bg-white/90 backdrop-blur">
-            <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-2">
-              <button
-                onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
-                className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
-                title="Previous"
-              >
-                ⏮
-              </button>
-              <button
-                onClick={() => setIsPlaying((p) => !p)}
-                className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
-                title={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? "⏸" : "▶"}
-              </button>
-              <button
-                onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
-                className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
-                title="Next"
-              >
-                ⏭
-              </button>
-
-              <div className="ml-3 text-sm text-gray-600">
-                {rows.length ? (
-                  <>
-                    Event <span className="font-semibold">{selectedIndex + 1}</span> of{" "}
-                    <span className="font-semibold">{rows.length}</span>
-                  </>
-                ) : (
-                  "No events"
-                )}
-              </div>
-
-              <div className="ml-auto truncate text-sm text-gray-500">{selected ? selected.title : "—"}</div>
-            </div>
-          </div>
         </div>
 
         {/* SIDEBAR */}
-        <aside className="col-span-12 h-full overflow-auto bg-gray-50 lg:col-span-4">
+        <aside className="col-span-12 h-full bg-transparent lg:col-span-4 overflow-hidden">
           <div className="flex h-full flex-col">
-            <div className="border-b bg-white/90 px-4 py-3">
-              <div className="text-xs uppercase tracking-wide text-gray-500">Selected event</div>
-              <div className="text-base font-semibold">{selected ? selected.title : "—"}</div>
+            {/* Header sidebar con titolo evento + controlli player */}
+            <div className="flex items-center gap-3 border-b border-black/5 bg-white/60 px-4 py-3 backdrop-blur">
+              <div className="min-w-0">
+                <div className="text-[11px] uppercase tracking-wide text-gray-500">Selected event</div>
+                <div className="truncate text-[15px] font-semibold text-gray-900">{selected ? selected.title : "—"}</div>
+                <div className="text-[11px] text-gray-500">
+                  {rows.length ? (
+                    <>
+                      Event <span className="font-medium">{selectedIndex + 1}</span> of{" "}
+                      <span className="font-medium">{rows.length}</span>
+                    </>
+                  ) : "No events"}
+                </div>
+              </div>
+
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  title="Previous"
+                >
+                  ⏮
+                </button>
+                <button
+                  onClick={() => setIsPlaying((p) => !p)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? "⏸" : "▶"}
+                </button>
+                <button
+                  onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  title="Next"
+                >
+                  ⏭
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-4">
+            {/* Contenuto: solo la descrizione scorre */}
+            <div className="flex-1 px-4 py-3 overflow-hidden">
               {selected ? (
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                  <div className="space-y-3">
-                    <p className="whitespace-pre-wrap text-sm text-gray-700">
+                <div className="rounded-2xl border border-black/10 bg-white/60 p-4 shadow-sm backdrop-blur h-full flex flex-col transition hover:bg-white/70">
+                  {/* Descrizione scrollabile e a dimensione controllata */}
+                  <div className="space-y-3 overflow-y-auto pr-1" style={{ maxHeight: "46vh" }}>
+                    <p className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
                       {selected.description || "No description available."}
                     </p>
 
-                    <div className="text-sm text-gray-600">
+                    <div className="text-[13px] text-gray-700">
                       {selected.exact_date ? (
                         <div>
                           <span className="font-medium">Date:</span>{" "}
@@ -560,7 +740,7 @@ export default function GroupEventModulePage() {
                       ) : null}
                     </div>
 
-                    <div className="text-xs text-gray-500">
+                    <div className="text-[12px] text-gray-500">
                       {selected.latitude !== null && selected.longitude !== null
                         ? `Lat/Lng: ${selected.latitude.toFixed(5)}, ${selected.longitude.toFixed(5)}`
                         : "Lat/Lng: —"}
@@ -572,24 +752,30 @@ export default function GroupEventModulePage() {
                           href={selected.wiki_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm text-blue-700 underline"
+                          className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
                         >
                           Open Wikipedia
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path d="M14 3h7v7M21 3l-9 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            <path d="M5 21l8-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                          </svg>
                         </a>
                       </div>
                     ) : null}
                   </div>
 
                   {/* Jump rapido */}
-                  <div className="mt-6">
-                    <div className="mb-2 text-sm font-medium">Jump to event</div>
+                  <div className="mt-4">
+                    <div className="mb-2 text-sm font-medium text-gray-900">Jump to event</div>
                     <div className="grid grid-cols-6 gap-2">
                       {rows.map((ev, idx) => (
                         <button
                           key={ev.id}
                           onClick={() => setSelectedIndex(idx)}
-                          className={`rounded-lg border px-2 py-1 text-xs ${
-                            idx === selectedIndex ? "border-black bg-black text-white" : "bg-white hover:bg-gray-50"
+                          className={`rounded-lg border px-2 py-1 text-xs transition ${
+                            idx === selectedIndex
+                              ? "border-black bg-black text-white"
+                              : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
                           }`}
                           title={ev.title}
                         >
@@ -600,14 +786,17 @@ export default function GroupEventModulePage() {
                   </div>
                 </div>
               ) : (
-                <div className="text-sm text-gray-500">Select a marker on the map.</div>
+                <div className="rounded-2xl border border-dashed border-black/10 bg-white/40 p-4 text-sm text-gray-600 backdrop-blur">
+                  Select a marker on the map.
+                </div>
               )}
             </div>
 
-            {(ge?.description) ? (
-              <div className="border-t bg-white/90 px-4 py-3">
-                <div className="mb-1 text-sm font-semibold">About this Journey</div>
-                <div className="whitespace-pre-wrap text-sm text-gray-700">
+            {/* About Journey */}
+            {ge?.description ? (
+              <div className="border-t border-black/5 bg-white/60 px-4 py-3 backdrop-blur">
+                <div className="mb-1 text-sm font-semibold text-gray-900">About this Journey</div>
+                <div className="whitespace-pre-wrap text-sm leading-6 text-gray-800">
                   {ge.description?.toString?.() ?? ""}
                 </div>
               </div>
