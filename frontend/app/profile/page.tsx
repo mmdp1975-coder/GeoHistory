@@ -1,1 +1,1 @@
-﻿export default function ProfilePage() { return <div>TODO: Profile Page</div>; }
+export default function ProfilePage() { return <div>TODO: Profile Page</div>; }

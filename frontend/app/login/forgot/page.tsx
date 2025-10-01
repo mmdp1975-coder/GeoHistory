@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -87,7 +87,7 @@ export default function ForgotPage() {
           <div className={styles.field}>
             <div className={styles.actions}>
               <button className={styles.btnPrimary} disabled={loading} type="submit">
-                {loading ? "Sending…" : "Send reset link"}
+                {loading ? "Sending�" : "Send reset link"}
               </button>
               <div className={styles.links}>
                 <Link className={styles.a} href="/login">Back to login</Link>

@@ -1,5 +1,5 @@
-﻿// lib/widgets.ts
-import supabase from "./supabaseBrowserClient";
+// lib/widgets.ts
+import { supabase } from "@/lib/supabaseBrowserClient";
 
 export type WidgetRow = {
   id: string | number;
@@ -13,7 +13,7 @@ export type WidgetRow = {
 /**
  * Ritorna i widget per persona.
  * 1) Prova a leggere da una tabella ipotetica "landing_widgets" (persona, title, subtitle, image_url, position)
- * 2) Se la tabella non esiste o è vuota, usa un fallback statico ordinato per "position"
+ * 2) Se la tabella non esiste o � vuota, usa un fallback statico ordinato per "position"
  */
 export default async function fetchWidgetsForPersona(personaParam: string): Promise<WidgetRow[]> {
   const persona = (personaParam || "").toUpperCase();

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -188,7 +188,7 @@ export default function AdminLanding() {
         {!loading && widgets.length > 0 && (
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {widgets.map((w) => {
-              const icon = w.icon ?? "🧭";
+              const icon = w.icon ?? "??";
               const title = w.title ?? "Untitled";
               const subtitle = w.description ?? "";
               const href = w.route ?? "#";
