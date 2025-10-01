@@ -1,50 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseBrowserClient";
 
-// -- Configurazione client Supabase lato server -------------------------------
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string; // consigliato lato server
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-
-// Usa service-role se disponibile, altrimenti anon (fallback)
-const supabase: SupabaseClient<any, any, any, any, any> = createClient(
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY
-);
-
-// -- Helpers tipizzati in modo compatibile (evitiamo il conflitto "never") ---
-async function listTables(client: SupabaseClient<any, any, any, any, any>) {
-  // Nota: PostgREST espone solo gli oggetti nello schema esposto (di solito "public").
-  // Se hai una view che elenca le tabelle (es. v_tables) usa quella. In alternativa prova
-  // a leggere la lista dalle viste di sistema esposte (in Supabase di default non sono esposte).
-  //
-  // Qui implemento una lettura "safe": se hai una tabella di controllo (es. _schema_tables) usala.
-  // In mancanza, ritorno un array vuoto per non bloccare la build (potrai sostituire con la tua query).
+// Helper per elencare le tabelle
+async function listTables() {
   try {
-    // ESEMPIO (se esiste una view pubblica "v_tables" con {table_schema, table_name}):
-    // const { data, error } = await client.from("v_tables").select("table_schema, table_name");
-    // if (error) throw error;
-    // return data?.map(r => `${r.table_schema}.${r.table_name}`) ?? [];
-
-    return []; // fallback: nessuna tabella (non rompe la build)
+    // NB: Supabase non espone information_schema di default.
+    // Qui puoi collegarti a una view custom se ce l’hai.
+    // Per ora ritorniamo un array vuoto come placeholder.
+    return [];
   } catch (err) {
     console.error("listTables error:", err);
     return [];
   }
 }
 
-async function getTableRows(
-  client: SupabaseClient<any, any, any, any, any>,
-  table: string,
-  limit = 100
-) {
-  // Legge righe da una tabella dello schema "public"
-  const { data, error } = await client.from(table).select("*").limit(limit);
-  if (error) throw error;
-  return data ?? [];
+// Helper per leggere righe da una tabella
+async function getTableRows(table: string, limit = 100) {
+  try {
+    const { data, error } = await supabase.from(table).select("*").limit(limit);
+    if (error) throw error;
+    return data ?? [];
+  } catch (err) {
+    console.error("getTableRows error:", err);
+    return [];
+  }
 }
 
-// -----------------------------------------------------------------------------
+// ============================================================================
 
 export async function GET(
   req: NextRequest,
@@ -55,14 +37,14 @@ export async function GET(
 
     // /api/admin-db  oppure  /api/admin-db/tables
     if (slug.length === 0 || (slug[0] || "").toLowerCase() === "tables") {
-      const tables = await listTables(supabase);
+      const tables = await listTables();
       return NextResponse.json({ tables });
     }
 
     // /api/admin-db/rows/<tableName>
     if (slug.length >= 2 && (slug[0] || "").toLowerCase() === "rows") {
       const tableName = slug[1];
-      const rows = await getTableRows(supabase, tableName);
+      const rows = await getTableRows(tableName);
       return NextResponse.json({ table: tableName, rows });
     }
 
