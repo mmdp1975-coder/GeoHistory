@@ -68,15 +68,15 @@ const OSM_STYLE: any = {
    ============================ */
 const MODERN_ICONS: Record<string, string> = {
   // generici
-  "pin": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
-  "battle": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9l-1-1 7-7 1 1-7 7z"/><path d="M3 21l6-6"/><path d="M3 17l4 4"/></svg>`,
-  "castle": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l3-2 3 2 3-2 3 2 3-2 3 2v14"/><path d="M3 14h18"/><path d="M8 22v-6h8v6"/></svg>`,
-  "museum": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M21 10v9H3V10"/><path d="M7 21v-8m5 8v-8m5 8v-8"/></svg>`,
-  "ship": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19s3 2 9 2 9-2 9-2"/><path d="M5 18l2-7h10l2 7"/><path d="M7 11V6h10v5"/></svg>`,
-  "church": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M8 8h8"/><path d="M6 22V12l6-4 6 4v10"/><path d="M10 22v-6h4v6"/></svg>`,
-  "monument": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4l3 6-5 5-5-5 3-6z"/><path d="M4 21h16"/></svg>`,
-  "dig": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M7 22v-7l4-4 4 4v7"/></svg>`,
-  "person": `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/></svg>`,
+  pin: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
+  battle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9l-1-1 7-7 1 1-7 7z"/><path d="M3 21l6-6"/><path d="M3 17l4 4"/></svg>`,
+  castle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l3-2 3 2 3-2 3 2 3-2 3 2v14"/><path d="M3 14h18"/><path d="M8 22v-6h8v6"/></svg>`,
+  museum: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M21 10v9H3V10"/><path d="M7 21v-8m5 8v-8m5 8v-8"/></svg>`,
+  ship: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19s3 2 9 2 9-2 9-2"/><path d="M5 18l2-7h10l2 7"/><path d="M7 11V6h10v5"/></svg>`,
+  church: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M8 8h8"/><path d="M6 22V12l6-4 6 4v10"/><path d="M10 22v-6h4v6"/></svg>`,
+  monument: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4l3 6-5 5-5-5 3-6z"/><path d="M4 21h16"/></svg>`,
+  dig: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M7 22v-7l4-4 4 4v7"/></svg>`,
+  person: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/></svg>`,
 };
 
 /* Normalizza un testo in parola-chiave per l’icon lib */
@@ -201,7 +201,7 @@ export default function GroupEventModulePage() {
         return;
       }
 
-      (container as HTMLDivElement).style.minHeight = "60vh";
+      // LASCIO solo altezza piena del contenitore (che è già fissato via CSS responsive)
       (container as HTMLDivElement).style.height = "100%";
       (container as HTMLDivElement).style.width = "100%";
 
@@ -357,23 +357,21 @@ export default function GroupEventModulePage() {
           });
         }
 
-        if (active) {
-          setGe(geData);
-          setRows(vms);
-          setIconByEventId(iconMap);
-          setSelectedIndex(0);
-          setNoGeoBanner(!vms.some((v) => v.latitude !== null && v.longitude !== null));
-          if (debug) console.log("[GE] icons resolved:", iconMap.size);
-        }
+        setGe(geData);
+        setRows(vms);
+        setIconByEventId(iconMap);
+        setSelectedIndex(0);
+        setNoGeoBanner(!vms.some((v) => v.latitude !== null && v.longitude !== null));
+        if (debug) console.log("[GE] icons resolved:", iconMap.size);
       } catch (e: any) {
-        if (active) setErr(e?.message ?? "Unknown error");
+        setErr(e?.message ?? "Unknown error");
         console.error("[GE] Fetch error:", e);
       } finally {
-        if (active) setLoading(false);
+        setLoading(false);
       }
     })();
 
-    return () => { active = false; };
+    return () => {};
   }, [gid, debug]);
 
   // ---- MARKERS con raggiera + icone moderne + selezione grande ----
@@ -404,7 +402,6 @@ export default function GroupEventModulePage() {
              t.endsWith(".png") || t.endsWith(".svg") || t.endsWith(".jpg") || t.endsWith(".jpeg") || t.endsWith(".webp");
     };
     const isEmojiish = (s: string) => {
-      // euristica semplice: pochi caratteri, contiene surrogate/emoji o simboli
       return s.trim().length <= 4;
     };
 
@@ -423,7 +420,7 @@ export default function GroupEventModulePage() {
       wrap.style.placeItems = "center";
       if (isSelected) {
         wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
-        wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)"; // amber-500/45
+        wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
       }
 
       if (raw) {
@@ -448,7 +445,6 @@ export default function GroupEventModulePage() {
         }
       }
 
-      // SVG moderno da keyword oppure default "pin"
       const svgHtml = (keyword && MODERN_ICONS[keyword]) || MODERN_ICONS["pin"];
       const holder = document.createElement("div");
       holder.innerHTML = svgHtml;
@@ -456,10 +452,9 @@ export default function GroupEventModulePage() {
       if (svg) {
         svg.setAttribute("width", isSelected ? "26" : "22");
         svg.setAttribute("height", isSelected ? "26" : "22");
-        (svg as any).style.color = "#111827"; // text-gray-900
+        (svg as any).style.color = "#111827";
         wrap.appendChild(svg);
       } else {
-        // fallback numerico ultimo-resort
         const span = document.createElement("span");
         span.textContent = String(idx + 1);
         span.style.fontSize = isSelected ? "14px" : "12px";
@@ -470,7 +465,7 @@ export default function GroupEventModulePage() {
       return wrap;
     }
 
-    const BASE_R = 22; // raggio in px per la raggiera
+    const BASE_R = 22;
 
     for (const [_key, items] of groups) {
       const n = items.length;
@@ -508,7 +503,6 @@ export default function GroupEventModulePage() {
       }
     }
 
-    // Fit sui punti (coordinate reali)
     if (pts.length) {
       const bounds = pts.reduce<[[number, number], [number, number]]>(
         (b, c) => [
@@ -530,7 +524,6 @@ export default function GroupEventModulePage() {
         map.flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
       } catch {}
     }
-  // ridisegno anche quando cambia la selezione → marker selezionato più grande
   }, [rows, mapReady, iconByEventId, selectedIndex]);
 
   // ---- Player auto-advance ----
@@ -662,9 +655,10 @@ export default function GroupEventModulePage() {
       </header>
 
       {/* BODY */}
-      <div className="grid flex-1 grid-cols-12 gap-0">
+      {/* Mobile: 2 righe → [mappa 50dvh, contenuti auto]; Desktop: 12 colonne */}
+      <div className="grid flex-1 gap-0 grid-rows-[50dvh_auto] lg:grid-rows-1 lg:grid-cols-12">
         {/* MAP */}
-        <div className="relative col-span-12 border-r border-black/5 lg:col-span-8">
+        <div className="relative h-full border-b border-black/5 lg:border-b-0 lg:border-r lg:col-span-8 lg:row-auto">
           <div id="gehj-map" className="absolute inset-0" />
           {noGeoBanner && (
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs text-amber-900 shadow backdrop-blur">
@@ -674,7 +668,7 @@ export default function GroupEventModulePage() {
         </div>
 
         {/* SIDEBAR */}
-        <aside className="col-span-12 h-full bg-transparent lg:col-span-4 overflow-hidden">
+        <aside className="h-full bg-transparent overflow-hidden lg:col-span-4">
           <div className="flex h-full flex-col">
             {/* Header sidebar con titolo evento + controlli player */}
             <div className="flex items-center gap-3 border-b border-black/5 bg-white/60 px-4 py-3 backdrop-blur">
@@ -716,12 +710,12 @@ export default function GroupEventModulePage() {
               </div>
             </div>
 
-            {/* Contenuto: solo la descrizione scorre */}
+            {/* Contenuto: la descrizione occupa lo spazio rimanente e scorre */}
             <div className="flex-1 px-4 py-3 overflow-hidden">
               {selected ? (
-                <div className="rounded-2xl border border-black/10 bg-white/60 p-4 shadow-sm backdrop-blur h-full flex flex-col transition hover:bg-white/70">
-                  {/* Descrizione scrollabile e a dimensione controllata */}
-                  <div className="space-y-3 overflow-y-auto pr-1" style={{ maxHeight: "46vh" }}>
+                <div className="flex h-full flex-col rounded-2xl border border-black/10 bg-white/60 p-4 shadow-sm backdrop-blur transition hover:bg-white/70">
+                  {/* Descrizione scrollabile senza vincolare a vh (funziona sia mobile sia desktop) */}
+                  <div className="flex-1 space-y-3 overflow-y-auto pr-1">
                     <p className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
                       {selected.description || "No description available."}
                     </p>
