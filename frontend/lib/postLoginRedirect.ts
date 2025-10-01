@@ -1,67 +1,67 @@
-// lib/postLoginRedirect.ts
-import supabase from "./supabaseBrowserClient";
+// frontend/lib/postLoginRedirect.ts
+import { supabase } from "./supabaseBrowserClient";
 
 type PersonaCode = "STUD_PRIMARY" | "STUD_MIDDLE" | "STUD_HIGH" | "FAN" | "RESEARCH";
 
-const PATH_BY_CODE: Record<PersonaCode, string> = {
-  STUD_PRIMARY: "/landing/STUD_PRIMARY",
-  STUD_MIDDLE:  "/landing/STUD_MIDDLE",
-  STUD_HIGH:    "/landing/STUD_HIGH",
-  FAN:          "/landing/FAN",
-  RESEARCH:     "/landing/RESEARCH",
-};
-
-function sanitizePath(code: PersonaCode | undefined, raw: string | null | undefined): string {
-  // Non valido: vuoto, "/landing" secco, o non prefisso /landing/
-  const bad = !raw || raw.trim() === "" || raw.trim() === "/landing" || !raw.startsWith("/landing/");
-  if (bad) {
-    if (code && code in PATH_BY_CODE) return PATH_BY_CODE[code];
-    return "/landing/FAN";
+function codeToSlug(code?: string | null): string | null {
+  switch ((code || "").toUpperCase()) {
+    case "STUD_PRIMARY":
+      return "student-primary";
+    case "STUD_MIDDLE":
+      return "student-middle";
+    case "STUD_HIGH":
+      return "student-high";
+    case "FAN":
+      return "fan";
+    case "RESEARCH":
+      return "research";
+    default:
+      return null;
   }
-  return raw!;
 }
 
-export async function resolvePostLoginPath(): Promise<string> {
-  // 1) Utente
-  const { data: auth } = await supabase.auth.getUser();
-  const user = auth?.user;
-  if (!user) return "/login";
+/**
+ * Restituisce l'URL dove mandare l'utente dopo il login.
+ * Priorità:
+ * 1) profiles.landing_slug
+ * 2) profiles.persona_code (mappato) oppure profiles.persona
+ * 3) fallback "/landing"
+ */
+export default async function postLoginRedirect(): Promise<string> {
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    const uid = userRes?.user?.id ?? null;
+    if (!uid) return "/login";
 
-  // 2) persona_id dal profilo
-  const { data: prof, error: profErr } = await supabase
-    .from("profiles")
-    .select("persona_id")
-    .eq("id", user.id)
-    .maybeSingle();
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("landing_slug, persona, persona_code")
+      .eq("id", uid)
+      .maybeSingle();
 
-  if (profErr) {
-    console.log("[GeHiJ] profiles error →", profErr);
-    return "/landing/FAN";
+    if (error) {
+      console.warn("[postLoginRedirect] profile error:", error.message);
+      return "/landing";
+    }
+
+    const landing = (profile as any)?.landing_slug as string | null;
+    if (landing && typeof landing === "string") {
+      return `/landing/${landing}`;
+    }
+
+    const code = (profile as any)?.persona_code as PersonaCode | null;
+    const codeSlug = codeToSlug(code ?? null);
+    if (codeSlug) return `/landing/${codeSlug}`;
+
+    const persona = (profile as any)?.persona as string | null;
+    if (persona && typeof persona === "string") {
+      const slug = persona.trim().toLowerCase().replace(/\s+/g, "-");
+      return `/landing/${slug}`;
+    }
+
+    return "/landing";
+  } catch (e) {
+    console.warn("[postLoginRedirect] unexpected:", e);
+    return "/landing";
   }
-  const personaId = (prof as any)?.persona_id;
-  if (!personaId) {
-    console.log("[GeHiJ] persona_id assente");
-    return "/landing/FAN";
-  }
-
-  // 3) persona (code, default_landing_path)
-  const { data: persona, error: persErr } = await supabase
-    .from("personas")
-    .select("code, default_landing_path")
-    .eq("id", personaId)
-    .maybeSingle();
-
-  if (persErr) {
-    console.log("[GeHiJ] personas error →", persErr);
-    return "/landing/FAN";
-  }
-
-  const code = (persona as any)?.code as PersonaCode | undefined;
-  const raw = (persona as any)?.default_landing_path as string | null | undefined;
-  const path = sanitizePath(code, raw);
-
-  console.log("[GeHiJ] redirect:", { email: user.email, personaId, code, raw_default: raw, final: path });
-  return path;
 }
-
-export default resolvePostLoginPath;
