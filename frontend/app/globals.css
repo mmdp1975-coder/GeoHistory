@@ -1,0 +1,9 @@
+/* app/globals.css — diagnostica minimal per v4 */
+@import "tailwindcss";
+
+/* Se vedi il body grigio chiaro, questo file è caricato */
+html, body { height: 100%; }
+body { background: #f8fafc; color: #0f172a; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+
+/* Utility *solo* per testi piccoli (non usa @apply) */
+.small { font-size: 12px; opacity: .8; }

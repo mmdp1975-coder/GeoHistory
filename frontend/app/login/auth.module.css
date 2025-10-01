@@ -1,0 +1,217 @@
+/* app/login/auth.module.css */
+
+/* ====== Layout base con sfondo mappa ====== */
+.page {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;          /* centro la card in pagina */
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  color: #111827;
+  overflow: hidden;
+  padding: 16px;
+}
+.bg {
+  position: fixed;
+  inset: 0;
+  background-image: url("/bg/login-map.jpg");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.7;
+  z-index: 0;
+}
+.veil {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0), rgba(0,0,0,0.25));
+  z-index: 1;
+}
+
+/* ====== Card (centrata + coerente con i campi) ====== */
+.card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 520px;             /* allineata alla larghezza dei campi */
+  margin: 0 auto;               /* centrare anche in fallback */
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 26px 24px 22px;
+  box-shadow:
+    0 10px 15px -3px rgba(0,0,0,0.1),
+    0 4px 6px -2px rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* Logo centrato e grande */
+.brandWrap {
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+.logo {
+  display: block;
+  width: 220px;                 /* definizione massima percepita */
+  height: auto;
+}
+
+/* Tagline e value proposition */
+.tagline {
+  margin-top: 6px;
+  font-size: 14px;
+  text-align: center;
+  color: #111827;
+  font-weight: 700;
+}
+.valueprop {
+  margin-top: 6px;
+  font-size: 13px;
+  text-align: center;
+  color: #4b5563;
+}
+
+/* Titoli sezione (Login / Reset / Create) */
+.title {
+  font-weight: 700;
+  font-size: 22px;
+  text-align: left;
+}
+/* Allineo i titoli alla stessa colonna dei campi */
+.titleAligned {
+  max-width: 420px;
+  margin: 14px auto 10px;
+}
+
+/* ====== Form ====== */
+.form {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* fields stretti + centrati */
+.field {
+  max-width: 420px;             /* larghezza effettiva di Email/Password e bottoni */
+  width: 100%;
+  margin: 0 auto;
+}
+.label {
+  font-size: 12px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+.inputWrap {
+  position: relative;
+}
+.input {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  outline: none;
+  background: #f9fafb;
+}
+.input:focus {
+  border-color: #111827;
+  background: #ffffff;
+}
+
+/* icona occhio per password */
+.eyeBtn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  opacity: 0.85;
+}
+
+.actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+.btnPrimary {
+  width: 100%;                  /* bottone largo come i campi */
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 700;
+  background: #111827;
+  color: white;
+  cursor: pointer;
+}
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.a {
+  color: #111827;
+  font-weight: 600;
+  text-decoration: none;
+}
+.a:hover {
+  text-decoration: underline;
+}
+
+/* Divider social */
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 6px;
+  color: #6b7280;
+  font-size: 12px;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  height: 1px;
+  background: #e5e7eb;
+  display: block;
+}
+
+/* Social row */
+.social {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.iconBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+/* Alert */
+.alert {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+.alertError { border: 1px solid #fecaca; background: #fef2f2; color: #7f1d1d; }
+.alertOk    { border: 1px solid #bbf7d0; background: #f0fdf4; color: #14532d; }
