@@ -8,7 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { supabase } from "@/lib/supabaseBrowserClient";
 
 /* =========================================================================
-   SCHEMA (confermato dal tuo DB)
+   SCHEMA
    - events_list: id, latitude, longitude, exact_date, year_from, year_to, location, ...
    - event_group_event: event_id → group_event_id
    - event_translations: event_id, lang, title, description, description_short, wikipedia_url
@@ -44,7 +44,7 @@ function dateOrderKey(e: { exact_date?: string | null; year_from?: number | null
   return 9_999_999_999;
 }
 
-// Stile fallback OSM (se manca MAPTILER)
+// Fallback OSM se manca MAPTILER
 const OSM_STYLE: any = {
   version: 8,
   sources: {
@@ -62,12 +62,8 @@ const OSM_STYLE: any = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-/* ============================
-   ICON LIB MODERNA (inline SVG)
-   keywords → <svg> string
-   ============================ */
+/* Libreria icone inline */
 const MODERN_ICONS: Record<string, string> = {
-  // generici
   pin: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
   battle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9l-1-1 7-7 1 1-7 7z"/><path d="M3 21l6-6"/><path d="M3 17l4 4"/></svg>`,
   castle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l3-2 3 2 3-2 3 2 3-2 3 2v14"/><path d="M3 14h18"/><path d="M8 22v-6h8v6"/></svg>`,
@@ -78,12 +74,9 @@ const MODERN_ICONS: Record<string, string> = {
   dig: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M7 22v-7l4-4 4 4v7"/></svg>`,
   person: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/></svg>`,
 };
-
-/* Normalizza un testo in parola-chiave per l’icon lib */
 function normalizeIconKey(s?: string | null): string | null {
   if (!s) return null;
   const k = s.toLowerCase().trim();
-  // rimuovo spazi/punteggiatura
   const key = k.replace(/[^a-z0-9_-]+/g, "");
   return key || null;
 }
@@ -91,43 +84,32 @@ function normalizeIconKey(s?: string | null): string | null {
 export default function GroupEventModulePage() {
   const router = useRouter();
   const sp = useSearchParams();
-
-  // ----- DEBUG -----
   const debug =
     sp.get("debug") === "1" ||
     (sp.get("gid") ? sp.get("gid")!.includes("debug=1") : false);
 
-  // ----- GID sanitize -----
+  // GID sanitize
   const [gid, setGid] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [landingHref, setLandingHref] = useState<string | null>(null);
+
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
     if (raw) {
       const clean = raw.split("?")[0].split("&")[0].trim();
-      if (UUID_RE.test(clean)) {
-        setGid(clean);
-        if (debug) console.log("[GE] gid OK:", clean);
-        return;
-      } else {
-        if (debug) console.warn("[GE] gid non valido:", raw);
+      if (UUID_RE.test(clean)) setGid(clean);
+      else setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>&debug=1 oppure apri da Favourites.");
+    } else {
+      try {
+        const ls = typeof window !== "undefined" ? localStorage.getItem("active_group_event_id") : null;
+        if (ls && UUID_RE.test(ls)) setGid(ls);
+        else setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>&debug=1 oppure apri da Favourites.");
+      } catch {
+        setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>&debug=1 oppure apri da Favourites.");
       }
     }
-    try {
-      const ls = typeof window !== "undefined" ? localStorage.getItem("active_group_event_id") : null;
-      if (ls && UUID_RE.test(ls)) {
-        setGid(ls);
-        if (debug) console.log("[GE] gid from localStorage:", ls);
-      } else {
-        setErr('Missing/invalid gid. Usa /module/group_event?gid=<UUID>&debug=1 oppure apri da Favourites.');
-        setLoading(false);
-      }
-    } catch {
-      setErr('Missing/invalid gid. Usa /module/group_event?gid=<UUID>&debug=1 oppure apri da Favourites.');
-      setLoading(false);
-    }
-  }, [sp, debug]);
+  }, [sp]);
 
-  // ----- Landing href -----
-  const [landingHref, setLandingHref] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
       try {
@@ -161,49 +143,69 @@ export default function GroupEventModulePage() {
     })();
   }, []);
 
-  // ----- Dati -----
+  // Dati
   const [ge, setGe] = useState<AnyObj | null>(null);
   const [rows, setRows] = useState<EventVM[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [noGeoBanner, setNoGeoBanner] = useState(false);
 
-  // Icona risolta per evento: { event_id → { raw, keyword } }
+  // Icone
   const [iconByEventId, setIconByEventId] = useState<Map<string, { raw: string; keyword: string | null }>>(new Map());
 
-  // ----- Mappa & stato -----
+  // Mappa
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapDims, setMapDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
-  // ---- INIT MAP ----
+  // ---- INIT MAP (mobile-safe: usa svh, evita absolute) ----
   useEffect(() => {
     let cancelled = false;
     let attempts = 0;
-    const MAX_ATTEMPTS = 40;
+    const MAX_ATTEMPTS = 100; // ~100 rAF
+    const MIN_W = 50;
+    const MIN_H = 120;
+
+    function forceHeights(container: HTMLElement) {
+      // se il parent non ha altezza, forzala (mobile)
+      const parent = container.parentElement as HTMLElement | null;
+      if (parent) {
+        parent.style.minHeight = "60svh";
+        parent.style.height = "60svh";
+      }
+      (container as HTMLDivElement).style.width = "100%";
+      (container as HTMLDivElement).style.height = "100%";
+    }
 
     function tryInit() {
-      if (cancelled) return;
-      if (typeof window === "undefined") return;
-      if (mapRef.current) return;
+      if (cancelled || typeof window === "undefined" || mapRef.current) return;
 
       const container = document.getElementById("gehj-map");
       if (!container) {
         attempts++;
-        if (attempts <= MAX_ATTEMPTS) {
-          requestAnimationFrame(tryInit);
-        } else {
-          console.error("[GE] container mappa non trovato dopo i retry");
-        }
+        if (attempts <= MAX_ATTEMPTS) requestAnimationFrame(tryInit);
         return;
       }
 
-      // LASCIO solo altezza piena del contenitore (che è già fissato via CSS responsive)
-      (container as HTMLDivElement).style.height = "100%";
-      (container as HTMLDivElement).style.width = "100%";
+      // Assicura dimensioni iniziali
+      forceHeights(container);
+
+      const rect = container.getBoundingClientRect();
+      const h = Math.floor(rect.height);
+      const w = Math.floor(rect.width);
+      setMapDims({ w, h });
+
+      if (h < MIN_H || w < MIN_W) {
+        attempts++;
+        if (attempts <= MAX_ATTEMPTS) {
+          // prova anche un piccolo delay per iOS toolbar/layout
+          setTimeout(() => requestAnimationFrame(tryInit), 50);
+        }
+        return;
+      }
 
       const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
       const style = apiKey
@@ -222,37 +224,45 @@ export default function GroupEventModulePage() {
         mapRef.current = map;
         setMapReady(true);
 
-        map.on("load", () => setMapLoaded(true));
+        map.on("load", () => {
+          setMapLoaded(true);
+          try { map.resize(); } catch {}
+          setTimeout(() => { try { map.resize(); } catch {} }, 100);
+        });
         map.on("error", (e) => console.error("[GE] Map error:", e));
 
         const ro = new ResizeObserver(() => {
           try {
+            const r = container.getBoundingClientRect();
+            setMapDims({ w: Math.floor(r.width), h: Math.floor(r.height) });
             map.resize();
           } catch {}
         });
         ro.observe(container);
+
+        const onVis = () => { try { map.resize(); } catch {} };
+        const onOrient = () => { try { map.resize(); } catch {} };
+        document.addEventListener("visibilitychange", onVis);
+        window.addEventListener("orientationchange", onOrient);
+        window.addEventListener("load", onVis);
       } catch (e) {
         console.error("[GE] new maplibregl.Map error:", e);
       }
     }
 
     requestAnimationFrame(tryInit);
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // ---- Fetch dati + chain type_map → types (icone) ----
+  // ---- Fetch dati + icone ----
   useEffect(() => {
     if (!gid) return;
-    let active = true;
 
     (async () => {
       try {
         setLoading(true);
         setErr(null);
 
-        // 1) group_event
         const { data: geRows, error: geErr } = await supabase
           .from("group_events")
           .select("*")
@@ -262,7 +272,6 @@ export default function GroupEventModulePage() {
         if (!geRows?.length) throw new Error("Group event not found");
         const geData = geRows[0];
 
-        // 2) event link → events_list(*)
         const { data: links, error: linkErr } = await supabase
           .from("event_group_event")
           .select("event_id, events_list(*)")
@@ -283,12 +292,8 @@ export default function GroupEventModulePage() {
               location: e.location ?? null,
             })) || [];
 
-        // 3) translations (prefer IT > fallback)
         const ids = cores.map((c) => c.id);
-        const trMap = new Map<
-          string,
-          { title?: string | null; description?: string | null; description_short?: string | null; wikipedia_url?: string | null }
-        >();
+        const trMap = new Map<string, { title?: string | null; description?: string | null; description_short?: string | null; wikipedia_url?: string | null }>();
         if (ids.length) {
           const { data: trs } = await supabase
             .from("event_translations")
@@ -316,7 +321,7 @@ export default function GroupEventModulePage() {
 
         vms.sort((a, b) => a.order_key - b.order_key);
 
-        // 4) event_type_map → event_types (icon/icon_name/code)
+        // icone
         const iconMap = new Map<string, { raw: string; keyword: string | null }>();
         if (ids.length) {
           const { data: etmRows, error: etmErr } = await supabase
@@ -325,10 +330,7 @@ export default function GroupEventModulePage() {
             .in("event_id", ids);
           if (etmErr) throw etmErr;
 
-          const typeCodes = Array.from(
-            new Set((etmRows ?? []).map((r: any) => String(r.type_code)).filter(Boolean))
-          );
-
+          const typeCodes = Array.from(new Set((etmRows ?? []).map((r: any) => String(r.type_code)).filter(Boolean)));
           let typeInfo = new Map<string, { raw?: string | null; name?: string | null }>();
           if (typeCodes.length) {
             const { data: teRows, error: teErr } = await supabase
@@ -341,10 +343,9 @@ export default function GroupEventModulePage() {
             });
           }
 
-          // compongo: prima icona disponibile per evento (icon → icon_name → type_code keyword)
           (etmRows ?? []).forEach((m: any) => {
             const evId = String(m.event_id);
-            if (iconMap.has(evId)) return; // già risolto
+            if (iconMap.has(evId)) return;
             const code = m?.type_code ? String(m.type_code) : null;
             if (!code) return;
             const t = typeInfo.get(code);
@@ -362,7 +363,6 @@ export default function GroupEventModulePage() {
         setIconByEventId(iconMap);
         setSelectedIndex(0);
         setNoGeoBanner(!vms.some((v) => v.latitude !== null && v.longitude !== null));
-        if (debug) console.log("[GE] icons resolved:", iconMap.size);
       } catch (e: any) {
         setErr(e?.message ?? "Unknown error");
         console.error("[GE] Fetch error:", e);
@@ -370,16 +370,13 @@ export default function GroupEventModulePage() {
         setLoading(false);
       }
     })();
+  }, [gid]);
 
-    return () => {};
-  }, [gid, debug]);
-
-  // ---- MARKERS con raggiera + icone moderne + selezione grande ----
+  // ---- MARKERS (raggiere + selezione) ----
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    // pulizia precedente
     (markersRef.current || []).forEach((m) => m.remove());
     markersRef.current = [];
 
@@ -395,21 +392,17 @@ export default function GroupEventModulePage() {
       pts.push([ev.longitude, ev.latitude]);
     });
 
-    // helpers
     const isUrlIcon = (s: string) => {
       const t = s.toLowerCase();
       return t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/") ||
              t.endsWith(".png") || t.endsWith(".svg") || t.endsWith(".jpg") || t.endsWith(".jpeg") || t.endsWith(".webp");
     };
-    const isEmojiish = (s: string) => {
-      return s.trim().length <= 4;
-    };
+    const isEmojiish = (s: string) => s.trim().length <= 4;
 
     function makeMarkerEl(ev: EventVM, idx: number) {
       const iconInfo = iconByEventId.get(ev.id);
       const raw = iconInfo?.raw ?? "";
       const keyword = iconInfo?.keyword ?? null;
-
       const isSelected = idx === selectedIndex;
 
       const wrap = document.createElement("div");
@@ -461,7 +454,6 @@ export default function GroupEventModulePage() {
         span.style.fontWeight = "700";
         wrap.appendChild(span);
       }
-
       return wrap;
     }
 
@@ -503,41 +495,32 @@ export default function GroupEventModulePage() {
       }
     }
 
-    if (pts.length) {
-      const bounds = pts.reduce<[[number, number], [number, number]]>(
-        (b, c) => [
-          [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
-          [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
-        ],
-        [
-          [pts[0][0], pts[0][1]],
-          [pts[0][0], pts[0][1]],
-        ]
-      );
-      try {
+    try {
+      if (pts.length) {
+        const bounds = pts.reduce<[[number, number], [number, number]]>(
+          (b, c) => [
+            [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
+            [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
+          ],
+          [[pts[0][0], pts[0][1]],[pts[0][0], pts[0][1]]]
+        );
         map.fitBounds(bounds as any, { padding: 84, duration: 800 });
-      } catch (e) {
-        console.log("[GE] fitBounds error:", e);
-      }
-    } else {
-      try {
+      } else {
         map.flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
-      } catch {}
-    }
+      }
+    } catch {}
   }, [rows, mapReady, iconByEventId, selectedIndex]);
 
-  // ---- Player auto-advance ----
+  // Auto-play
   useEffect(() => {
     let t: any = null;
     if (isPlaying && rows.length > 0) {
-      t = setInterval(() => {
-        setSelectedIndex((i) => (i + 1) % rows.length);
-      }, 3200);
+      t = setInterval(() => setSelectedIndex((i) => (i + 1) % rows.length), 3200);
     }
     return () => t && clearInterval(t);
   }, [isPlaying, rows.length]);
 
-  // ---- Pan selezione ----
+  // Pan sulla selezione
   useEffect(() => {
     const map = mapRef.current;
     const ev = rows[selectedIndex];
@@ -549,7 +532,6 @@ export default function GroupEventModulePage() {
 
   const selected = useMemo(() => rows[selectedIndex] ?? null, [rows, selectedIndex]);
 
-  // ---- Back ----
   function onBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
@@ -558,14 +540,14 @@ export default function GroupEventModulePage() {
     router.push(landingHref || "/landing");
   }
 
-  // ---- Render ----
+  // UI
   const geTitle = (ge?.title ?? "Journey").toString();
   const geSubtitle = (ge?.pitch ?? "").toString();
   const geCover = ge?.cover_url ?? null;
 
   if (loading) {
     return (
-      <div className="flex h-[100dvh] items-center justify-center bg-gradient-to-b from-amber-50 via-white to-white">
+      <div className="flex h-[100svh] items-center justify-center bg-gradient-to-b from-amber-50 via-white to-white">
         <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow backdrop-blur">
           Loading Journey…
         </div>
@@ -575,7 +557,7 @@ export default function GroupEventModulePage() {
 
   if (err) {
     return (
-      <div className="min-h-[100dvh] bg-gradient-to-b from-rose-50 via-white to-white p-6">
+      <div className="min-h-[100svh] bg-gradient-to-b from-rose-50 via-white to-white p-6">
         <div className="mx-auto max-w-2xl rounded-2xl border border-red-200 bg-white/70 p-5 text-red-800 shadow backdrop-blur">
           <div className="mb-1 text-base font-semibold">Error</div>
           <div className="text-sm">{err}</div>
@@ -593,28 +575,16 @@ export default function GroupEventModulePage() {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[radial-gradient(1200px_600px_at_20%_-10%,#fff7e6,transparent),linear-gradient(to_bottom,#ffffff,60%,#fafafa)]">
+    <div className="flex h-[100svh] flex-col bg-[radial-gradient(1200px_600px_at_20%_-10%,#fff7e6,transparent),linear-gradient(to_bottom,#ffffff,60%,#fafafa)]">
       {/* HEADER */}
       <header className="sticky top-0 z-10 w-full border-b border-black/5 bg-white/60 backdrop-blur supports-[backdrop-filter]:bg-white/40">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-2 py-2">
-          {/* LOGO GEOHISTORY */}
-          <a
-            href={landingHref || "/landing"}
-            className="flex shrink-0 items-center"
-            title="GeoHistory Journey"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.png"
-              alt="GeoHistory"
-              className="h-10 w-auto object-contain"
-            />
+          <a href={landingHref || "/landing"} className="flex shrink-0 items-center" title="GeoHistory Journey">
+            <img src="/logo.png" alt="GeoHistory" className="h-10 w-auto object-contain" />
           </a>
 
-          {/* Cover + titolo */}
           {geCover ? (
             <div className="relative hidden h-10 w-10 overflow-hidden rounded-xl ring-1 ring-black/10 shadow-sm md:block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={geCover} alt={geTitle} className="h-full w-full object-cover" />
             </div>
           ) : (
@@ -647,21 +617,26 @@ export default function GroupEventModulePage() {
               <div><b>mapLoaded:</b> {String(mapLoaded)}</div>
               <div><b>markers:</b> {(markersRef.current || []).length}</div>
               <div><b>landingHref:</b> {landingHref || "—"}</div>
-              <div><b>icons by event:</b> {iconByEventId.size}</div>
               <div><b>selectedIndex:</b> {selectedIndex}</div>
+              <div><b>mapDims:</b> {mapDims.w}×{mapDims.h}px</div>
             </div>
           </div>
         )}
       </header>
 
       {/* BODY */}
-      {/* Mobile: 2 righe → [mappa 50dvh, contenuti auto]; Desktop: 12 colonne */}
-      <div className="grid flex-1 gap-0 grid-rows-[50dvh_auto] lg:grid-rows-1 lg:grid-cols-12">
-        {/* MAP */}
-        <div className="relative h-full border-b border-black/5 lg:border-b-0 lg:border-r lg:col-span-8 lg:row-auto">
-          <div id="gehj-map" className="absolute inset-0" />
+      {/* Mobile: 2 righe → mappa 60svh; Desktop: 12 colonne */}
+      <div className="grid flex-1 gap-0 grid-rows-[60svh_auto] lg:grid-rows-1 lg:grid-cols-12">
+        {/* MAP WRAPPER (NO absolute; h piena) */}
+        <div className="relative h-[60svh] min-h-[60svh] border-b border-black/5 lg:h-auto lg:min-h-0 lg:border-b-0 lg:border-r lg:col-span-8 lg:row-auto">
+          <div id="gehj-map" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+          {!mapLoaded && (
+            <div className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto w-fit rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow backdrop-blur">
+              Inizializzazione mappa… ({mapDims.w}×{mapDims.h}px)
+            </div>
+          )}
           {noGeoBanner && (
-            <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs text-amber-900 shadow backdrop-blur">
+            <div className="pointer-events-none absolute left-1/2 top-10 z-10 -translate-x-1/2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1 text-xs text-amber-900 shadow backdrop-blur">
               Nessun evento geolocalizzato per questo Journey
             </div>
           )}
@@ -670,21 +645,14 @@ export default function GroupEventModulePage() {
         {/* SIDEBAR */}
         <aside className="h-full bg-transparent overflow-hidden lg:col-span-4">
           <div className="flex h-full flex-col">
-            {/* Header sidebar con titolo evento + controlli player */}
             <div className="flex items-center gap-3 border-b border-black/5 bg-white/60 px-4 py-3 backdrop-blur">
               <div className="min-w-0">
                 <div className="text-[11px] uppercase tracking-wide text-gray-500">Selected event</div>
-                <div className="truncate text-[15px] font-semibold text-gray-900">{selected ? selected.title : "—"}</div>
+                <div className="truncate text-[15px] font-semibold text-gray-900">{rows[selectedIndex]?.title ?? "—"}</div>
                 <div className="text-[11px] text-gray-500">
-                  {rows.length ? (
-                    <>
-                      Event <span className="font-medium">{selectedIndex + 1}</span> of{" "}
-                      <span className="font-medium">{rows.length}</span>
-                    </>
-                  ) : "No events"}
+                  {rows.length ? <>Event <span className="font-medium">{selectedIndex + 1}</span> of <span className="font-medium">{rows.length}</span></> : "No events"}
                 </div>
               </div>
-
               <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
@@ -710,11 +678,9 @@ export default function GroupEventModulePage() {
               </div>
             </div>
 
-            {/* Contenuto: la descrizione occupa lo spazio rimanente e scorre */}
             <div className="flex-1 px-4 py-3 overflow-hidden">
               {selected ? (
                 <div className="flex h-full flex-col rounded-2xl border border-black/10 bg-white/60 p-4 shadow-sm backdrop-blur transition hover:bg-white/70">
-                  {/* Descrizione scrollabile senza vincolare a vh (funziona sia mobile sia desktop) */}
                   <div className="flex-1 space-y-3 overflow-y-auto pr-1">
                     <p className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
                       {selected.description || "No description available."}
@@ -758,7 +724,6 @@ export default function GroupEventModulePage() {
                     ) : null}
                   </div>
 
-                  {/* Jump rapido */}
                   <div className="mt-4">
                     <div className="mb-2 text-sm font-medium text-gray-900">Jump to event</div>
                     <div className="grid grid-cols-6 gap-2">
@@ -786,7 +751,6 @@ export default function GroupEventModulePage() {
               )}
             </div>
 
-            {/* About Journey */}
             {ge?.description ? (
               <div className="border-t border-black/5 bg-white/60 px-4 py-3 backdrop-blur">
                 <div className="mb-1 text-sm font-semibold text-gray-900">About this Journey</div>
