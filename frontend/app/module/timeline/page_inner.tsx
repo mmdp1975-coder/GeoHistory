@@ -2,15 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabaseBrowserClient";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseBrowserClient";
 
 /**
  * Timeline Explorer (module/timeline)
- * - Usa events_list(year_from, year_to, era[BC/AD]) -> normalizza: BC = negativo, AD = positivo
- * - Calcola dominio in client; imposta IL RANGE INIZIALE = [minDomain, maxDomain] una sola volta
- * - Mostra card dei group_events collegati via event_group_event
- * - NON renderizza slider/inputs finché i valori non sono pronti (evita 0/0)
+ * Pulizia: rimossa la barra superiore interna (Back/Logo/Settings/Logout),
+ * ora si usa solo la TopBar globale dal layout di /module.
  */
 
 type UUID = string;
@@ -39,6 +37,18 @@ type GroupEvent = {
 };
 type GeWithCount = GroupEvent & { matched_events: number };
 
+// DEFAULT
+const DEFAULT_FROM = -3000; // 3000 BC
+const DEFAULT_TO = 2025;    // 2025 AD
+
+// chunk per PostgREST .in(...)
+const EGE_CHUNK = 80;
+const GE_CHUNK  = 200;
+
+// Colori brand
+const BRAND_BLUE = "#0b3b60"; // blu scuro
+const BRAND_BLUE_SOFT = "#0d4a7a";
+
 function isBC(v?: string | null) {
   if (!v) return false;
   const s = v.trim().toUpperCase();
@@ -54,6 +64,12 @@ function formatYear(y: number) {
   return `${y} CE`;
 }
 
+// Colore sicuro
+function safeColor(hex?: string | null, fallback = "#111827") {
+  const h = (hex || "").trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(h) ? h : fallback;
+}
+
 export default function TimelinePage() {
   const search = useSearchParams();
 
@@ -67,14 +83,14 @@ export default function TimelinePage() {
   const [maxDomain, setMaxDomain] = useState<number | null>(null);
   const [fromYear, setFromYear] = useState<number | undefined>(undefined);
   const [toYear, setToYear] = useState<number | undefined>(undefined);
-  const rangeInitialized = useRef(false); // evita 0/0 e re-init involontari
+  const rangeInitialized = useRef(false);
 
   // risultati
   const [loading, setLoading] = useState(false);
   const [groupEvents, setGroupEvents] = useState<GeWithCount[]>([]);
   const [totalMatches, setTotalMatches] = useState(0);
 
-  // 1) Carica e normalizza; calcola dominio
+  // ===== Carica eventi e calcola dominio =====
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -130,27 +146,36 @@ export default function TimelinePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // 1b) Inizializza il RANGE una sola volta quando il dominio è pronto
+  // ===== Inizializza range una sola volta =====
   useEffect(() => {
     if (rangeInitialized.current) return;
     if (minDomain == null || maxDomain == null) return;
-    // clamp di eventuali querystring
-    const qsFrom = Number(search.get("from"));
-    const qsTo = Number(search.get("to"));
-    const start = Number.isFinite(qsFrom) ? Math.max(Math.min(qsFrom, maxDomain), minDomain) : minDomain;
-    const end = Number.isFinite(qsTo) ? Math.max(Math.min(qsTo, maxDomain), start) : maxDomain;
 
-    setFromYear(start);
-    setToYear(end);
-    rangeInitialized.current = true; // da qui in avanti non si reimposta più
+    const qsFromRaw = search.get("from");
+    const qsToRaw = search.get("to");
+
+    const hasQsFrom = qsFromRaw !== null && qsFromRaw !== "";
+    const hasQsTo = qsToRaw !== null && qsToRaw !== "";
+
+    const qsFrom = Number(qsFromRaw);
+    const qsTo = Number(qsToRaw);
+
+    const desiredStart = hasQsFrom && Number.isFinite(qsFrom) ? qsFrom : DEFAULT_FROM;
+    const desiredEnd = hasQsTo && Number.isFinite(qsTo) ? qsTo : DEFAULT_TO;
+
+    const startClamped = Math.max(Math.min(desiredStart, maxDomain), minDomain);
+    const endClamped = Math.max(Math.min(desiredEnd, maxDomain), startClamped);
+
+    setFromYear(startClamped);
+    setToYear(endClamped);
+    rangeInitialized.current = true;
   }, [minDomain, maxDomain, search]);
 
   const domainReady =
     !initializing && minDomain != null && maxDomain != null && typeof fromYear === "number" && typeof toYear === "number";
-
   const canSearch = domainReady && (fromYear as number) <= (toYear as number);
 
-  // 2) Filtra in memoria per overlap e poi risale ai group_events
+  // ===== Query chunked: eventi → mapping → group_events =====
   useEffect(() => {
     if (!canSearch) return;
 
@@ -164,17 +189,16 @@ export default function TimelinePage() {
 
         const matched = eventsNorm.filter((e) => e.yFrom <= to && e.yTo >= from);
         const eventIds = Array.from(new Set(matched.map((m) => m.source_event_id)));
+
         if (eventIds.length === 0) {
           if (!cancelled) { setGroupEvents([]); setTotalMatches(0); }
           setLoading(false);
           return;
         }
 
-        // event_group_event
-        const chunkSize = 1000;
         const allEGE: EGE[] = [];
-        for (let i = 0; i < eventIds.length; i += chunkSize) {
-          const chunk = eventIds.slice(i, i + chunkSize);
+        for (let i = 0; i < eventIds.length; i += EGE_CHUNK) {
+          const chunk = eventIds.slice(i, i + EGE_CHUNK);
           const { data: ege, error: egeErr } = await supabase
             .from("event_group_event")
             .select("event_id, group_event_id")
@@ -182,24 +206,22 @@ export default function TimelinePage() {
           if (egeErr) throw egeErr;
           allEGE.push(...((ege as EGE[]) || []));
         }
+
         if (allEGE.length === 0) {
           if (!cancelled) { setGroupEvents([]); setTotalMatches(0); }
           setLoading(false);
           return;
         }
 
-        // conteggio per group_event_id
         const counts = new Map<UUID, number>();
         for (const row of allEGE) {
           counts.set(row.group_event_id, (counts.get(row.group_event_id) || 0) + 1);
         }
         const geIds = Array.from(counts.keys());
 
-        // metadati group_events
-        const geChunkSize = 1000;
         const allGE: GroupEvent[] = [];
-        for (let i = 0; i < geIds.length; i += geChunkSize) {
-          const chunk = geIds.slice(i, i + geChunkSize);
+        for (let i = 0; i < geIds.length; i += GE_CHUNK) {
+          const chunk = geIds.slice(i, i + GE_CHUNK);
           const { data: ges, error: geErr } = await supabase
             .from("group_events")
             .select("id, title, slug, color_hex, icon_name, cover_url")
@@ -227,37 +249,45 @@ export default function TimelinePage() {
     return () => { cancelled = true; };
   }, [fromYear, toYear, canSearch, eventsNorm]);
 
-  // UI helpers
   const headerSubtitle = useMemo(() => {
     if (!domainReady) return "Initializing…";
     return `Showing group events with at least one event between ${formatYear(fromYear as number)} and ${formatYear(toYear as number)}`;
   }, [domainReady, fromYear, toYear]);
 
   return (
-    <div className="min-h-screen w-full bg-white text-neutral-900">
-      {/* TOP: TIMELINE */}
-      <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-4">
+    <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
+      {/* BANDA BLU: titolo + sottotitolo + timeline (resta) */}
+      <header className="z-20 border-b border-neutral-200" style={{ backgroundColor: BRAND_BLUE }}>
+        <div className="mx-auto max-w-7xl px-4 py-5 text-white">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Timeline Explorer</h1>
-            <p className="text-sm text-neutral-600">{headerSubtitle}</p>
+            <h1 className="text-xl font-semibold tracking-tight">Timeline Explorer</h1>
+            <p className="text-sm/6 opacity-90">{headerSubtitle}</p>
           </div>
 
-          {/* Timeline Card */}
-          <div className="mt-4 rounded-2xl border border-neutral-200 bg-white shadow-sm">
+          {/* Timeline Card (in blu) */}
+          <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 shadow-sm">
             <div className="p-4">
-              {/* Slider & inputs mostrati SOLO quando i valori sono pronti */}
               {domainReady ? (
                 <>
-                  <div className="relative py-6">
-                    {/* Track */}
-                    <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-1 bg-neutral-200 rounded-full" />
-                    {/* Selected segment */}
+                  <div className="relative py-8">
+                    {/* Track 3D */}
                     <div
-                      className="absolute top-1/2 -translate-y-1/2 h-1 bg-neutral-900 rounded-full"
+                      className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-3 rounded-full"
+                      style={{
+                        background: "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
+                        boxShadow:
+                          "inset 0 1px 3px rgba(0,0,0,0.20), inset 0 -1px 2px rgba(255,255,255,0.55), 0 1px 2px rgba(0,0,0,0.12)"
+                      }}
+                    />
+                    {/* Selected segment 3D (blu) */}
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 h-3 rounded-full"
                       style={{
                         left: `${(((fromYear as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
                         right: `${(1 - ((toYear as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
+                        background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
+                        boxShadow:
+                          "inset 0 1px 2px rgba(255,255,255,0.25), inset 0 -1px 2px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25)"
                       }}
                     />
                     {/* Lower thumb */}
@@ -281,7 +311,7 @@ export default function TimelinePage() {
                       aria-label="To year"
                     />
                     {/* Labels estremi */}
-                    <div className="mt-10 flex justify-between text-xs text-neutral-600">
+                    <div className="mt-11 flex justify-between text-xs text-white/80">
                       <span>{formatYear(minDomain as number)}</span>
                       <span>{formatYear(maxDomain as number)}</span>
                     </div>
@@ -290,10 +320,10 @@ export default function TimelinePage() {
                   {/* Inputs + quick actions */}
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-neutral-700">From</label>
+                      <label className="text-sm text-white/90">From</label>
                       <input
                         type="number"
-                        className="w-28 rounded-lg border border-neutral-300 bg-white px-2 py-1 text-sm"
+                        className="w-28 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-sm text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
                         value={fromYear as number}
                         onChange={(e) =>
                           setFromYear(
@@ -306,10 +336,10 @@ export default function TimelinePage() {
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-neutral-700">To</label>
+                      <label className="text-sm text-white/90">To</label>
                       <input
                         type="number"
-                        className="w-28 rounded-lg border border-neutral-300 bg-white px-2 py-1 text-sm"
+                        className="w-28 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-sm text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
                         value={toYear as number}
                         onChange={(e) =>
                           setToYear(
@@ -325,7 +355,7 @@ export default function TimelinePage() {
                     <div className="ml-auto flex items-center gap-2">
                       <button
                         onClick={() => { setFromYear(minDomain as number); setToYear(maxDomain as number); }}
-                        className="rounded-lg border border-neutral-300 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
+                        className="rounded-lg border border-white/25 bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
                       >
                         Show all
                       </button>
@@ -334,7 +364,7 @@ export default function TimelinePage() {
                           setFromYear(Math.max(minDomain as number, 1200));
                           setToYear(Math.min(maxDomain as number, 1900));
                         }}
-                        className="rounded-lg border border-neutral-300 bg-white px-3 py-1 text-sm hover:bg-neutral-50"
+                        className="rounded-lg border border-white/25 bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
                       >
                         Quick: 1200–1900
                       </button>
@@ -342,7 +372,7 @@ export default function TimelinePage() {
                   </div>
                 </>
               ) : (
-                <div className="py-10 text-sm text-neutral-600">Loading timeline…</div>
+                <div className="py-10 text-sm text-white/80">Loading timeline…</div>
               )}
             </div>
           </div>
@@ -371,79 +401,95 @@ export default function TimelinePage() {
           </div>
         )}
 
-        {!loading && groupEvents.length === 0 && !initializing && (
+        {!loading && groupEvents.length === 0 && !initializing && !error && (
           <div className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-neutral-600">
             Nessun group event trovato nel range selezionato. Prova ad allargare la finestra temporale.
           </div>
         )}
 
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {groupEvents.map((g) => (
-            <li key={g.id}>
-              <Link
-                href={`/module/group_event?gid=${g.id}`}
-                className="group block h-full overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="relative h-32 w-full overflow-hidden bg-neutral-100">
-                  {g.cover_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={g.cover_url}
-                      alt={g.title || g.slug || "Cover"}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                      <span className="text-sm">No cover</span>
+          {groupEvents.map((g) => {
+            const accent = safeColor(g.color_hex, "#111827");
+            const gradient =
+              `linear-gradient(180deg, ${accent}1A 0%, ${accent}0D 60%, #FFFFFF 100%)`; // 1A=10%, 0D≈5%
+            return (
+              <li key={g.id}>
+                <Link
+                  href={`/module/group_event?gid=${g.id}`}
+                  className="group block h-full overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                >
+                  <div className="relative h-36 w-full overflow-hidden" style={{ background: gradient }}>
+                    {g.cover_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={g.cover_url}
+                        alt={g.title || g.slug || "Cover"}
+                        className="h-full w-full object-cover opacity-95 transition-transform group-hover:scale-[1.02]"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-neutral-400">
+                        <span className="text-sm">No cover</span>
+                      </div>
+                    )}
+                    <span
+                      className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-medium ring-1 ring-white"
+                      style={{ color: accent }}
+                      title={g.icon_name || undefined}
+                    >
+                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />
+                      {g.icon_name || "Journey"}
+                    </span>
+                  </div>
+                  <div className="p-4">
+                    <div className="mb-1 line-clamp-1 text-[15px] font-semibold tracking-tight">
+                      {g.title || g.slug || "Untitled"}
                     </div>
-                  )}
-                  <span
-                    className="absolute left-3 top-3 inline-block h-3 w-3 rounded-full ring-2 ring-white"
-                    style={{ backgroundColor: g.color_hex || "#9CA3AF" }}
-                    title={g.icon_name || undefined}
-                  />
-                </div>
-                <div className="p-4">
-                  <div className="mb-1 line-clamp-1 font-medium">
-                    {g.title || g.slug || "Untitled"}
+                    <div className="text-sm text-neutral-600">
+                      {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
+                    </div>
                   </div>
-                  <div className="text-sm text-neutral-600">
-                    {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
-                  </div>
-                </div>
-              </Link>
-            </li>
-          ))}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </main>
 
-      {/* Slider styling */}
+      {/* Slider styling 3D */}
       <style jsx global>{`
         input[type="range"].range-thumb {
           -webkit-appearance: none;
-          height: 28px;
+          height: 36px;
           outline: none;
           background: transparent;
         }
         input[type="range"].range-thumb::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 18px;
-          height: 18px;
+          width: 22px;
+          height: 22px;
           border-radius: 9999px;
-          background: #111827; /* neutral-900 */
-          border: 2px solid #e5e7eb; /* neutral-200 */
+          background: linear-gradient(180deg, #ffffff 0%, #f2f5f9 40%, #e6ebf3 100%);
+          border: 1px solid rgba(0,0,0,0.15);
+          box-shadow:
+            inset 0 1px 1px rgba(255,255,255,0.9),
+            inset 0 -1px 1px rgba(0,0,0,0.08),
+            0 2px 6px rgba(0,0,0,0.25);
           cursor: pointer;
-          margin-top: -8px;
+          margin-top: -9px;
           position: relative;
           z-index: 10;
         }
         input[type="range"].range-thumb::-moz-range-thumb {
-          width: 18px;
-          height: 18px;
+          width: 22px;
+          height: 22px;
           border-radius: 9999px;
-          background: #111827;
-          border: 2px solid #e5e7eb;
+          background: linear-gradient(180deg, #ffffff 0%, #f2f5f9 40%, #e6ebf3 100%);
+          border: 1px solid rgba(0,0,0,0.15);
+          box-shadow:
+            inset 0 1px 1px rgba(255,255,255,0.9),
+            inset 0 -1px 1px rgba(0,0,0,0.08),
+            0 2px 6px rgba(0,0,0,0.25);
           cursor: pointer;
           position: relative;
           z-index: 10;
