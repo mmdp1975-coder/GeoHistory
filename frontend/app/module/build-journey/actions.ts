@@ -14,29 +14,43 @@ const COL_NARRATIVE  = "narrative"; // se nel tuo DB è "description", cambia qu
 type Era = "AD" | "BC";
 
 type EventMinimal = {
-  year_from?: number | null;
-  year_to?: number | null;
-  exact_date?: string | null;
-  era?: Era | null;
-  continent?: string | null;
-  country?: string | null;
-  location?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-
-  // --- extra per event_translations ---
+  // Dati minimi per la creazione degli eventi
+  // NB: tieni coerenti i nomi con la tua tabella events_list o v_events
+  //     Se i nomi nel DB sono diversi, adatta i campi qui e la insert più sotto.
   title_text?: string | null;
   description_text?: string | null;
+
+  // campi temporali
+  year_from?: number | null;
+  year_to?: number | null;
+  era?: Era | null;
+
+  // campi geografici
+  latitude?: number | null;
+  longitude?: number | null;
+  location_name?: string | null;
+
+  // foreign key per il tipo evento, se già determinato
+  event_type_id?: string | null;
+
+  // opzionale: eventuale link wikipedia (se previsto nel tuo DB)
+  wikipedia_url?: string | null;
+
+  // opzionale: qualunque altro campo tu voglia mappare
+  // ...
 };
 
-type CreateJourneyPayload = {
-  title: string;
-  slug: string;
-  pitch?: string | null;
-  cover_url?: string | null;
-  description?: string | null;
-  visibility: string;
-  status: string;
+type BuildJourneyPayload = {
+  // Dati minimi per creare il Journey (= group_event)
+  // Adatta ai nomi dei campi reali della tua tabella group_events
+  name_en: string;
+  name_it: string;
+  subtitle_en?: string | null;
+  subtitle_it?: string | null;
+
+  // metadata del journey
+  era_from?: Era | null;
+  era_to?: Era | null;
 
   year_from?: number | null;
   year_to?: number | null;
@@ -54,15 +68,17 @@ function getSupabaseServer() {
   return createClient(url, key, { global: { headers: { Cookie: cookies().toString() } } });
 }
 
+/** Recupero user + profileId dalla sessione */
 async function getSessionProfileId(supabase: ReturnType<typeof createClient>) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { profileId: null as string | null, userRef: null as string | null };
 
-  const { data: profRow } = await supabase
+  const { data: profRow, error: profErr } = await supabase
     .from("profiles")
     .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+    .eq("user_id", user.id) // <-- Se nel tuo schema è "auth_user_id" o altro, cambia qui.
+    .maybeSingle<{ id: string }>();
+  if (profErr) throw profErr;
 
   return { profileId: profRow?.id ?? null, userRef: user.email ?? user.id };
 }
@@ -70,87 +86,190 @@ async function getSessionProfileId(supabase: ReturnType<typeof createClient>) {
 /** Traduzione con OpenAI (usa stesso modello usato per estrazione) */
 async function translate(text: string, target: "en" | "it"): Promise<string> {
   if (!text?.trim()) return "";
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-  const sys = `Sei un traduttore accurato verso ${target === "en" ? "inglese" : "italiano"}. Mantieni il significato e un tono enciclopedico.`;
-  const resp = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+  const system =
+    target === "en"
+      ? "You are a professional translator. Translate the following Italian text into concise, fluent English suitable for a history website."
+      : "Sei un traduttore professionista. Traduci il seguente testo inglese in italiano conciso e fluente, adatto a un portale di storia.";
+
+  const { choices } = await client.chat.completions.create({
+    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: text },
+    ],
     temperature: 0.2,
-    messages: [{ role: "system", content: sys }, { role: "user", content: text }]
   });
-  return resp.choices[0]?.message?.content?.trim() || text;
+
+  const out = choices?.[0]?.message?.content?.trim() || "";
+  return out;
 }
 
-/** Crea 2 righe event_translations (en, it) se il testo è presente */
-async function createEventTranslations(supabase: ReturnType<typeof createClient>, eventId: string, title?: string | null, narrative?: string | null) {
-  const baseTitle = (title || "").trim();
-  const baseNarr  = (narrative || "").trim();
+/** Scrivi le due traduzioni IT/EN in event_translations se presenti */
+async function createEventTranslations(
+  supabase: ReturnType<typeof createClient>,
+  event_id: string,
+  title_source: string | null,
+  narrative_source: string | null
+) {
+  // Se non abbiamo nessun testo, esci
+  if (!title_source && !narrative_source) return;
 
-  if (!baseTitle && !baseNarr) return; // niente da salvare
+  // Prepara EN e IT (se la lingua sorgente è una sola, traduciamo l'altra)
+  const title_it = title_source ? title_source : null;
+  const narrative_it = narrative_source ? narrative_source : null;
 
-  // Heuristica: assumiamo fonte inglese e traduciamo in IT; se vuoi invertire, cambia qui
-  const enTitle = baseTitle ? baseTitle : "";
-  const enNarr  = baseNarr  ? baseNarr  : "";
+  // Traduco in EN se ho l'IT (o se il testo sembra IT). Qui assumo input in IT per semplicità.
+  const title_en = title_it ? await translate(title_it, "en") : null;
+  const narrative_en = narrative_it ? await translate(narrative_it, "en") : null;
 
-  const itTitle = baseTitle ? await translate(baseTitle, "it") : "";
-  const itNarr  = baseNarr  ? await translate(baseNarr,  "it") : "";
+  const rows: any[] = [];
+  if (title_it || narrative_it) {
+    rows.push({
+      [COL_EVENT_ID]: event_id,
+      [COL_LANG]: "it",
+      [COL_TITLE]: title_it,
+      [COL_NARRATIVE]: narrative_it,
+    });
+  }
+  if (title_en || narrative_en) {
+    rows.push({
+      [COL_EVENT_ID]: event_id,
+      [COL_LANG]: "en",
+      [COL_TITLE]: title_en,
+      [COL_NARRATIVE]: narrative_en,
+    });
+  }
+  if (!rows.length) return;
 
-  const rows = [
-    { [COL_EVENT_ID]: eventId, [COL_LANG]: "en", [COL_TITLE]: enTitle || null, [COL_NARRATIVE]: enNarr || null },
-    { [COL_EVENT_ID]: eventId, [COL_LANG]: "it", [COL_TITLE]: itTitle || null, [COL_NARRATIVE]: itNarr || null }
-  ];
-
-  await supabase.from(EVENT_TRANSLATIONS_TABLE).insert(rows);
+  const { error } = await supabase.from(EVENT_TRANSLATIONS_TABLE).insert(rows);
+  if (error) throw error;
 }
 
-/**
- * Inserisce:
- * - group_events
- * - events_list (bulk)
- * - event_group_event (bulk)
- * - event_translations (2 lingue per evento, se abbiamo titolo/descrizione)
- */
-export async function createJourneyWithEvents(payload: CreateJourneyPayload) {
+/** ACTION principale: crea un Journey + suoi eventi (e relative traduzioni minime) */
+export async function buildJourney(payload: BuildJourneyPayload) {
   const supabase = getSupabaseServer();
   const { profileId, userRef } = await getSessionProfileId(supabase);
 
-  // 1) group_events
-  const geInsert = {
-    slug: payload.slug,
-    title: payload.title,
-    pitch: payload.pitch ?? null,
-    cover_url: payload.cover_url ?? null,
-    description: payload.description ?? null,
-    visibility: payload.visibility,
-    status: payload.status,
-    is_official: false,
-    owner_user_ref: userRef,
-    owner_profile_id: profileId,
-  };
-  const { data: geRow, error: geErr } = await supabase.from("group_events").insert(geInsert).select("id").single();
-  if (geErr) return { ok: false as const, error: `group_events insert failed: ${geErr.message}` };
-  const group_event_id = geRow!.id as string;
+  if (!profileId) {
+    return {
+      ok: false as const,
+      error: "NO_SESSION",
+      message: "Utente non loggato o profilo non trovato.",
+    };
+  }
 
-  // 2) events_list
-  const eventsListRows = (payload.events || []).map((e) => ({
+  // 1) Crea group_event
+  const groupEventRow = {
+    // Adatta Nomi campi della tua tabella group_events
+    name: payload.name_en, // se hai una colonna unica name, puoi mettere quello EN/IT che preferisci come "master"
+    subtitle: payload.subtitle_en || null, // idem
+    era_from: payload.era_from || null,
+    era_to: payload.era_to || null,
+
+    year_from: payload.year_from || null,
+    year_to: payload.year_to || null,
+    era: payload.era || null,
+
+    journey_location: payload.journey_location || null,
+    journey_latitude: payload.journey_latitude || null,
+    journey_longitude: payload.journey_longitude || null,
+
+    owner_profile_id: profileId,
+    visibility: "Private", // opzionale, adatta al tuo schema/stati
+    state: "Draft",        // idem
+  };
+
+  const { data: geIns, error: geErr } = await supabase
+    .from("group_events")
+    .insert(groupEventRow)
+    .select("id")
+    .single();
+
+  if (geErr) {
+    return { ok: false as const, error: "GE_INSERT", message: geErr.message };
+  }
+  const group_event_id = geIns.id as string;
+
+  // 2) Crea group_event_translations (IT + EN)
+  const getSafe = (s: string | undefined | null) => (s?.trim() ? s!.trim() : null);
+  const name_en = getSafe(payload.name_en);
+  const name_it = getSafe(payload.name_it);
+  const subtitle_en = getSafe(payload.subtitle_en ?? null);
+  const subtitle_it = getSafe(payload.subtitle_it ?? null);
+
+  const transRows: Array<{
+    group_event_id: string;
+    lang: "it" | "en";
+    name: string | null;
+    subtitle?: string | null;
+    cover_url?: string | null;
+    description?: string | null;
+  }> = [];
+
+  // IT
+  transRows.push({
+    group_event_id,
+    lang: "it",
+    name: name_it,
+    subtitle: subtitle_it,
+    cover_url: null, // se hai una cover la puoi mettere qui
+    description: null,
+  });
+
+  // EN
+  // se non fornisci in input i testi inglesi, traduciamo al volo il titolo/sottotitolo italiani
+  transRows.push({
+    group_event_id,
+    lang: "en",
+    name: name_en ?? (name_it ? await translate(name_it, "en") : null),
+    subtitle: subtitle_en ?? (subtitle_it ? await translate(subtitle_it, "en") : null),
+    cover_url: null,
+    description: null,
+  });
+
+  const { error: getErr } = await supabase.from("group_event_translations").insert(transRows);
+  if (getErr) {
+    return { ok: false as const, error: "GET_INSERT", message: getErr.message };
+  }
+
+  // 3) Inserisci gli eventi collegati
+  const eventRows = (payload.events || []).map((e) => ({
+    // Adatta i nomi col tuo schema "events_list" (o tabella eventi effettiva)
+    group_event_id,
+    title_text: e.title_text ?? null,
+    description_text: e.description_text ?? null,
+
     year_from: e.year_from ?? null,
     year_to: e.year_to ?? null,
-    exact_date: e.exact_date ?? null,
     era: e.era ?? null,
-    continent: e.continent ?? null,
-    country: e.country ?? null,
-    location: e.location ?? null,
+
     latitude: e.latitude ?? null,
     longitude: e.longitude ?? null,
-  }));
-  const { data: evRows, error: evErr } = await supabase.from("events_list").insert(eventsListRows).select("id");
-  if (evErr) return { ok: false as const, error: `events_list insert failed: ${evErr.message}`, group_event_id };
-  const insertedEvents = (evRows as { id: string }[]) || [];
+    location_name: e.location_name ?? null,
 
-  // 3) event_group_event
-  if (insertedEvents.length > 0) {
-    const links = insertedEvents.map((r) => ({ event_id: r.id, group_event_id, added_by_user_ref: userRef }));
-    const { error: linkErr } = await supabase.from("event_group_event").insert(links);
-    if (linkErr) return { ok: false as const, error: `event_group_event insert failed: ${linkErr.message}`, group_event_id };
+    event_type_id: e.event_type_id ?? null,
+    wikipedia_url: e.wikipedia_url ?? null,
+
+    // eventuali default
+    visibility: "Private",
+    state: "Draft",
+    owner_profile_id: profileId,
+    owner_ref: userRef,
+  }));
+
+  let insertedEvents: Array<{ id: string }> = [];
+  if (eventRows.length > 0) {
+    const { data: evIns, error: evErr } = await supabase
+      .from("events_list")
+      .insert(eventRows)
+      .select("id");
+
+    if (evErr) {
+      return { ok: false as const, error: "EV_INSERT", message: evErr.message };
+    }
+    insertedEvents = (evIns || []) as Array<{ id: string }>;
   }
 
   // 4) event_translations (EN + IT) — se presenti title/description nell’input in posizione corrispondente
