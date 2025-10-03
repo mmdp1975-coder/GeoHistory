@@ -4,51 +4,39 @@ import { cookies } from "next/headers";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
-/** === CONFIG event_translations (adatta qui i nomi se diversi nel tuo DB) === */
-const EVENT_TRANSLATIONS_TABLE = "event_translations";
-const COL_EVENT_ID   = "event_id";
-const COL_LANG       = "lang";
-const COL_TITLE      = "title";
-const COL_NARRATIVE  = "narrative"; // se nel tuo DB è "description", cambia questo nome
+/** Tabelle/colonne (adatta i nomi se diversi nel tuo DB) */
+const EVENT_TRANSLATIONS_TABLE = "event_translations" as const;
+const COL_EVENT_ID = "event_id" as const;
+const COL_LANG = "lang" as const;
+const COL_TITLE = "title" as const;
+const COL_NARRATIVE = "narrative" as const; // se nel DB è "description", cambia anche qui
 
 type Era = "AD" | "BC";
 
+/** Struttura minima evento in input */
 type EventMinimal = {
-  // Dati minimi per la creazione degli eventi
-  // NB: tieni coerenti i nomi con la tua tabella events_list o v_events
-  //     Se i nomi nel DB sono diversi, adatta i campi qui e la insert più sotto.
   title_text?: string | null;
   description_text?: string | null;
 
-  // campi temporali
   year_from?: number | null;
   year_to?: number | null;
   era?: Era | null;
 
-  // campi geografici
   latitude?: number | null;
   longitude?: number | null;
   location_name?: string | null;
 
-  // foreign key per il tipo evento, se già determinato
   event_type_id?: string | null;
-
-  // opzionale: eventuale link wikipedia (se previsto nel tuo DB)
   wikipedia_url?: string | null;
-
-  // opzionale: qualunque altro campo tu voglia mappare
-  // ...
 };
 
+/** Payload principale per costruire il Journey */
 type BuildJourneyPayload = {
-  // Dati minimi per creare il Journey (= group_event)
-  // Adatta ai nomi dei campi reali della tua tabella group_events
   name_en: string;
   name_it: string;
   subtitle_en?: string | null;
   subtitle_it?: string | null;
 
-  // metadata del journey
   era_from?: Era | null;
   era_to?: Era | null;
 
@@ -65,25 +53,29 @@ type BuildJourneyPayload = {
 function getSupabaseServer() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  return createClient(url, key, { global: { headers: { Cookie: cookies().toString() } } });
+  return createClient(url, key, {
+    global: { headers: { Cookie: cookies().toString() } },
+  });
 }
 
-/** Recupero user + profileId dalla sessione */
-async function getSessionProfileId(supabase: ReturnType<typeof createClient>) {
-  const { data: { user } } = await supabase.auth.getUser();
+/** Recupera user e profileId dalla sessione */
+async function getSessionProfileId(supabase: ReturnType<typeof getSupabaseServer>) {
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user ?? null;
   if (!user) return { profileId: null as string | null, userRef: null as string | null };
 
   const { data: profRow, error: profErr } = await supabase
     .from("profiles")
     .select("id")
-    .eq("user_id", user.id) // <-- Se nel tuo schema è "auth_user_id" o altro, cambia qui.
+    .eq("user_id", user.id) // <-- Se nel tuo schema è "auth_user_id" o altro, cambia SOLO questa riga.
     .maybeSingle<{ id: string }>();
+
   if (profErr) throw profErr;
 
   return { profileId: profRow?.id ?? null, userRef: user.email ?? user.id };
 }
 
-/** Traduzione con OpenAI (usa stesso modello usato per estrazione) */
+/** Traduzione con OpenAI */
 async function translate(text: string, target: "en" | "it"): Promise<string> {
   if (!text?.trim()) return "";
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -102,52 +94,58 @@ async function translate(text: string, target: "en" | "it"): Promise<string> {
     temperature: 0.2,
   });
 
-  const out = choices?.[0]?.message?.content?.trim() || "";
-  return out;
+  return choices?.[0]?.message?.content?.trim() || "";
 }
 
-/** Scrivi le due traduzioni IT/EN in event_translations se presenti */
+/** Tipo locale per inserire righe in event_translations */
+type EventTranslationInsert = {
+  event_id: string;
+  lang: "it" | "en";
+  title: string | null;
+  narrative: string | null;
+};
+
+/** Scrive traduzioni IT/EN in event_translations se presenti */
 async function createEventTranslations(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof getSupabaseServer>,
   event_id: string,
   title_source: string | null,
   narrative_source: string | null
 ) {
-  // Se non abbiamo nessun testo, esci
   if (!title_source && !narrative_source) return;
 
-  // Prepara EN e IT (se la lingua sorgente è una sola, traduciamo l'altra)
-  const title_it = title_source ? title_source : null;
-  const narrative_it = narrative_source ? narrative_source : null;
+  // Assumo input IT e genero EN. Se non vuoi tradurre, puoi salvare solo IT.
+  const title_it = title_source || null;
+  const narrative_it = narrative_source || null;
 
-  // Traduco in EN se ho l'IT (o se il testo sembra IT). Qui assumo input in IT per semplicità.
   const title_en = title_it ? await translate(title_it, "en") : null;
   const narrative_en = narrative_it ? await translate(narrative_it, "en") : null;
 
-  const rows: any[] = [];
+  const rows: EventTranslationInsert[] = [];
   if (title_it || narrative_it) {
     rows.push({
-      [COL_EVENT_ID]: event_id,
-      [COL_LANG]: "it",
-      [COL_TITLE]: title_it,
-      [COL_NARRATIVE]: narrative_it,
+      event_id,
+      lang: "it",
+      title: title_it,
+      narrative: narrative_it,
     });
   }
   if (title_en || narrative_en) {
     rows.push({
-      [COL_EVENT_ID]: event_id,
-      [COL_LANG]: "en",
-      [COL_TITLE]: title_en,
-      [COL_NARRATIVE]: narrative_en,
+      event_id,
+      lang: "en",
+      title: title_en,
+      narrative: narrative_en,
     });
   }
   if (!rows.length) return;
 
-  const { error } = await supabase.from(EVENT_TRANSLATIONS_TABLE).insert(rows);
+  // Usa nome tabella letterale per evitare "never"
+  const { error } = await supabase.from("event_translations").insert(rows);
   if (error) throw error;
 }
 
-/** ACTION principale: crea un Journey + suoi eventi (e relative traduzioni minime) */
+/** ACTION principale: crea Journey + eventi + traduzioni */
 export async function buildJourney(payload: BuildJourneyPayload) {
   const supabase = getSupabaseServer();
   const { profileId, userRef } = await getSessionProfileId(supabase);
@@ -160,25 +158,24 @@ export async function buildJourney(payload: BuildJourneyPayload) {
     };
   }
 
-  // 1) Crea group_event
+  // 1) Crea group_event (adatta i nomi campi alla tua tabella)
   const groupEventRow = {
-    // Adatta Nomi campi della tua tabella group_events
-    name: payload.name_en, // se hai una colonna unica name, puoi mettere quello EN/IT che preferisci come "master"
-    subtitle: payload.subtitle_en || null, // idem
+    name: payload.name_en, // se hai una sola colonna "name"
+    subtitle: payload.subtitle_en || null,
     era_from: payload.era_from || null,
     era_to: payload.era_to || null,
 
-    year_from: payload.year_from || null,
-    year_to: payload.year_to || null,
-    era: payload.era || null,
+    year_from: payload.year_from ?? null,
+    year_to: payload.year_to ?? null,
+    era: payload.era ?? null,
 
-    journey_location: payload.journey_location || null,
-    journey_latitude: payload.journey_latitude || null,
-    journey_longitude: payload.journey_longitude || null,
+    journey_location: payload.journey_location ?? null,
+    journey_latitude: payload.journey_latitude ?? null,
+    journey_longitude: payload.journey_longitude ?? null,
 
     owner_profile_id: profileId,
-    visibility: "Private", // opzionale, adatta al tuo schema/stati
-    state: "Draft",        // idem
+    visibility: "Private", // opzionale
+    state: "Draft",        // opzionale
   };
 
   const { data: geIns, error: geErr } = await supabase
@@ -193,7 +190,7 @@ export async function buildJourney(payload: BuildJourneyPayload) {
   const group_event_id = geIns.id as string;
 
   // 2) Crea group_event_translations (IT + EN)
-  const getSafe = (s: string | undefined | null) => (s?.trim() ? s!.trim() : null);
+  const getSafe = (s: string | undefined | null) => (s?.trim() ? s.trim() : null);
   const name_en = getSafe(payload.name_en);
   const name_it = getSafe(payload.name_it);
   const subtitle_en = getSafe(payload.subtitle_en ?? null);
@@ -214,12 +211,11 @@ export async function buildJourney(payload: BuildJourneyPayload) {
     lang: "it",
     name: name_it,
     subtitle: subtitle_it,
-    cover_url: null, // se hai una cover la puoi mettere qui
+    cover_url: null,
     description: null,
   });
 
-  // EN
-  // se non fornisci in input i testi inglesi, traduciamo al volo il titolo/sottotitolo italiani
+  // EN (se mancano i testi in EN, traduco quelli IT)
   transRows.push({
     group_event_id,
     lang: "en",
@@ -236,7 +232,6 @@ export async function buildJourney(payload: BuildJourneyPayload) {
 
   // 3) Inserisci gli eventi collegati
   const eventRows = (payload.events || []).map((e) => ({
-    // Adatta i nomi col tuo schema "events_list" (o tabella eventi effettiva)
     group_event_id,
     title_text: e.title_text ?? null,
     description_text: e.description_text ?? null,
@@ -252,7 +247,6 @@ export async function buildJourney(payload: BuildJourneyPayload) {
     event_type_id: e.event_type_id ?? null,
     wikipedia_url: e.wikipedia_url ?? null,
 
-    // eventuali default
     visibility: "Private",
     state: "Draft",
     owner_profile_id: profileId,
@@ -272,18 +266,26 @@ export async function buildJourney(payload: BuildJourneyPayload) {
     insertedEvents = (evIns || []) as Array<{ id: string }>;
   }
 
-  // 4) event_translations (EN + IT) — se presenti title/description nell’input in posizione corrispondente
+  // 4) event_translations (IT/EN) per ogni evento inserito
   try {
     await Promise.all(
       insertedEvents.map((row, idx) => {
         const src = payload.events[idx];
-        return createEventTranslations(supabase, row.id, src?.title_text || null, src?.description_text || null);
+        return createEventTranslations(
+          supabase,
+          row.id,
+          src?.title_text || null,
+          src?.description_text || null
+        );
       })
     );
   } catch (e: any) {
-    // Non blocchiamo la creazione del Journey se fallisce la traduzione/scrittura
+    // Non bloccare il Journey se falliscono le traduzioni
     console.warn("event_translations insert warning:", e?.message || e);
   }
 
   return { ok: true as const, group_event_id };
 }
+
+/** Alias per compatibilità con page.tsx */
+export { buildJourney as createJourneyWithEvents };
