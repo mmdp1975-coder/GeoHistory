@@ -229,10 +229,6 @@ export default function LoginPage() {
             <Image src="/icons/microsoft.svg" alt="" width={20} height={20} />
           </button>
         </div>
-
-        <p className={styles.footerEnv}>
-          Project URL: {process.env.NEXT_PUBLIC_SUPABASE_URL}
-        </p>
       </div>
     </div>
   );
