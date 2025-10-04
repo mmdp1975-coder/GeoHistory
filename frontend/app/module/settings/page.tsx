@@ -67,7 +67,6 @@ export default function SettingsPage() {
       }
       if (alive) setUser(user);
 
-      // profilo
       const { data: prof, error: perr } = await supabase
         .from('profiles')
         .select('id, language_code, persona_id')
@@ -80,7 +79,6 @@ export default function SettingsPage() {
         setProfile(prof as Profile);
       }
 
-      // personas
       const { data: pers, error: persErr } = await supabase
         .from('personas')
         .select('id, code, name_it, name_en')
@@ -122,9 +120,6 @@ export default function SettingsPage() {
       }
 
       setOk('Impostazioni salvate correttamente.');
-      // Se vuoi rifrescare la pagina o reindirizzare alla tua landing, sblocca una delle due:
-      // router.refresh();
-      // router.push('/landing');
     } catch (err: any) {
       setError(err?.message || 'Errore salvataggio');
     } finally {
@@ -149,20 +144,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-[calc(100vh-0px)] w-full bg-gray-50">
-      {/* Header semplice */}
-      <div className="w-full border-b bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/landing" className="text-sm text-blue-600 underline">← Back</Link>
-            <h1 className="text-lg font-semibold">Settings</h1>
-          </div>
-          <div className="text-xs text-gray-500">
-            {user?.email}
-          </div>
-        </div>
-      </div>
-
-      {/* Body */}
+      {/* Body (header removed) */}
       <div className="mx-auto max-w-5xl px-4 py-8">
         <div className="rounded-2xl bg-white shadow p-6">
           <h2 className="text-base font-semibold mb-6">Profile preferences</h2>
