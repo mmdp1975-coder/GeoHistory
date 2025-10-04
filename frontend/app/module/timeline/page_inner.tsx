@@ -5,12 +5,6 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseBrowserClient";
 
-/**
- * Timeline Explorer (module/timeline)
- * Pulizia: rimossa la barra superiore interna (Back/Logo/Settings/Logout),
- * ora si usa solo la TopBar globale dal layout di /module.
- */
-
 type UUID = string;
 
 type EventsListRowRaw = {
@@ -35,9 +29,12 @@ type GroupEvent = {
   icon_name: string | null;
   cover_url: string | null;
 };
-type GeWithCount = GroupEvent & { matched_events: number };
+type GeWithCount = GroupEvent & {
+  matched_events: number;
+  earliest_year: number | null;
+};
 
-// DEFAULT
+// DEFAULT richiesta
 const DEFAULT_FROM = -3000; // 3000 BC
 const DEFAULT_TO = 2025;    // 2025 AD
 
@@ -46,7 +43,7 @@ const EGE_CHUNK = 80;
 const GE_CHUNK  = 200;
 
 // Colori brand
-const BRAND_BLUE = "#0b3b60"; // blu scuro
+const BRAND_BLUE = "#0b3b60";
 const BRAND_BLUE_SOFT = "#0d4a7a";
 
 function isBC(v?: string | null) {
@@ -64,10 +61,23 @@ function formatYear(y: number) {
   return `${y} CE`;
 }
 
-// Colore sicuro
 function safeColor(hex?: string | null, fallback = "#111827") {
   const h = (hex || "").trim();
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(h) ? h : fallback;
+}
+
+// calcola uno step "pulito" per i ticks (50/100/250/500/1000/...)
+function niceStep(span: number, targetTicks = 7) {
+  const raw = span / targetTicks;
+  const pow10 = Math.pow(10, Math.floor(Math.log10(Math.max(1, Math.abs(raw)))));
+  const base = raw / pow10;
+  let nice = 1;
+  if (base <= 1) nice = 1;
+  else if (base <= 2) nice = 2;
+  else if (base <= 2.5) nice = 2.5;
+  else if (base <= 5) nice = 5;
+  else nice = 10;
+  return nice * pow10;
 }
 
 export default function TimelinePage() {
@@ -78,19 +88,45 @@ export default function TimelinePage() {
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // dominio e range
-  const [minDomain, setMinDomain] = useState<number | null>(null);
-  const [maxDomain, setMaxDomain] = useState<number | null>(null);
+  // range selezionato (i cursori sono indipendenti)
   const [fromYear, setFromYear] = useState<number | undefined>(undefined);
   const [toYear, setToYear] = useState<number | undefined>(undefined);
   const rangeInitialized = useRef(false);
+
+  // min/max reale del dataset (solo per clamp iniziale)
+  const [dataMin, setDataMin] = useState<number | null>(null);
+  const [dataMax, setDataMax] = useState<number | null>(null);
+
+  // selezione effettiva (ordinata) usata per UI e query
+  const selFrom = useMemo(() => {
+    if (typeof fromYear !== "number" || typeof toYear !== "number") return null;
+    return Math.min(fromYear, toYear);
+  }, [fromYear, toYear]);
+  const selTo = useMemo(() => {
+    if (typeof fromYear !== "number" || typeof toYear !== "number") return null;
+    return Math.max(fromYear, toYear);
+  }, [fromYear, toYear]);
+
+  // dominio visivo: sempre 1000 prima e 1000 dopo la selezione ordinata
+  const minDomain = useMemo(() => {
+    if (selFrom == null) return null;
+    return Math.trunc(selFrom - 1000);
+  }, [selFrom]);
+  const maxDomain = useMemo(() => {
+    if (selTo == null) return null;
+    return Math.trunc(selTo + 1000);
+  }, [selTo]);
 
   // risultati
   const [loading, setLoading] = useState(false);
   const [groupEvents, setGroupEvents] = useState<GeWithCount[]>([]);
   const [totalMatches, setTotalMatches] = useState(0);
 
-  // ===== Carica eventi e calcola dominio =====
+  // preferiti
+  const [favs, setFavs] = useState<Set<UUID>>(new Set());
+  const [favMsg, setFavMsg] = useState<string | null>(null);
+
+  // ===== Carica eventi e calcola min/max dati =====
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -121,7 +157,7 @@ export default function TimelinePage() {
           norm.push({ source_event_id: r.source_event_id, yFrom: Math.trunc(a), yTo: Math.trunc(b) });
         }
 
-        // dominio dai dati; fallback se tabella vuota
+        // min/max dai dati (usati solo per clamp iniziale)
         let domainMin = -2000;
         let domainMax = 2100;
         if (norm.length > 0) {
@@ -135,8 +171,8 @@ export default function TimelinePage() {
         if (cancelled) return;
 
         setEventsNorm(norm);
-        setMinDomain(domainMin);
-        setMaxDomain(domainMax);
+        setDataMin(domainMin);
+        setDataMax(domainMax);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Initialization error");
       } finally {
@@ -149,7 +185,7 @@ export default function TimelinePage() {
   // ===== Inizializza range una sola volta =====
   useEffect(() => {
     if (rangeInitialized.current) return;
-    if (minDomain == null || maxDomain == null) return;
+    if (dataMin == null || dataMax == null) return;
 
     const qsFromRaw = search.get("from");
     const qsToRaw = search.get("to");
@@ -163,29 +199,37 @@ export default function TimelinePage() {
     const desiredStart = hasQsFrom && Number.isFinite(qsFrom) ? qsFrom : DEFAULT_FROM;
     const desiredEnd = hasQsTo && Number.isFinite(qsTo) ? qsTo : DEFAULT_TO;
 
-    const startClamped = Math.max(Math.min(desiredStart, maxDomain), minDomain);
-    const endClamped = Math.max(Math.min(desiredEnd, maxDomain), startClamped);
+    // clamp iniziale sui dati reali (solo per partire dentro al dataset)
+    const startClamped = Math.max(Math.min(desiredStart, dataMax), dataMin);
+    const endClamped = Math.max(Math.min(desiredEnd, dataMax), Math.min(dataMax, dataMax)); // garantisco numero
 
     setFromYear(startClamped);
     setToYear(endClamped);
     rangeInitialized.current = true;
-  }, [minDomain, maxDomain, search]);
+  }, [dataMin, dataMax, search]);
 
   const domainReady =
-    !initializing && minDomain != null && maxDomain != null && typeof fromYear === "number" && typeof toYear === "number";
-  const canSearch = domainReady && (fromYear as number) <= (toYear as number);
+    !initializing &&
+    selFrom != null &&
+    selTo != null &&
+    minDomain != null &&
+    maxDomain != null;
 
-  // ===== Query chunked: eventi → mapping → group_events =====
+  // ===== Query chunked: eventi → mapping → group_events (con earliest_year) =====
   useEffect(() => {
-    if (!canSearch) return;
+    if (!domainReady) return;
 
     let cancelled = false;
     (async () => {
       setLoading(true);
       setError(null);
       try {
-        const from = fromYear as number;
-        const to = toYear as number;
+        const from = selFrom as number;
+        const to = selTo as number;
+
+        // mappa rapida per recuperare yFrom degli event ids
+        const eventYearMap = new Map<UUID, number>();
+        for (const e of eventsNorm) eventYearMap.set(e.source_event_id, e.yFrom);
 
         const matched = eventsNorm.filter((e) => e.yFrom <= to && e.yTo >= from);
         const eventIds = Array.from(new Set(matched.map((m) => m.source_event_id)));
@@ -213,9 +257,16 @@ export default function TimelinePage() {
           return;
         }
 
+        // conteggio + earliest per group_event
         const counts = new Map<UUID, number>();
+        const earliest = new Map<UUID, number>();
         for (const row of allEGE) {
           counts.set(row.group_event_id, (counts.get(row.group_event_id) || 0) + 1);
+          const y = eventYearMap.get(row.event_id);
+          if (typeof y === "number") {
+            const cur = earliest.get(row.group_event_id);
+            if (cur == null || y < cur) earliest.set(row.group_event_id, y);
+          }
         }
         const geIds = Array.from(counts.keys());
 
@@ -231,148 +282,247 @@ export default function TimelinePage() {
         }
 
         const merged: GeWithCount[] = allGE
-          .map((g) => ({ ...g, matched_events: counts.get(g.id) || 0 }))
+          .map((g) => ({
+            ...g,
+            matched_events: counts.get(g.id) || 0,
+            earliest_year: earliest.has(g.id) ? (earliest.get(g.id) as number) : null
+          }))
           .filter((g) => g.matched_events > 0)
-          .sort((a, b) => b.matched_events - a.matched_events);
+          .sort((a, b) => {
+            // ordine cronologico per earliest_year crescente; a parità, più match prima
+            if (a.earliest_year == null && b.earliest_year == null) {
+              return b.matched_events - a.matched_events;
+            }
+            if (a.earliest_year == null) return 1;
+            if (b.earliest_year == null) return -1;
+            if (a.earliest_year !== b.earliest_year) return a.earliest_year - b.earliest_year;
+            return b.matched_events - a.matched_events;
+          });
 
-        if (!cancelled) {
-          setGroupEvents(merged);
-          setTotalMatches(merged.reduce((acc, x) => acc + x.matched_events, 0));
-        }
+        setGroupEvents(merged);
+        setTotalMatches(merged.reduce((acc, x) => acc + x.matched_events, 0));
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Unknown error");
+        setError(e?.message ?? "Unknown error");
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [fromYear, toYear, canSearch, eventsNorm]);
+  }, [selFrom, selTo, domainReady, eventsNorm]);
 
-  const headerSubtitle = useMemo(() => {
-    if (!domainReady) return "Initializing…";
-    return `Showing group events with at least one event between ${formatYear(fromYear as number)} and ${formatYear(toYear as number)}`;
-  }, [domainReady, fromYear, toYear]);
+  // ===== Preferiti: carica set preferiti per i group_events correnti =====
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setFavs(new Set()); return; }
+        if (groupEvents.length === 0) { setFavs(new Set()); return; }
+
+        const ids = groupEvents.map(g => g.id);
+        const { data, error: favErr } = await supabase
+          .from("favourites")
+          .select("group_event_id")
+          .in("group_event_id", ids)
+          .eq("user_id", user.id);
+
+        if (favErr) { /* silenzioso */ return; }
+        const s = new Set<UUID>((data || []).map((r: any) => r.group_event_id as UUID));
+        if (!cancelled) setFavs(s);
+      } catch {
+        // ignora errori di schema/permessi
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [groupEvents]);
+
+  const toggleFavourite = async (ev: React.MouseEvent, groupEventId: UUID) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    setFavMsg(null);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setFavMsg("Please sign in to use favourites."); return; }
+
+      const isFav = favs.has(groupEventId);
+      // UI ottimistica
+      const next = new Set(favs);
+      if (isFav) next.delete(groupEventId); else next.add(groupEventId);
+      setFavs(next);
+
+      if (isFav) {
+        const { error } = await supabase
+          .from("favourites")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("group_event_id", groupEventId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("favourites")
+          .insert({ user_id: user.id, group_event_id: groupEventId });
+        if (error) throw error;
+      }
+    } catch (e: any) {
+      setFavMsg(e?.message || "Unable to toggle favourite.");
+    }
+  };
+
+  // ===== UI =====
+  const domainLabelsReady =
+    typeof minDomain === "number" && typeof maxDomain === "number" && selFrom != null && selTo != null;
+
+  // centro corrente per pan (mantiene ampiezza)
+  const span = (selFrom != null && selTo != null) ? (selTo - selFrom) : 0;
+  const center = (selFrom != null && selTo != null) ? (selFrom + selTo) / 2 : 0;
+  const panMin = (typeof minDomain === "number") ? (minDomain + span / 2) : 0;
+  const panMax = (typeof maxDomain === "number") ? (maxDomain - span / 2) : 0;
+
+  // ticks temporali (da mostrare subito sotto la barra)
+  const ticks = useMemo(() => {
+    if (!domainLabelsReady) return [];
+    const dMin = minDomain as number;
+    const dMax = maxDomain as number;
+    const fullSpan = dMax - dMin;
+    const step = niceStep(fullSpan, 7);
+    const first = Math.ceil(dMin / step) * step;
+    const out: number[] = [];
+    for (let t = first; t <= dMax; t += step) out.push(Math.round(t));
+    return out;
+  }, [domainLabelsReady, minDomain, maxDomain]);
 
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
-      {/* BANDA BLU: titolo + sottotitolo + timeline (resta) */}
+      {/* HEADER blu */}
       <header className="z-20 border-b border-neutral-200" style={{ backgroundColor: BRAND_BLUE }}>
-        <div className="mx-auto max-w-7xl px-4 py-5 text-white">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-xl font-semibold tracking-tight">Timeline Explorer</h1>
-            <p className="text-sm/6 opacity-90">{headerSubtitle}</p>
+        <div className="mx-auto max-w-7xl px-4 py-3 text-white">{/* py più compatto */}
+          {/* Riga titolo + controlli (From/To/Show All) */}
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h1 className="text-lg font-semibold tracking-tight">Timeline Explorer</h1>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <label className="text-xs text-white/90">From</label>
+                <input
+                  type="number"
+                  className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
+                  value={typeof fromYear === "number" ? fromYear : ""}
+                  onChange={(e) => setFromYear(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-xs text-white/90">To</label>
+                <input
+                  type="number"
+                  className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
+                  value={typeof toYear === "number" ? toYear : ""}
+                  onChange={(e) => setToYear(Number(e.target.value))}
+                />
+              </div>
+              <button
+                onClick={() => { setFromYear(DEFAULT_FROM); setToYear(DEFAULT_TO); }}
+                className="rounded-md border border-white/25 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/15"
+              >
+                Show All
+              </button>
+            </div>
           </div>
 
-          {/* Timeline Card (in blu) */}
-          <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 shadow-sm">
-            <div className="p-4">
+          {/* Timeline Card (ultra compatta) */}
+          <div className="mt-2 rounded-xl border border-white/15 bg-white/5 shadow-sm">
+            <div className="p-2">
               {domainReady ? (
                 <>
-                  <div className="relative py-8">
-                    {/* Track 3D */}
+                  <div className="relative py-2">{/* wrapper più basso */}
+                    {/* Track 3D, sottile */}
                     <div
-                      className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-3 rounded-full"
+                      className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-[6px] rounded-full"
                       style={{
                         background: "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
                         boxShadow:
-                          "inset 0 1px 3px rgba(0,0,0,0.20), inset 0 -1px 2px rgba(255,255,255,0.55), 0 1px 2px rgba(0,0,0,0.12)"
+                          "inset 0 1px 2px rgba(0,0,0,0.18), inset 0 -1px 1px rgba(255,255,255,0.5), 0 1px 1px rgba(0,0,0,0.08)"
                       }}
                     />
                     {/* Selected segment 3D (blu) */}
                     <div
-                      className="absolute top-1/2 -translate-y-1/2 h-3 rounded-full"
+                      className="absolute top-1/2 -translate-y-1/2 h-[6px] rounded-full"
                       style={{
-                        left: `${(((fromYear as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
-                        right: `${(1 - ((toYear as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
+                        left: `${(((selFrom as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
+                        right: `${(1 - ((selTo as number) - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100}%`,
                         background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
                         boxShadow:
-                          "inset 0 1px 2px rgba(255,255,255,0.25), inset 0 -1px 2px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25)"
+                          "inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)"
                       }}
                     />
-                    {/* Lower thumb */}
+
+                    {/* Slider: FROM (indipendente, alla stessa altezza della barra) */}
                     <input
                       type="range"
                       min={minDomain as number}
                       max={maxDomain as number}
                       value={fromYear as number}
-                      onChange={(e) => setFromYear(Math.min(Number(e.target.value), (toYear as number)))}
-                      className="range-thumb pointer-events-auto absolute left-0 right-0 w-full appearance-none bg-transparent"
+                      onChange={(e) => setFromYear(Number(e.target.value))}
+                      className="range-thumb pointer-events-auto absolute left-0 right-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent"
                       aria-label="From year"
                     />
-                    {/* Upper thumb */}
+                    {/* Slider: TO (indipendente, alla stessa altezza della barra) */}
                     <input
                       type="range"
                       min={minDomain as number}
                       max={maxDomain as number}
                       value={toYear as number}
-                      onChange={(e) => setToYear(Math.max(Number(e.target.value), (fromYear as number)))}
-                      className="range-thumb pointer-events-auto absolute left-0 right-0 w-full appearance-none bg-transparent"
+                      onChange={(e) => setToYear(Number(e.target.value))}
+                      className="range-thumb pointer-events-auto absolute left-0 right-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent"
                       aria-label="To year"
                     />
-                    {/* Labels estremi */}
-                    <div className="mt-11 flex justify-between text-xs text-white/80">
-                      <span>{formatYear(minDomain as number)}</span>
-                      <span>{formatYear(maxDomain as number)}</span>
-                    </div>
-                  </div>
-
-                  {/* Inputs + quick actions */}
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-white/90">From</label>
-                      <input
-                        type="number"
-                        className="w-28 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-sm text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                        value={fromYear as number}
-                        onChange={(e) =>
-                          setFromYear(
-                            Math.min(
-                              Number(e.target.value || (minDomain as number)),
-                              (toYear as number)
-                            )
-                          )
+                    {/* Slider: PAN (centro), stessa altezza */}
+                    <input
+                      type="range"
+                      min={panMin}
+                      max={panMax}
+                      value={center}
+                      onChange={(e) => {
+                        const c = Number(e.target.value);
+                        const half = span / 2;
+                        const newFrom = Math.round(c - half);
+                        const newTo = Math.round(c + half);
+                        if ((fromYear as number) <= (toYear as number)) {
+                          setFromYear(newFrom);
+                          setToYear(newTo);
+                        } else {
+                          setFromYear(newTo);
+                          setToYear(newFrom);
                         }
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm text-white/90">To</label>
-                      <input
-                        type="number"
-                        className="w-28 rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-sm text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                        value={toYear as number}
-                        onChange={(e) =>
-                          setToYear(
-                            Math.max(
-                              Number(e.target.value || (maxDomain as number)),
-                              (fromYear as number)
-                            )
-                          )
-                        }
-                      />
-                    </div>
+                      }}
+                      className="range-pan absolute left-0 right-0 top-1/2 -translate-y-1/2 w-full appearance-none bg-transparent"
+                      aria-label="Pan window"
+                    />
 
-                    <div className="ml-auto flex items-center gap-2">
-                      <button
-                        onClick={() => { setFromYear(minDomain as number); setToYear(maxDomain as number); }}
-                        className="rounded-lg border border-white/25 bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
-                      >
-                        Show all
-                      </button>
-                      <button
-                        onClick={() => {
-                          setFromYear(Math.max(minDomain as number, 1200));
-                          setToYear(Math.min(maxDomain as number, 1900));
-                        }}
-                        className="rounded-lg border border-white/25 bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
-                      >
-                        Quick: 1200–1900
-                      </button>
-                    </div>
+                    {/* Ticks subito sotto la barra (spazio minimo) */}
+                    {domainLabelsReady && (
+                      <div className="mt-2 select-none">
+                        <div className="relative mx-3 h-4">
+                          {ticks.map((t) => {
+                            const pct =
+                              ((t - (minDomain as number)) / ((maxDomain as number) - (minDomain as number))) * 100;
+                            return (
+                              <div key={t} className="absolute top-0 -translate-x-1/2" style={{ left: `${pct}%` }}>
+                                <div className="h-[10px] w-px bg-white/80" />
+                                <div className="mt-0.5 text-[10px] leading-none text-white/90 whitespace-nowrap -translate-x-1/2 translate-x-1/2">
+                                  {formatYear(t)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* (RIMOSSI min/max) */}
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
-                <div className="py-10 text-sm text-white/80">Loading timeline…</div>
+                <div className="py-4 text-sm text-white/80">Loading timeline…</div>
               )}
             </div>
           </div>
@@ -380,8 +530,8 @@ export default function TimelinePage() {
       </header>
 
       {/* BODY */}
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        <div className="mb-4 text-sm text-neutral-600">
+      <main className="mx-auto max-w-7xl px-4 py-5">
+        <div className="mb-3 text-sm text-neutral-600">
           {initializing ? (
             <span>Initializing…</span>
           ) : loading ? (
@@ -396,13 +546,19 @@ export default function TimelinePage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
             {error}
           </div>
         )}
 
+        {favMsg && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+            {favMsg}
+          </div>
+        )}
+
         {!loading && groupEvents.length === 0 && !initializing && !error && (
-          <div className="rounded-xl border border-neutral-200 bg-white p-10 text-center text-neutral-600">
+          <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center text-neutral-600">
             Nessun group event trovato nel range selezionato. Prova ad allargare la finestra temporale.
           </div>
         )}
@@ -411,7 +567,8 @@ export default function TimelinePage() {
           {groupEvents.map((g) => {
             const accent = safeColor(g.color_hex, "#111827");
             const gradient =
-              `linear-gradient(180deg, ${accent}1A 0%, ${accent}0D 60%, #FFFFFF 100%)`; // 1A=10%, 0D≈5%
+              `linear-gradient(180deg, ${accent}1A 0%, ${accent}0D 60%, #FFFFFF 100%)`;
+            const isFav = favs.has(g.id);
             return (
               <li key={g.id}>
                 <Link
@@ -431,21 +588,30 @@ export default function TimelinePage() {
                         <span className="text-sm">No cover</span>
                       </div>
                     )}
-                    <span
-                      className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-medium ring-1 ring-white"
+
+                    {/* Favourite pill */}
+                    <button
+                      onClick={(e) => toggleFavourite(e, g.id)}
+                      className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-medium ring-1 ring-white hover:bg-white"
                       style={{ color: accent }}
-                      title={g.icon_name || undefined}
+                      title={isFav ? "Remove from favourites" : "Add to favourites"}
                     >
-                      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accent }} />
-                      {g.icon_name || "Journey"}
-                    </span>
+                      <span className="inline-block" aria-hidden="true">
+                        {isFav ? "★" : "☆"}
+                      </span>
+                      <span>Favourite</span>
+                    </button>
                   </div>
+
                   <div className="p-4">
                     <div className="mb-1 line-clamp-1 text-[15px] font-semibold tracking-tight">
                       {g.title || g.slug || "Untitled"}
                     </div>
                     <div className="text-sm text-neutral-600">
                       {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
+                      {typeof g.earliest_year === "number" && (
+                        <span className="text-neutral-400"> • from {formatYear(g.earliest_year)}</span>
+                      )}
                     </div>
                   </div>
                 </Link>
@@ -455,44 +621,66 @@ export default function TimelinePage() {
         </ul>
       </main>
 
-      {/* Slider styling 3D */}
+      {/* Slider styling (ancora più compatti) */}
       <style jsx global>{`
         input[type="range"].range-thumb {
           -webkit-appearance: none;
-          height: 36px;
+          height: 22px; /* più basso */
           outline: none;
           background: transparent;
+          position: relative;
+          z-index: 10;
         }
         input[type="range"].range-thumb::-webkit-slider-thumb {
           -webkit-appearance: none;
           appearance: none;
-          width: 22px;
-          height: 22px;
+          width: 14px; /* più piccolo */
+          height: 14px;
           border-radius: 9999px;
           background: linear-gradient(180deg, #ffffff 0%, #f2f5f9 40%, #e6ebf3 100%);
           border: 1px solid rgba(0,0,0,0.15);
           box-shadow:
             inset 0 1px 1px rgba(255,255,255,0.9),
             inset 0 -1px 1px rgba(0,0,0,0.08),
-            0 2px 6px rgba(0,0,0,0.25);
+            0 2px 3px rgba(0,0,0,0.18);
           cursor: pointer;
-          margin-top: -9px;
-          position: relative;
-          z-index: 10;
+          margin-top: -7px;
         }
         input[type="range"].range-thumb::-moz-range-thumb {
-          width: 22px;
-          height: 22px;
+          width: 14px;
+          height: 14px;
           border-radius: 9999px;
           background: linear-gradient(180deg, #ffffff 0%, #f2f5f9 40%, #e6ebf3 100%);
           border: 1px solid rgba(0,0,0,0.15);
           box-shadow:
             inset 0 1px 1px rgba(255,255,255,0.9),
             inset 0 -1px 1px rgba(0,0,0,0.08),
-            0 2px 6px rgba(0,0,0,0.25);
+            0 2px 3px rgba(0,0,0,0.18);
           cursor: pointer;
+        }
+
+        /* Slider PAN (solo per spostare il centro, mantiene l'ampiezza) */
+        input[type="range"].range-pan {
+          -webkit-appearance: none;
+          height: 22px;
+          outline: none;
+          background: transparent;
           position: relative;
-          z-index: 10;
+          z-index: 5;
+        }
+        input[type="range"].range-pan::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 0px; /* invisibile ma draggable sull'intera area */
+          height: 14px;
+          background: transparent;
+          cursor: grab;
+        }
+        input[type="range"].range-pan::-moz-range-thumb {
+          width: 0px;
+          height: 14px;
+          background: transparent;
+          cursor: grab;
         }
       `}</style>
     </div>
