@@ -1,57 +1,54 @@
-import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseBrowserClient";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-// Helper per leggere i metadati di una tabella
-async function getTableMeta(table: string) {
-  try {
-    // NB: Supabase non espone i metadati in automatico.
-    // Qui puoi sostituire con una query verso una view custom se l’hai creata.
-    return { name: table, columns: [] };
-  } catch (err) {
-    console.error("getTableMeta error:", err);
-    return { name: table, columns: [] };
-  }
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type Ctx = { params: { table: string; id: string } };
+
+function admin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const sr  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!url || !sr) throw new Error("Missing envs");
+  return createClient(url, sr, { auth: { persistSession: false } });
 }
 
-export async function GET(
-  req: NextRequest,
-  ctx: { params: { table: string; id: string } }
-) {
-  const { table, id } = ctx.params;
-
+export async function PUT(req: Request, { params }: Ctx) {
   try {
-    const { data, error } = await supabase.from(table).select("*").eq("id", id).single();
+    const table = (params?.table || "").trim();
+    const id = (params?.id || "").trim();
+    if (!table || !id) return NextResponse.json({ error: "Missing table or id" }, { status: 400 });
+
+    const body = await req.json().catch(() => ({}));
+    if (!body || typeof body !== "object") return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+
+    const sb = admin();
+    const { data, error } = await sb.from(table).update(body).eq("id", id).select("*");
     if (error) throw error;
 
-    const meta = await getTableMeta(table);
-
-    return NextResponse.json({ table, id, meta, row: data });
+    return NextResponse.json({ ok: true, table, id, updated: data || [] });
   } catch (e: any) {
-    console.error("GET error:", e);
-    return NextResponse.json(
-      { error: e?.message ?? "Error fetching row" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
-export async function POST(
-  req: NextRequest,
-  ctx: { params: { table: string; id: string } }
-) {
-  const { table, id } = ctx.params;
-
+export async function DELETE(_req: Request, { params }: Ctx) {
   try {
-    const body = await req.json();
-    const { data, error } = await supabase.from(table).update(body).eq("id", id).select();
+    const table = (params?.table || "").trim();
+    const id = (params?.id || "").trim();
+    if (!table || !id) return NextResponse.json({ error: "Missing table or id" }, { status: 400 });
+
+    const sb = admin();
+    const { data, error } = await sb.from(table).delete().eq("id", id).select("*");
     if (error) throw error;
 
-    return NextResponse.json({ ok: true, row: data });
+    return NextResponse.json({ ok: true, table, id, deleted: data || [] });
   } catch (e: any) {
-    console.error("POST error:", e);
-    return NextResponse.json(
-      { error: e?.message ?? "Error updating row" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e?.message || "Internal Server Error" }, { status: 500 });
   }
 }
+
+// Le altre HTTP methods non sono gestite qui (evitiamo conflitti)
+export async function GET()  { return NextResponse.json({ error: "Not Found" }, { status: 404 }); }
+export async function POST() { return NextResponse.json({ error: "Not Found" }, { status: 404 }); }

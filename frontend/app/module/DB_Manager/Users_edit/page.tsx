@@ -10,16 +10,12 @@ const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_BYPASS_TOKEN || "";
 const devHeaders = DEV_BYPASS ? { "x-dev-bypass": DEV_BYPASS } : {};
 
 export default function DBManagerPage() {
-  // NON usiamo più onTokenChange: teniamo un token “vuoto” e
-  // lasciamo che sia il DEV_BYPASS ad autorizzare le chiamate.
-  const [token] = useState<string | null>("");
-
+  // token non usato: autorizzi via DEV_BYPASS
   const [tables, setTables] = useState<string[]>([]);
   const [tablesLoading, setTablesLoading] = useState(false);
   const [tablesErr, setTablesErr] = useState<string | null>(null);
 
   const [table, setTable] = useState<string>("");
-
   const [meta, setMeta] = useState<TableMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaErr, setMetaErr] = useState<string | null>(null);
@@ -33,10 +29,19 @@ export default function DBManagerPage() {
 
   const [editing, setEditing] = useState<
     | { mode: "none" }
-    | { mode: "edit"; id: string; original: any; values: Record<string, any> }
+    | { mode: "edit"; id: string; values: Record<string, any> }
     | { mode: "create"; values: Record<string, any> }
   >({ mode: "none" });
   const [opMsg, setOpMsg] = useState<string | null>(null);
+
+  // 2 pulsanti per le pagine figlie
+  // (restano invariati)
+  const Nav = () => (
+    <div className="ml-auto flex gap-2">
+      <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey →</Link>
+      <Link href="/module/DB_Manager/Users_edit" className="rounded-lg border px-3 py-2 text-sm">Users →</Link>
+    </div>
+  );
 
   async function safeJson(res: Response) {
     const txt = await res.text();
@@ -44,48 +49,35 @@ export default function DBManagerPage() {
     try { return JSON.parse(txt); } catch { return { error: txt }; }
   }
 
-  // Load tables
+  // carica elenco tabelle
   useEffect(() => {
-    // se non hai DEV_BYPASS e non gestisci token, non partire
-    if (!DEV_BYPASS && !token) return;
     (async () => {
       try {
         setTablesLoading(true); setTablesErr(null);
-        const res = await fetch("/api/admin-db/tables", {
-          cache: "no-store",
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...devHeaders,
-          },
-        });
+        const res = await fetch("/api/admin-db/tables", { cache: "no-store", headers: { ...devHeaders } });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading tables");
         const list: string[] = Array.isArray(j.tables) ? j.tables : [];
         setTables(list);
         if (!table && list.length) setTable(list[0]);
       } catch (e: any) {
-        setTablesErr(e?.message ?? "Tables load error"); setTables([]);
+        setTablesErr(e?.message ?? "Tables load error");
+        setTables([]);
       } finally {
         setTablesLoading(false);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
-  // Load meta + rows
+  // carica meta + righe al cambio tabella
   useEffect(() => {
-    if ((!DEV_BYPASS && !token) || !table) return;
+    if (!table) return;
 
     (async () => {
       try {
         setMetaLoading(true); setMetaErr(null);
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/meta`, {
-          cache: "no-store",
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...devHeaders,
-          },
-        });
+        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/meta`, { cache: "no-store", headers: { ...devHeaders } });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading meta");
         setMeta({ table: j.table || table, columns: Array.isArray(j.columns) ? j.columns : [] });
@@ -101,13 +93,7 @@ export default function DBManagerPage() {
       try {
         setRowsLoading(true); setRowsErr(null);
         const qs = new URLSearchParams({ page: String(1), pageSize: String(pageSize) }).toString();
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, {
-          cache: "no-store",
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...devHeaders,
-          },
-        });
+        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, { cache: "no-store", headers: { ...devHeaders } });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading rows");
         setRows(Array.isArray(j.rows) ? j.rows : []);
@@ -119,7 +105,7 @@ export default function DBManagerPage() {
         setRowsLoading(false);
       }
     })();
-  }, [table, token, pageSize]);
+  }, [table, pageSize]);
 
   const columns = useMemo(() => {
     const metaCols = meta?.columns?.map((c) => c.column_name) ?? [];
@@ -131,18 +117,17 @@ export default function DBManagerPage() {
 
   const primaryKey = useMemo(() => (columns.includes("id") ? "id" : null), [columns]);
 
-  const isEditingRow = (row: any) =>
-    editing.mode === "edit" && primaryKey && String(row?.[primaryKey]) === editing.id;
-
   const startEdit = (row: any) => {
     if (!primaryKey) return;
-    setEditing({ mode: "edit", id: String(row[primaryKey]), original: row, values: { ...row } });
+    const id = String(row[primaryKey]);
+    const clone: Record<string, any> = {};
+    for (const c of columns) clone[c] = row[c];
+    setEditing({ mode: "edit", id, values: clone });
     setOpMsg(null);
   };
   const startCreate = () => {
     const blank: Record<string, any> = {};
-    for (const c of columns) blank[c] = null;
-    if (primaryKey) delete blank[primaryKey];
+    for (const c of columns) if (c !== "id") blank[c] = null;
     setEditing({ mode: "create", values: blank });
     setOpMsg(null);
   };
@@ -153,31 +138,19 @@ export default function DBManagerPage() {
 
   const refreshRows = async () => {
     const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString();
-    const r = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, {
-      cache: "no-store",
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...devHeaders,
-      },
-    });
+    const r = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, { cache: "no-store", headers: { ...devHeaders } });
     const j: any = await r.json().catch(() => ({}));
-    if (r.ok) {
-      setRows(Array.isArray(j.rows) ? j.rows : []);
-      setTotal(Number(j.total || 0));
-    }
+    if (r.ok) { setRows(Array.isArray(j.rows) ? j.rows : []); setTotal(Number(j.total || 0)); }
   };
 
   const saveEdit = async () => {
     try {
+      if (!table) return;
       if (editing.mode === "edit") {
         const id = editing.id;
         const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...devHeaders,
-          },
+          headers: { "Content-Type": "application/json", ...devHeaders },
           body: JSON.stringify(editing.values),
         });
         const json: any = await res.json().catch(() => ({}));
@@ -186,11 +159,7 @@ export default function DBManagerPage() {
       } else if (editing.mode === "create") {
         const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...devHeaders,
-          },
+          headers: { "Content-Type": "application/json", ...devHeaders },
           body: JSON.stringify(editing.values),
         });
         const json: any = await res.json().catch(() => ({}));
@@ -211,10 +180,7 @@ export default function DBManagerPage() {
     try {
       const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...devHeaders,
-        },
+        headers: { ...devHeaders },
       });
       const json: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Delete failed");
@@ -231,13 +197,10 @@ export default function DBManagerPage() {
     <div className="mx-auto max-w-7xl p-6">
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold">DB Manager</h1>
-        <div className="ml-auto flex gap-2">
-          <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey →</Link>
-          <Link href="/module/DB_Manager/Users_edit" className="rounded-lg border px-3 py-2 text-sm">Users →</Link>
-        </div>
+        <Nav />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-6 flex items-center gap-3">
         <label className="text-sm text-slate-600">Table</label>
         <select
           className="rounded-lg border px-3 py-2 text-sm"
@@ -248,7 +211,6 @@ export default function DBManagerPage() {
           {!tables.length && <option value="">—</option>}
           {tables.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-
         {tablesLoading && <span className="text-sm text-slate-500">loading…</span>}
         {tablesErr && <span className="text-sm text-red-600">{tablesErr}</span>}
 

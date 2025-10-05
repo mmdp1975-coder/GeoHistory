@@ -4,7 +4,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseBrowserClient";
 
 /* -------- Types -------- */
@@ -17,7 +17,7 @@ type CardModel = {
   imageUrl?: string | null;
   addedAt?: string | null;
   count: number;
-  mine: boolean; // è nei preferiti dell'utente loggato?
+  mine: boolean;
 };
 
 /* -------- Helpers data -------- */
@@ -61,16 +61,13 @@ export default function FavouritesPage() {
         setLoading(true);
         setErr(null);
 
-        // 0) UID & landing corretta (referrer > profilo > /landing)
         const { data: userData, error: userErr } = await supabase.auth.getUser();
         if (userErr) throw userErr;
         const uid = userData?.user?.id ?? null;
 
-        // referrer dalla landing (se esiste)
         const fromRef = referrerLandingPath();
         if (fromRef) setLandingHref(fromRef);
         else if (uid) {
-          // fallback: landing del profilo
           const { data: prof } = await supabase
             .from("profiles")
             .select("landing_slug, persona, persona_code")
@@ -86,7 +83,6 @@ export default function FavouritesPage() {
           setLandingHref("/landing");
         }
 
-        // 1) aggregato cross-profile (bypassa RLS)
         const { data: agg, error: aggErr } = await supabase.rpc("get_favourites_all");
         if (aggErr) throw aggErr;
         const rows = (agg ?? []) as AggRow[];
@@ -95,7 +91,6 @@ export default function FavouritesPage() {
           return;
         }
 
-        // 2) i MIEI preferiti → per gestire la stella (★/☆)
         let mySet = new Set<string>();
         if (uid) {
           const { data: mine, error: mineErr } = await supabase
@@ -106,7 +101,6 @@ export default function FavouritesPage() {
           mySet = new Set((mine ?? []).map((r: any) => String(r.group_event_id)));
         }
 
-        // 3) carico i group_events coinvolti
         const ids = rows.map((r) => r.group_event_id);
         const { data: ges, error: geErr } = await supabase
           .from("group_events")
@@ -114,7 +108,6 @@ export default function FavouritesPage() {
           .in("id", ids);
         if (geErr) throw geErr;
 
-        // 4) mapping card
         const byId = new Map<string, AggRow>(rows.map((r) => [r.group_event_id, r]));
         const mapped: CardModel[] = (ges ?? []).map((raw: AnyObj) => {
           const id = String(raw.id);
@@ -140,7 +133,6 @@ export default function FavouritesPage() {
           };
         });
 
-        // 5) ordino per last_added_at (desc)
         mapped.sort((a, b) => {
           const ta = a.addedAt ? new Date(a.addedAt).getTime() : 0;
           const tb = b.addedAt ? new Date(b.addedAt).getTime() : 0;
@@ -160,7 +152,6 @@ export default function FavouritesPage() {
     };
   }, []);
 
-  /* -------- Toggle stella: aggiunge o rimuove per l'utente loggato -------- */
   async function onToggleStar(groupEventId: string, mine: boolean) {
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -168,7 +159,6 @@ export default function FavouritesPage() {
       if (!uid) throw new Error("Not authenticated");
 
       if (mine) {
-        // era nei miei preferiti → rimuovi
         const { error } = await supabase
           .from("group_event_favourites")
           .delete()
@@ -182,11 +172,9 @@ export default function FavouritesPage() {
           )
         );
       } else {
-        // NON era nei miei preferiti → aggiungi
         const { error } = await supabase
           .from("group_event_favourites")
           .insert([{ profile_id: uid, group_event_id: groupEventId }]);
-        // 23505 = unique violation → consideralo comunque aggiunto
         if (error && (error as any).code !== "23505") throw error;
 
         setCards((prev) =>
@@ -200,43 +188,19 @@ export default function FavouritesPage() {
     }
   }
 
-  /* -------- Open: salva ID e naviga con gid in querystring -------- */
   function onOpen(id: string) {
     try {
       if (typeof window !== "undefined") {
-        localStorage.setItem("active_group_event_id", id); // retro-compatibilità
+        localStorage.setItem("active_group_event_id", id);
       }
-    } catch {
-      /* ignore */
-    }
-    router.push(`/module/group_event?gid=${id}`); // <— PASSO L’ID ALLA NUOVA PAGINA
+    } catch {}
+    router.push(`/module/group_event?gid=${id}`);
   }
 
   const hasCards = cards.length > 0;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-8">
-      {/* Header */}
-      <div className="mb-6 flex items-center gap-3">
-        {/* Freccia → landing corretta (referrer o profilo) */}
-        <Link
-          href={landingHref}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-          title="Go to landing"
-          aria-label="Go to landing"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </Link>
-
-        <h1 className="text-2xl font-bold tracking-tight">Favourites</h1>
-
-        <span className="ml-auto text-sm text-slate-500">
-          {hasCards ? `${cards.length} items` : ""}
-        </span>
-      </div>
-
       {/* Stato */}
       {err && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
@@ -244,7 +208,6 @@ export default function FavouritesPage() {
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !hasCards && <EmptyState />}
 
       {/* Grid */}
@@ -256,7 +219,6 @@ export default function FavouritesPage() {
                 key={c.id}
                 className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
               >
-                {/* Cover */}
                 <div className="relative h-40 w-full bg-slate-100">
                   {c.imageUrl ? (
                     <Image
@@ -269,8 +231,6 @@ export default function FavouritesPage() {
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-amber-100 to-slate-100" />
                   )}
-
-                  {/* Stella grande cliccabile (toggle) + count */}
                   <button
                     onClick={() => onToggleStar(c.id, c.mine)}
                     className="absolute left-2 top-2 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm backdrop-blur transition hover:bg-white"
@@ -283,10 +243,8 @@ export default function FavouritesPage() {
                   </button>
                 </div>
 
-                {/* Body */}
                 <div className="space-y-2 p-4">
                   <h2 className="line-clamp-2 text-base font-semibold leading-tight text-slate-900">
-                    {/* Open: salva ID e naviga al nuovo modulo */}
                     <button
                       onClick={() => onOpen(c.id)}
                       className="text-left underline-offset-2 hover:underline"
@@ -303,7 +261,6 @@ export default function FavouritesPage() {
                   )}
                 </div>
 
-                {/* Footer */}
                 <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
                   <button
                     onClick={() => onOpen(c.id)}
@@ -344,6 +301,7 @@ function EmptyState() {
     </div>
   );
 }
+
 function CardSkeleton() {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
