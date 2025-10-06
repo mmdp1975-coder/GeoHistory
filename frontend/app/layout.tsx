@@ -1,10 +1,9 @@
-// app/layout.tsx
-import "./globals.css";
+// frontend/app/layout.tsx
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "GeoHistory Journey",
-  description: "Journey: where time & space become story",
+  description: "Where time and space turn into stories",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
