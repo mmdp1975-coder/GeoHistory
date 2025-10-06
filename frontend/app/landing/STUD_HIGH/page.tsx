@@ -36,6 +36,7 @@ type PersonaRow = {
 };
 
 type ProfileRow = {
+  full_name: string | null;
   username: string | null;
   personas: PersonaRow | null;
 };
