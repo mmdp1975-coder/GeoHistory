@@ -1,6 +1,7 @@
 // frontend/app/module/group_event/page_inner.tsx
 "use client";
 
+import type { JSX } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
