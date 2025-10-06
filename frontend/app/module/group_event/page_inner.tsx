@@ -777,6 +777,7 @@ export default function GroupEventModulePage() {
       }
     });
 
+
     if (!annotated.length) return null;
 
     let min = annotated[0].min;
@@ -790,7 +791,7 @@ export default function GroupEventModulePage() {
     const safeSpan = spanValue === 0 ? 1 : spanValue;
 
     const items: TimelineItem[] = annotated.map((item) => {
-      const startValue = item.start;
+      const startValue = item.min; // ← prima era item.start
       const startProgress = Math.min(1, Math.max(0, (startValue - min) / safeSpan));
       return { ...item, progress: startProgress, start: startValue };
     });
