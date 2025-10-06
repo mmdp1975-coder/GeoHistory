@@ -766,7 +766,15 @@ export default function GroupEventModulePage() {
     const annotated: { ev: EventVM; index: number; min: number; max: number; center: number }[] = [];
     rows.forEach((ev, index) => {
       const span = buildTimelineSpan(ev);
-      if (span) annotated.push({ ev, index, min: span.min, max: span.max, center: span.center, start: span.start });
+      if (span) {
+        annotated.push({
+          ev,
+          index,
+          min: span.min,
+          max: span.max,
+          center: span.center,
+        });
+      }
     });
 
     if (!annotated.length) return null;
