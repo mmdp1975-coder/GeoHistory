@@ -1,283 +1,413 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-type TableMetaCol = { column_name: string; data_type: string };
-type TableMeta = { table: string; columns: TableMetaCol[] };
+type SupabaseAuthUser = {
+  id: string;
+  email?: string | null;
+  phone?: string | null;
+  created_at?: string | null;
+  last_sign_in_at?: string | null;
+  user_metadata?: Record<string, any> | null;
+  app_metadata?: Record<string, any> | null;
+  identities?: any[] | null;
+};
+
+type ProfileRow = Record<string, any> & { id: string };
 
 const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_BYPASS_TOKEN || "";
-const devHeaders = DEV_BYPASS ? { "x-dev-bypass": DEV_BYPASS } : {};
+const devHeaders: Record<string, string> = DEV_BYPASS ? { "x-dev-bypass": DEV_BYPASS } : ({} as Record<string, string>);
+const PAGE_SIZE = 20;
 
-export default function DBManagerPage() {
-  // token non usato: autorizzi via DEV_BYPASS
-  const [tables, setTables] = useState<string[]>([]);
-  const [tablesLoading, setTablesLoading] = useState(false);
-  const [tablesErr, setTablesErr] = useState<string | null>(null);
+function toPrettyJSON(value: any) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return "{}";
+  }
+}
 
-  const [table, setTable] = useState<string>("");
-  const [meta, setMeta] = useState<TableMeta | null>(null);
-  const [metaLoading, setMetaLoading] = useState(false);
-  const [metaErr, setMetaErr] = useState<string | null>(null);
+function tryParseJSON(value: string) {
+  try {
+    return JSON.parse(value);
+  } catch (error: any) {
+    const message = error?.message || "Invalid JSON";
+    return new Error(message);
+  }
+}
 
-  const [rows, setRows] = useState<any[]>([]);
-  const [rowsLoading, setRowsLoading] = useState(false);
-  const [rowsErr, setRowsErr] = useState<string | null>(null);
-  const [page] = useState(1);
-  const [pageSize] = useState(25);
+async function safeJson(res: Response) {
+  const txt = await res.text();
+  if (!txt) return res.ok ? {} : { error: `HTTP ${res.status}` };
+  try {
+    return JSON.parse(txt);
+  } catch {
+    return { error: txt };
+  }
+}
+
+export default function UsersAdminPage() {
+  const [loading, setLoading] = useState(false);
+  const [users, setUsers] = useState<SupabaseAuthUser[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, ProfileRow>>({});
   const [total, setTotal] = useState(0);
-
-  const [editing, setEditing] = useState<
-    | { mode: "none" }
-    | { mode: "edit"; id: string; values: Record<string, any> }
-    | { mode: "create"; values: Record<string, any> }
-  >({ mode: "none" });
+  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [opMsg, setOpMsg] = useState<string | null>(null);
 
-  // 2 pulsanti per le pagine figlie
-  // (restano invariati)
-  const Nav = () => (
-    <div className="ml-auto flex gap-2">
-      <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey →</Link>
-      <Link href="/module/DB_Manager/Users_edit" className="rounded-lg border px-3 py-2 text-sm">Users →</Link>
-    </div>
-  );
+  const [authDraft, setAuthDraft] = useState("{}");
+  const [profileDraft, setProfileDraft] = useState("{}");
+  const [jsonErr, setJsonErr] = useState<string | null>(null);
 
-  async function safeJson(res: Response) {
-    const txt = await res.text();
-    if (!txt) return res.ok ? {} : { error: `HTTP ${res.status}` };
-    try { return JSON.parse(txt); } catch { return { error: txt }; }
+  const [creating, setCreating] = useState(false);
+  const [createDraft, setCreateDraft] = useState(
+    toPrettyJSON({ email: "", password: "", user_metadata: { first_name: "", last_name: "" } })
+  );
+  const [createErr, setCreateErr] = useState<string | null>(null);
+
+  const jsonHeaders: HeadersInit = useMemo(() => ({ "Content-Type": "application/json", ...devHeaders }), []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setOpMsg(null);
+    try {
+      const params = new URLSearchParams({ page: String(page), perPage: String(PAGE_SIZE) });
+      if (query.trim()) params.set("query", query.trim());
+      const res = await fetch(`/api/admin/users?${params}`, { cache: "no-store", headers: devHeaders });
+      const json: any = await safeJson(res);
+      if (!res.ok) throw new Error(json?.error || "Failed loading users");
+
+      setUsers(Array.isArray(json.users) ? json.users : []);
+      setProfiles(json.profiles || {});
+      setTotal(Number(json.total || 0));
+
+      const firstId = json.users?.[0]?.id ?? null;
+      const current = json.users?.some((u: any) => u.id === selectedId) ? selectedId : firstId;
+      setSelectedId(current ?? null);
+    } catch (error: any) {
+      setOpMsg(error?.message ?? "Load error");
+      setUsers([]);
+      setProfiles({});
+      setTotal(0);
+      setSelectedId(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, query, selectedId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Update editors when selected user changes or profiles/users reload
+  useEffect(() => {
+    if (!selectedId) {
+      setAuthDraft("{}");
+      setProfileDraft("{}");
+      return;
+    }
+    const user = users.find((u) => u.id === selectedId);
+    const profile = profiles[selectedId];
+    setAuthDraft(
+      toPrettyJSON({
+        email: user?.email ?? "",
+        password: "",
+        phone: user?.phone ?? null,
+        user_metadata: user?.user_metadata ?? {},
+        app_metadata: user?.app_metadata ?? undefined,
+      })
+    );
+    setProfileDraft(toPrettyJSON(profile ?? { id: selectedId }));
+  }, [selectedId, users, profiles]);
+
+  const selectedUser = useMemo(() => users.find((u) => u.id === selectedId) || null, [users, selectedId]);
+  const selectedProfile = selectedId ? profiles[selectedId] ?? null : null;
+  const totalPages = total ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1;
+
+  async function handleProfileSave() {
+    if (!selectedId) return;
+    setJsonErr(null);
+    const parsed = tryParseJSON(profileDraft);
+    if (parsed instanceof Error) {
+      setJsonErr(parsed.message);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/tables/profiles/rows/${encodeURIComponent(selectedId)}`, {
+        method: "PUT",
+        headers: jsonHeaders,
+        body: JSON.stringify(parsed),
+      });
+      const json: any = await safeJson(res);
+      if (!res.ok) throw new Error(json?.error || "Update failed");
+      setOpMsg("Profile updated");
+      await load();
+    } catch (error: any) {
+      setOpMsg(error?.message ?? "Profile update error");
+    }
   }
 
-  // carica elenco tabelle
-  useEffect(() => {
-    (async () => {
-      try {
-        setTablesLoading(true); setTablesErr(null);
-        const res = await fetch("/api/admin-db/tables", { cache: "no-store", headers: { ...devHeaders } });
-        const j: any = await safeJson(res);
-        if (!res.ok) throw new Error(j?.error || "Failed loading tables");
-        const list: string[] = Array.isArray(j.tables) ? j.tables : [];
-        setTables(list);
-        if (!table && list.length) setTable(list[0]);
-      } catch (e: any) {
-        setTablesErr(e?.message ?? "Tables load error");
-        setTables([]);
-      } finally {
-        setTablesLoading(false);
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // carica meta + righe al cambio tabella
-  useEffect(() => {
-    if (!table) return;
-
-    (async () => {
-      try {
-        setMetaLoading(true); setMetaErr(null);
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/meta`, { cache: "no-store", headers: { ...devHeaders } });
-        const j: any = await safeJson(res);
-        if (!res.ok) throw new Error(j?.error || "Failed loading meta");
-        setMeta({ table: j.table || table, columns: Array.isArray(j.columns) ? j.columns : [] });
-      } catch (e: any) {
-        setMetaErr(e?.message ?? "Meta load error");
-        setMeta({ table, columns: [] });
-      } finally {
-        setMetaLoading(false);
-      }
-    })();
-
-    (async () => {
-      try {
-        setRowsLoading(true); setRowsErr(null);
-        const qs = new URLSearchParams({ page: String(1), pageSize: String(pageSize) }).toString();
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, { cache: "no-store", headers: { ...devHeaders } });
-        const j: any = await safeJson(res);
-        if (!res.ok) throw new Error(j?.error || "Failed loading rows");
-        setRows(Array.isArray(j.rows) ? j.rows : []);
-        setTotal(Number(j.total || 0));
-      } catch (e: any) {
-        setRowsErr(e?.message ?? "Rows load error");
-        setRows([]); setTotal(0);
-      } finally {
-        setRowsLoading(false);
-      }
-    })();
-  }, [table, pageSize]);
-
-  const columns = useMemo(() => {
-    const metaCols = meta?.columns?.map((c) => c.column_name) ?? [];
-    if (metaCols.length > 0) return metaCols;
-    const keys = new Set<string>();
-    for (const r of rows.slice(0, 50)) Object.keys(r || {}).forEach((k) => keys.add(k));
-    return Array.from(keys);
-  }, [meta, rows]);
-
-  const primaryKey = useMemo(() => (columns.includes("id") ? "id" : null), [columns]);
-
-  const startEdit = (row: any) => {
-    if (!primaryKey) return;
-    const id = String(row[primaryKey]);
-    const clone: Record<string, any> = {};
-    for (const c of columns) clone[c] = row[c];
-    setEditing({ mode: "edit", id, values: clone });
-    setOpMsg(null);
-  };
-  const startCreate = () => {
-    const blank: Record<string, any> = {};
-    for (const c of columns) if (c !== "id") blank[c] = null;
-    setEditing({ mode: "create", values: blank });
-    setOpMsg(null);
-  };
-  const cancelEdit = () => setEditing({ mode: "none" });
-  const onFieldChange = (col: string, v: any) => {
-    setEditing((prev) => (prev.mode === "none" ? prev : { ...prev, values: { ...prev.values, [col]: v } } as any));
-  };
-
-  const refreshRows = async () => {
-    const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString();
-    const r = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, { cache: "no-store", headers: { ...devHeaders } });
-    const j: any = await r.json().catch(() => ({}));
-    if (r.ok) { setRows(Array.isArray(j.rows) ? j.rows : []); setTotal(Number(j.total || 0)); }
-  };
-
-  const saveEdit = async () => {
+  async function handleProfileDelete() {
+    if (!selectedId) return;
+    if (!confirm("Delete only the profile record?")) return;
     try {
-      if (!table) return;
-      if (editing.mode === "edit") {
-        const id = editing.id;
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", ...devHeaders },
-          body: JSON.stringify(editing.values),
-        });
-        const json: any = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json?.error || "Update failed");
-        setOpMsg(`Updated ${(json.updated?.length ?? 0)} row(s).`);
-      } else if (editing.mode === "create") {
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...devHeaders },
-          body: JSON.stringify(editing.values),
-        });
-        const json: any = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json?.error || "Insert failed");
-        setOpMsg(`Inserted ${(json.inserted?.length ?? 0)} row(s).`);
-      }
-      setEditing({ mode: "none" });
-      await refreshRows();
-    } catch (e: any) {
-      setOpMsg(e?.message ?? "Save error");
-    }
-  };
-
-  const deleteRow = async (row: any) => {
-    if (!primaryKey) return;
-    const id = String(row[primaryKey]);
-    if (!confirm(`Delete row with ${primaryKey} = ${id}?`)) return;
-    try {
-      const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(selectedId)}?mode=profile-only`, {
         method: "DELETE",
-        headers: { ...devHeaders },
+        headers: devHeaders,
       });
-      const json: any = await res.json().catch(() => ({}));
+      const json: any = await safeJson(res);
       if (!res.ok) throw new Error(json?.error || "Delete failed");
-      setOpMsg(`Deleted ${(json.deleted?.length ?? 0)} row(s).`);
-      await refreshRows();
-    } catch (e: any) {
-      setOpMsg(e?.message ?? "Delete error");
+      setOpMsg("Profile deleted");
+      await load();
+    } catch (error: any) {
+      setOpMsg(error?.message ?? "Profile delete error");
     }
-  };
+  }
 
-  const totalPages = useMemo(() => (total ? Math.max(1, Math.ceil(total / pageSize)) : 1), [total, pageSize]);
+  async function handleDeleteUser() {
+    if (!selectedId) return;
+    if (!confirm("Delete Auth user and profile?")) return;
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(selectedId)}`, {
+        method: "DELETE",
+        headers: devHeaders,
+      });
+      const json: any = await safeJson(res);
+      if (!res.ok) throw new Error(json?.error || "Delete failed");
+      setOpMsg("User deleted");
+      await load();
+    } catch (error: any) {
+      setOpMsg(error?.message ?? "User delete error");
+    }
+  }
+
+  async function handleAuthSave() {
+    if (!selectedId) return;
+    setJsonErr(null);
+    const parsed = tryParseJSON(authDraft);
+    if (parsed instanceof Error) {
+      setJsonErr(parsed.message);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(selectedId)}`, {
+        method: "PATCH",
+        headers: jsonHeaders,
+        body: JSON.stringify(parsed),
+      });
+      const json: any = await safeJson(res);
+      if (!res.ok) throw new Error(json?.error || "Update failed");
+      setOpMsg("Auth user updated");
+      await load();
+    } catch (error: any) {
+      setOpMsg(error?.message ?? "Auth update error");
+    }
+  }
+
+  async function handleCreateUser() {
+    setCreateErr(null);
+    const parsed = tryParseJSON(createDraft);
+    if (parsed instanceof Error) {
+      setCreateErr(parsed.message);
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: jsonHeaders,
+        body: JSON.stringify(parsed),
+      });
+      const json: any = await safeJson(res);
+      if (!res.ok) throw new Error(json?.error || "Create failed");
+      setCreating(false);
+      setCreateDraft(toPrettyJSON({ email: "", password: "" }));
+      setOpMsg("User created");
+      await load();
+    } catch (error: any) {
+      setCreateErr(error?.message ?? "Create error");
+    }
+  }
 
   return (
-    <div className="mx-auto max-w-7xl p-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">DB Manager</h1>
-        <Nav />
-      </div>
+    <div className="mx-auto max-w-7xl p-6 space-y-6">
+      <header className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold">Users Admin</h1>
+        <div className="ml-auto flex gap-2">
+          <Link href="/module/DB_Manager" className="rounded-lg border px-3 py-2 text-sm">DB Manager {'->'}</Link>
+          <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey {'->'}</Link>
+        </div>
+      </header>
 
-      <div className="mt-6 flex items-center gap-3">
-        <label className="text-sm text-slate-600">Table</label>
-        <select
-          className="rounded-lg border px-3 py-2 text-sm"
-          value={table}
-          onChange={(e) => setTable(e.target.value)}
-          disabled={tablesLoading || !tables.length}
-        >
-          {!tables.length && <option value="">—</option>}
-          {tables.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        {tablesLoading && <span className="text-sm text-slate-500">loading…</span>}
-        {tablesErr && <span className="text-sm text-red-600">{tablesErr}</span>}
+      <section className="rounded-xl border bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <input
+            className="w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
+            placeholder="Search email, id, name..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <button
+            className="rounded-lg border px-3 py-2 text-sm"
+            onClick={() => setPage(1)}
+            disabled={loading}
+          >
+            Search
+          </button>
+          <button
+            className="rounded-lg border px-3 py-2 text-sm"
+            onClick={load}
+            disabled={loading}
+          >
+            Refresh
+          </button>
+          <button
+            className="rounded-lg border px-3 py-2 text-sm"
+            onClick={() => setCreating((v) => !v)}
+          >
+            {creating ? "Close create" : "+ New user"}
+          </button>
+          <span className="ml-auto text-sm text-neutral-600">
+            Page {page} / {totalPages} • {total} users
+          </span>
+        </div>
 
-        <button className="ml-auto rounded-lg border px-3 py-2 text-sm" onClick={startCreate} disabled={!columns.length}>
-          + Add row
-        </button>
-      </div>
+        {creating && (
+          <div className="mt-4 space-y-2">
+            <textarea
+              className="w-full rounded-lg border p-3 font-mono text-xs"
+              rows={8}
+              value={createDraft}
+              onChange={(event) => setCreateDraft(event.target.value)}
+              spellCheck={false}
+            />
+            {createErr && <div className="text-sm text-red-600">{createErr}</div>}
+            <button className="rounded-lg border px-3 py-2 text-sm" onClick={handleCreateUser}>
+              Create user
+            </button>
+          </div>
+        )}
 
-      {metaLoading && <p className="text-sm text-slate-500 mt-2">loading meta…</p>}
-      {metaErr && <p className="text-sm text-red-600 mt-2">{metaErr}</p>}
+        <div className="mt-4 overflow-auto rounded-lg border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-left">ID</th>
+                <th className="px-3 py-2 text-left">Created</th>
+                <th className="px-3 py-2 text-left">Last sign-in</th>
+                <th className="px-3 py-2 text-left">Profile admin?</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="px-3 py-4 text-neutral-500" colSpan={5}>Loading...</td>
+                </tr>
+              ) : users.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-4 text-neutral-500" colSpan={5}>No users</td>
+                </tr>
+              ) : (
+                users.map((user) => {
+                  const profile = profiles[user.id];
+                  const isSelected = user.id === selectedId;
+                  return (
+                    <tr
+                      key={user.id}
+                      className={`${isSelected ? "bg-blue-50" : "odd:bg-white even:bg-neutral-50"} cursor-pointer`}
+                      onClick={() => setSelectedId(user.id)}
+                    >
+                      <td className="px-3 py-2">{user.email ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{user.id}</td>
+                      <td className="px-3 py-2 text-xs">{user.created_at ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">{user.last_sign_in_at ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs">{profile?.is_admin ? "yes" : "no"}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {opMsg && <div className="mt-3 rounded border bg-slate-50 p-2 text-xs">{opMsg}</div>}
+        <div className="mt-3 flex gap-2 text-sm">
+          <button
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+          >
+            Prev
+          </button>
+          <button
+            className="rounded border px-2 py-1 disabled:opacity-50"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={loading || page >= totalPages}
+          >
+            Next
+          </button>
+        </div>
+      </section>
 
-      <div className="mt-4 overflow-auto rounded-xl border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-2 py-2 text-left border-b">Actions</th>
-              {columns.map((c) => <th key={c} className="px-3 py-2 text-left border-b">{c}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {rowsLoading ? (
-              <tr><td className="px-3 py-3 text-slate-500" colSpan={columns.length + 1}>loading rows…</td></tr>
-            ) : rowsErr ? (
-              <tr><td className="px-3 py-3 text-red-600" colSpan={columns.length + 1}>{rowsErr}</td></tr>
-            ) : rows.length === 0 ? (
-              <tr><td className="px-3 py-3 text-slate-500" colSpan={columns.length + 1}>Nessun record</td></tr>
-            ) : (
-              rows.map((r, idx) => {
-                const pk = primaryKey ? String(r[primaryKey]) : String(idx);
-                const isEdit = editing.mode === "edit" && editing.id === pk;
-                return (
-                  <tr key={pk} className="odd:bg-white even:bg-slate-50">
-                    <td className="px-2 py-2 border-b">
-                      {isEdit ? (
-                        <div className="flex gap-2">
-                          <button className="rounded border px-2 py-1" onClick={saveEdit}>Save</button>
-                          <button className="rounded border px-2 py-1" onClick={cancelEdit}>Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-2">
-                          <button className="rounded border px-2 py-1" onClick={() => startEdit(r)} disabled={!primaryKey}>Edit</button>
-                          <button className="rounded border px-2 py-1 text-red-700" onClick={() => deleteRow(r)} disabled={!primaryKey}>Delete</button>
-                        </div>
-                      )}
-                    </td>
-                    {columns.map((c) => (
-                      <td key={c} className="px-3 py-2 border-b">{formatCell(r?.[c])}</td>
-                    ))}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      {opMsg && <div className="rounded border bg-neutral-50 p-2 text-xs">{opMsg}</div>}
 
-      <div className="mt-3 flex items-center gap-3 text-sm">
-        <span className="text-slate-600">Page {page} / {totalPages} · {total} rows</span>
-      </div>
+      {selectedUser && (
+        <section className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-neutral-700">Supabase Auth user</h2>
+              <button className="rounded border px-2 py-1 text-xs" onClick={handleAuthSave}>
+                Save auth
+              </button>
+            </div>
+            <textarea
+              className="h-64 w-full rounded-lg border p-3 font-mono text-xs"
+              value={authDraft}
+              onChange={(event) => setAuthDraft(event.target.value)}
+              spellCheck={false}
+            />
+            <div className="mt-3 flex gap-2">
+              <button className="rounded border px-3 py-2 text-sm" onClick={handleDeleteUser}>
+                Delete user + profile
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-neutral-700">Profile row</h2>
+              <div className="flex gap-2">
+                <button className="rounded border px-2 py-1 text-xs" onClick={handleProfileSave}>
+                  Save profile
+                </button>
+                <button className="rounded border px-2 py-1 text-xs" onClick={handleProfileDelete}>
+                  Delete profile only
+                </button>
+              </div>
+            </div>
+            <textarea
+              className="h-64 w-full rounded-lg border p-3 font-mono text-xs"
+              value={profileDraft}
+              onChange={(event) => setProfileDraft(event.target.value)}
+              spellCheck={false}
+            />
+            {jsonErr && <div className="mt-2 text-sm text-red-600">{jsonErr}</div>}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
-function formatCell(v: any) {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "object") { try { return JSON.stringify(v); } catch { return String(v); } }
-  return String(v);
-}
+
+
+
+
+
+
+
+
+
+
+

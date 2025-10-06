@@ -2,15 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import styles from "../auth.module.css";
 
-/* Supabase con fallback sicuro */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import * as ClientModule from "../../../lib/supabaseBrowserClient";
 
-/** Restituisce un client Supabase funzionante anche se cambia l’export del modulo */
 function getSupabase(): SupabaseClient {
   const modAny = ClientModule as any;
   const named = modAny?.supabase as SupabaseClient | undefined;
@@ -30,84 +28,171 @@ function getSupabase(): SupabaseClient {
 
 const supabase = getSupabase();
 
+type Persona = {
+  id: string;
+  code: string | null;
+  name_it: string | null;
+  name_en: string | null;
+};
+
+function personaLabel(persona: Persona, locale: string): string {
+  const lang = locale.startsWith("it") ? "it" : "en";
+  const primary = lang === "it" ? persona.name_it : persona.name_en;
+  const fallback = lang === "it" ? persona.name_en : persona.name_it;
+  return (primary || fallback || persona.code || "Persona").trim();
+}
+
+function passwordIssue(password: string): string | null {
+  const minLength = 12;
+  if (password.length < minLength) return `Password must be at least ${minLength} characters.`;
+  if (!/[A-Z]/.test(password)) return "Include at least one uppercase letter.";
+  if (!/[a-z]/.test(password)) return "Include at least one lowercase letter.";
+  if (!/[0-9]/.test(password)) return "Include at least one number.";
+  if (!/[!@#$%^&*()_+\-=[\]{};':\"\\|,.<>/?]/.test(password)) {
+    return "Include at least one special character.";
+  }
+  return null;
+}
+
+function passwordStrength(password: string): { label: string; color: string } {
+  let score = 0;
+  if (password.length >= 12) score += 1;
+  if (password.length >= 16) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[!@#$%^&*()_+\-=[\]{};':\"\\|,.<>/?]/.test(password)) score += 1;
+
+  if (score >= 5) return { label: "Strong", color: "#16a34a" };
+  if (score >= 3) return { label: "Medium", color: "#f59e0b" };
+  return { label: "Weak", color: "#dc2626" };
+}
+
 export default function RegisterPage() {
   const [firstName, setFirstName] = useState("");
-  const [lastName,  setLastName]  = useState("");
-  const [email,     setEmail]     = useState("");
-  const [pwd,       setPwd]       = useState("");
-  const [pwd2,      setPwd2]      = useState("");
-  const [accepted,  setAccepted]  = useState(false);
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [personaId, setPersonaId] = useState<string>("");
+  const [accepted, setAccepted] = useState(false);
 
-  const [loading,   setLoading]   = useState(false);
-  const [err,       setErr]       = useState<string | null>(null);
-  const [ok,        setOk]        = useState(false);
-  const [showPwd,   setShowPwd]   = useState(false);
-  const [showPwd2,  setShowPwd2]  = useState(false);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [showPwd2, setShowPwd2] = useState(false);
 
-  // Redirect calcolato in modo stabile + facilmente whitelistabile
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("personas")
+          .select("id, code, name_it, name_en")
+          .order("code", { ascending: true });
+        if (!alive) return;
+        if (error) throw error;
+        const filteredPersonas = ((data || []) as Persona[]).filter((persona) => {
+          const code = (persona.code || "").trim().toUpperCase();
+          return code !== "ADMIN" && code !== "MOD" && code !== "MODERATOR";
+        });
+        setPersonas(filteredPersonas);
+      } catch (err) {
+        console.warn("[register] personas load failed", err);
+        setPersonas([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const emailRedirectTo = useMemo(() => {
     if (typeof window === "undefined") return undefined;
-    // Reindirizziamo sempre a /login dopo verifica email
-    return `${location.origin}/login`;
+    return `${window.location.origin}/login`;
   }, []);
+
+  const locale = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
+  const strength = passwordStrength(password);
 
   function validate(): string | null {
     if (!accepted) return "You must accept Terms and Privacy.";
-    if (!email?.includes("@")) return "Please enter a valid email address.";
-    if (pwd.length < 8) return "Password must be at least 8 characters.";
-    if (pwd !== pwd2) return "Passwords do not match.";
+    if (!firstName.trim() || !lastName.trim()) return "Please provide your first and last name.";
+    if (personas.length > 0 && !personaId) return "Please select a persona.";
+    if (!email.includes("@")) return "Please enter a valid email address.";
+    const issue = passwordIssue(password);
+    if (issue) return issue;
+    if (password !== passwordConfirm) return "Passwords do not match.";
     return null;
   }
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-    setOk(false);
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(false);
 
-    const v = validate();
-    if (v) {
-      setErr(v);
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      const username = email.trim().toLowerCase();
+
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email,
-        password: pwd,
+        password,
         options: {
           data: {
-            first_name: firstName || null,
-            last_name: lastName || null,
+            first_name: firstName.trim() || null,
+            last_name: lastName.trim() || null,
+            full_name: fullName || null,
+            persona_id: personaId || null,
+            username,
           },
-          emailRedirectTo, // deve essere allowlist in Supabase Auth → Redirect URLs
+          emailRedirectTo,
         },
       });
 
-      if (error) {
-        // Espone l’errore originale (utile per capire cosa blocca la registrazione)
-        throw error;
+      if (error) throw error;
+
+      const newUserId = signUpData?.user?.id ?? null;
+      if (newUserId) {
+        const profilePayload = {
+          id: newUserId,
+          persona_id: personaId || null,
+        };
+        const response = await fetch("/api/register/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(profilePayload),
+        });
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          const reason = typeof detail.error === "string" ? detail.error : response.statusText;
+          throw new Error(`Profile setup failed: ${reason}`);
+        }
+      } else {
+        console.warn("[register] signUp missing user id");
       }
 
-      // Supabase NON crea la session finché non confermi l'email.
-      setOk(true);
-    } catch (e: any) {
-      // Mostriamo messaggi comuni in modo più esplicativo
-      const msg: string = e?.message ?? "Registration failed.";
-      let friendly = msg;
-
-      if (/Signups not allowed/i.test(msg)) {
-        friendly =
-          "Registrations are disabled in Supabase Auth settings. Abilita le signups.";
-      } else if (/redirect/i.test(msg) || /url/i.test(msg)) {
-        friendly =
-          "Invalid redirect URL. Aggiungi l'URL di redirect a Supabase → Auth → Redirect URLs (es. http://localhost:3000/login e l’URL di produzione).";
-      } else if (/rate/i.test(msg)) {
-        friendly =
-          "Too many requests. Attendi qualche minuto prima di riprovare.";
+      setSuccess(true);
+    } catch (err: any) {
+      const message: string = err?.message ?? "Registration failed.";
+      let friendly = message;
+      if (/Signups not allowed/i.test(message)) {
+        friendly = "Registrations are disabled in Supabase Auth settings.";
+      } else if (/redirect/i.test(message)) {
+        friendly = "Invalid redirect URL. Add it in Supabase Auth settings.";
+      } else if (/rate/i.test(message)) {
+        friendly = "Too many requests. Try again later.";
       }
-
-      setErr(`${friendly} (detail: ${msg})`);
+      setError(`${friendly} (detail: ${message})`);
     } finally {
       setLoading(false);
     }
@@ -120,48 +205,63 @@ export default function RegisterPage() {
 
       <div className={styles.card}>
         <div className={styles.brandWrap}>
-          <Image
-            className={styles.logo}
-            src="/logo.png"
-            alt="GeoHistory Journey"
-            width={220}
-            height={220}
-            priority
-          />
+          <Image className={styles.logo} src="/logo.png" alt="GeoHistory Journey" width={220} height={220} />
         </div>
 
-        <div className={styles.tagline}>Where time and space turn into stories</div>
-        <div className={styles.valueprop}>
-          Explore journeys where history, imagination, and discovery blend.<br />
-          Unlock maps, events, timelines, and let time guide you to the past
-        </div>
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <h1 className={styles.title}>Create account</h1>
+          <p className={styles.subtitle}>
+            Join GeoHistory Journey. Confirm your email, then personalise the experience.
+          </p>
 
-        <h1 className={`${styles.title} ${styles.titleAligned}`}>Create your account</h1>
+          <div className={styles.rowTwoCols}>
+            <div className={styles.field}>
+              <div className={styles.label}>First name</div>
+              <div className={styles.inputWrap}>
+                <input
+                  className={styles.input}
+                  type="text"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.target.value)}
+                  placeholder="Ada"
+                  required
+                />
+              </div>
+            </div>
 
-        <form className={styles.form} onSubmit={onSubmit} noValidate>
-          <div className={styles.field}>
-            <div className={styles.label}>First name</div>
-            <div className={styles.inputWrap}>
-              <input
-                className={styles.input}
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="First name"
-                required
-              />
+            <div className={styles.field}>
+              <div className={styles.label}>Last name</div>
+              <div className={styles.inputWrap}>
+                <input
+                  className={styles.input}
+                  type="text"
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.target.value)}
+                  placeholder="Lovelace"
+                  required
+                />
+              </div>
             </div>
           </div>
 
           <div className={styles.field}>
-            <div className={styles.label}>Last name</div>
+            <div className={styles.label}>Persona</div>
             <div className={styles.inputWrap}>
-              <input
+              <select
                 className={styles.input}
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Last name"
-                required
-              />
+                value={personaId}
+                onChange={(event) => setPersonaId(event.target.value)}
+                required={personas.length > 0}
+              >
+                <option value="">Select persona...</option>
+                {personas.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {personaLabel(persona, locale)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -173,7 +273,7 @@ export default function RegisterPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@email.com"
                 required
               />
@@ -187,17 +287,17 @@ export default function RegisterPage() {
                 className={styles.input}
                 type={showPwd ? "text" : "password"}
                 autoComplete="new-password"
-                value={pwd}
-                onChange={(e) => setPwd(e.target.value)}
-                placeholder="••••••••"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="********"
                 required
-                minLength={8}
+                minLength={12}
               />
               <button
                 type="button"
                 aria-label={showPwd ? "Hide password" : "Show password"}
                 className={styles.eyeBtn}
-                onClick={() => setShowPwd(!showPwd)}
+                onClick={() => setShowPwd((prev) => !prev)}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   {showPwd ? (
@@ -215,6 +315,13 @@ export default function RegisterPage() {
                 </svg>
               </button>
             </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: "#4b5563" }}>
+              <strong style={{ color: strength.color }}>Strength: {strength.label}</strong>
+              <ul style={{ marginTop: 4, paddingLeft: 16, listStyle: "disc" }}>
+                <li>Use at least 12 characters.</li>
+                <li>Include uppercase, lowercase, numbers, and special characters.</li>
+              </ul>
+            </div>
           </div>
 
           <div className={styles.field}>
@@ -224,17 +331,17 @@ export default function RegisterPage() {
                 className={styles.input}
                 type={showPwd2 ? "text" : "password"}
                 autoComplete="new-password"
-                value={pwd2}
-                onChange={(e) => setPwd2(e.target.value)}
-                placeholder="••••••••"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.target.value)}
+                placeholder="********"
                 required
-                minLength={8}
+                minLength={12}
               />
               <button
                 type="button"
                 aria-label={showPwd2 ? "Hide password" : "Show password"}
                 className={styles.eyeBtn}
-                onClick={() => setShowPwd2(!showPwd2)}
+                onClick={() => setShowPwd2((prev) => !prev)}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   {showPwd2 ? (
@@ -258,16 +365,16 @@ export default function RegisterPage() {
             <input
               type="checkbox"
               checked={accepted}
-              onChange={(e) => setAccepted(e.target.checked)}
+              onChange={(event) => setAccepted(event.target.checked)}
             />
             <span>
-              I accept the <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and the{" "}
+              I accept the <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and the {""}
               <a className={styles.a} href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
             </span>
           </label>
 
-          {err && <div className={`${styles.alert} ${styles.alertError}`}>{err}</div>}
-          {ok && (
+          {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
+          {success && (
             <div className={`${styles.alert} ${styles.alertOk}`}>
               Registration completed. Check your inbox and confirm your email, then log in.
             </div>
@@ -276,7 +383,7 @@ export default function RegisterPage() {
           <div className={styles.field}>
             <div className={styles.actions}>
               <button className={styles.btnPrimary} disabled={loading} type="submit">
-                {loading ? "Creating…" : "Create account"}
+                {loading ? "Creating..." : "Create account"}
               </button>
               <div className={styles.links}>
                 <Link className={styles.a} href="/login">Back to login</Link>

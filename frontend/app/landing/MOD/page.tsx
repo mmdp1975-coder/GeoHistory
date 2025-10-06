@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -15,7 +15,7 @@ const theme = {
 
 type DbWidget = { id: string; key?: string | null; title: string; description?: string | null; route?: string | null; category?: string | null; icon?: string | null; status?: string | null; sort_order?: number | null; };
 type PersonaRow = { id: string; code: string | null };
-type ProfileRow = { username: string | null; personas: PersonaRow | null };
+type ProfileRow = { full_name: string | null; username: string | null; personas: PersonaRow | null };
 type WidgetPersonaRow = { widgets: DbWidget | null };
 
 export default function ModLanding() {
@@ -29,9 +29,12 @@ export default function ModLanding() {
   useEffect(() => {
     let unsub: (() => void) | undefined;
     const resolve = async (uid: string) => {
-      const { data, error } = await supabase.from("profiles").select("username, personas(id, code)").eq("id", uid).maybeSingle<ProfileRow>();
+      const { data, error } = await supabase.from("profiles").select("full_name, username, personas(id, code)").eq("id", uid).maybeSingle<ProfileRow>();
       if (error) throw error;
-      if (data?.username) setUsername(data.username);
+      if (data) {
+        const rawName = (data.full_name || data.username || "").trim();
+        if (rawName) setUsername(rawName);
+      }
       if (data?.personas?.id) setPersonaId(data.personas.id);
     };
     (async () => {
@@ -131,3 +134,6 @@ export default function ModLanding() {
     </>
   );
 }
+
+
+

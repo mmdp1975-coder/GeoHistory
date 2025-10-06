@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-/** THEME (STUDENT • PRIMARY) */
+/** THEME (STUDENT â€¢ PRIMARY) */
 const theme = {
-  label: "STUDENT • PRIMARY",
+  label: "STUDENT â€¢ PRIMARY",
   from: "from-sky-600",
   via: "via-sky-500",
   to: "to-sky-400",
@@ -18,7 +18,7 @@ type DbWidget = {
   description?: string | null; route?: string | null; category?: string | null; icon?: string | null; status?: string | null; sort_order?: number | null;
 };
 type PersonaRow = { id: string; code: string | null };
-type ProfileRow = { username: string | null; personas: PersonaRow | null };
+type ProfileRow = { full_name: string | null; username: string | null; personas: PersonaRow | null };
 type WidgetPersonaRow = { widgets: DbWidget | null };
 
 export default function StudPrimaryLanding() {
@@ -32,9 +32,12 @@ export default function StudPrimaryLanding() {
   useEffect(() => {
     let unsub: (() => void) | undefined;
     const resolve = async (uid: string) => {
-      const { data, error } = await supabase.from("profiles").select("username, personas(id, code)").eq("id", uid).maybeSingle<ProfileRow>();
+      const { data, error } = await supabase.from("profiles").select("full_name, username, personas(id, code)").eq("id", uid).maybeSingle<ProfileRow>();
       if (error) throw error;
-      if (data?.username) setUsername(data.username);
+      if (data) {
+        const rawName = (data.full_name || data.username || "").trim();
+        if (rawName) setUsername(rawName);
+      }
       if (data?.personas?.id) setPersonaId(data.personas.id);
     };
     (async () => {
@@ -134,3 +137,6 @@ export default function StudPrimaryLanding() {
     </>
   );
 }
+
+
+

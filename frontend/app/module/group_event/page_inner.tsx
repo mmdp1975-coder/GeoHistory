@@ -109,6 +109,169 @@ function formatWhen(ev: EventVM) {
   return "—";
 }
 
+function parseExactDateYear(date?: string | null): number | null {
+  if (!date) return null;
+  try {
+    const d = new Date(date);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.getUTCFullYear();
+  } catch {
+    return null;
+  }
+}
+
+function signedYear(value: number | null | undefined, era?: string | null): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const abs = Math.abs(value);
+  return normEra(era) === "BC" ? -abs : abs;
+}
+
+type TimelineSpan = { min: number; max: number; center: number; start: number };
+type TimelineItem = { ev: EventVM; index: number; min: number; max: number; center: number; start: number; progress: number };
+type TimelineData = { min: number; max: number; range: number; items: TimelineItem[] };
+
+function buildTimelineSpan(ev: EventVM): TimelineSpan | null {
+  const values: number[] = [];
+  const from = signedYear(ev.year_from, ev.era);
+  const to = signedYear(ev.year_to, ev.era);
+  if (from != null) values.push(from);
+  if (to != null) values.push(to);
+  if (!values.length) {
+    const exact = parseExactDateYear(ev.exact_date);
+    if (exact != null) values.push(exact);
+  }
+  if (!values.length) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const center = values.length >= 2 ? (min + max) / 2 : values[0];
+  const start = from != null ? from : values[0];
+  return { min, max, center, start };
+}
+
+function formatTimelineYearLabel(year: number) {
+  if (!Number.isFinite(year)) return "n/a";
+  const rounded = Math.round(year);
+  if (rounded < 0) return `${Math.abs(rounded)} BC`;
+  if (rounded === 0) return "0";
+  return `${rounded} AD`;
+}
+
+function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [];
+  const span = Math.abs(max - min);
+  const rawStep = span / Math.max(1, targetTicks);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(Math.max(1, rawStep))));
+  const normalized = rawStep / magnitude;
+  let nice = 1;
+  if (normalized <= 1) nice = 1;
+  else if (normalized <= 2) nice = 2;
+  else if (normalized <= 2.5) nice = 2.5;
+  else if (normalized <= 5) nice = 5;
+  else nice = 10;
+  const step = nice * magnitude;
+  const ticks: number[] = [];
+  const first = Math.ceil(min / step) * step;
+  for (let value = first; value < max; value += step) {
+    if (value <= min || value >= max) continue;
+    ticks.push(Math.round(value));
+  }
+  return ticks;
+}
+
+function CartoonGuy({ className = "h-16 w-16", animated = false }: { className?: string; animated?: boolean }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 120 160"
+      className={className}
+      role="img"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="walker-coat" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#1d4ed8" />
+          <stop offset="80%" stopColor="#1e3a8a" />
+        </linearGradient>
+        <linearGradient id="walker-trouser" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#0f172a" />
+          <stop offset="90%" stopColor="#1e293b" />
+        </linearGradient>
+      </defs>
+      <style>
+        {`
+          .walker-limb--back,
+          .walker-arm--back {
+            opacity: 0.78;
+          }
+          .walker-animated .walker-limb,
+          .walker-animated .walker-arm,
+          .walker-animated .walker-body {
+            transform-box: fill-box;
+          }
+          .walker-animated .walker-limb {
+            transform-origin: center;
+            animation: walker-swing 0.9s ease-in-out infinite alternate;
+          }
+          .walker-animated .walker-limb--back {
+            animation-delay: 0.45s;
+          }
+          .walker-animated .walker-arm {
+            transform-origin: center;
+            animation: walker-arm 0.9s ease-in-out infinite alternate;
+          }
+          .walker-animated .walker-arm--back {
+            animation-delay: 0.45s;
+          }
+          .walker-animated .walker-body {
+            transform-origin: center;
+            animation: walker-bob 0.9s ease-in-out infinite alternate;
+          }
+          @keyframes walker-swing {
+            from { transform: rotate(-9deg); }
+            to { transform: rotate(11deg); }
+          }
+          @keyframes walker-arm {
+            from { transform: rotate(9deg); }
+            to { transform: rotate(-9deg); }
+          }
+          @keyframes walker-bob {
+            from { transform: translateY(-1.5px); }
+            to { transform: translateY(1.5px); }
+          }
+        `}
+      </style>
+      <rect x="30" y="92" width="34" height="26" rx="12" fill="#1f2937" opacity="0.18" />
+      <g className={animated ? "walker-animated" : undefined}>
+        <g className="walker-body">
+          <path d="M56 18c14-6 28 2 30 14" stroke="#0b1120" strokeWidth="4" strokeLinecap="round" fill="none" />
+          <circle cx="60" cy="36" r="18" fill="#fed7aa" stroke="#f97316" strokeWidth="3.5" />
+          <path d="M70 32c5 0 9 2 11 6" stroke="#9a3412" strokeWidth="2.2" strokeLinecap="round" fill="none" />
+          <circle cx="72" cy="30" r="3.8" fill="#0f172a" />
+          <path d="M66 44c4 2.8 9.6 2.8 14-0.2" stroke="#0f172a" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+          <path d="M60 58c12 0 22 10 22 26v10c0 3.7-2.9 6.4-6.6 6.4H44.2c-3.7 0-6.6-2.7-6.6-6.4V84c0-14.5 9.6-26 22-26Z" fill="url(#walker-coat)" stroke="#1e3a8a" strokeWidth="4" />
+          <path d="M50 66h8l-3.2 16H42" fill="#1e3a8a" stroke="#1e3a8a" strokeWidth="2" opacity="0.35" />
+          <g className="walker-arm walker-arm--back" style={{ transformOrigin: "42px 72px" }}>
+            <path d="M44 66c-5.2 8.2-9.8 20-6.4 26.5L50 90" fill="#fed7aa" stroke="#f97316" strokeWidth="5.5" strokeLinecap="round" />
+          </g>
+          <g className="walker-arm" style={{ transformOrigin: "84px 72px" }}>
+            <path d="M82 66c5.2 8.2 9.8 20 6.4 26.5L72 90" fill="#fed7aa" stroke="#f97316" strokeWidth="5.5" strokeLinecap="round" />
+          </g>
+        </g>
+        <g className="walker-limb walker-limb--back" style={{ transformOrigin: "48px 124px" }}>
+          <path d="M52 100l-18 28 9 8 18-22" fill="url(#walker-trouser)" stroke="#0f172a" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M38 136c-5 6-6 11-1 12s14-2 18-6" stroke="#0f172a" strokeWidth="5.5" strokeLinecap="round" />
+        </g>
+        <g className="walker-limb" style={{ transformOrigin: "74px 124px" }}>
+          <path d="M70 100l24 20-6 10-20-12" fill="url(#walker-trouser)" stroke="#0f172a" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M88 130c6 6 10 9 7 13-2.5 4-12 4-18 1" stroke="#0f172a" strokeWidth="5.5" strokeLinecap="round" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+
+
+
 // Stile OSM fallback (se manca MAPTILER)
 const OSM_STYLE: any = {
   version: 8,
@@ -593,6 +756,93 @@ export default function GroupEventModulePage() {
     router.push(landingHref || "/landing");
   }
 
+
+  const current = rows[selectedIndex] ?? null;
+
+  const timelineData = useMemo<TimelineData | null>(() => {
+    if (!rows.length) return null;
+
+    const annotated: { ev: EventVM; index: number; min: number; max: number; center: number }[] = [];
+    rows.forEach((ev, index) => {
+      const span = buildTimelineSpan(ev);
+      if (span) annotated.push({ ev, index, min: span.min, max: span.max, center: span.center, start: span.start });
+    });
+
+    if (!annotated.length) return null;
+
+    let min = annotated[0].min;
+    let max = annotated[0].max;
+    for (const item of annotated) {
+      if (item.min < min) min = item.min;
+      if (item.max > max) max = item.max;
+    }
+
+    const spanValue = max - min;
+    const safeSpan = spanValue === 0 ? 1 : spanValue;
+
+    const items: TimelineItem[] = annotated.map((item) => {
+      const startValue = item.start;
+      const startProgress = Math.min(1, Math.max(0, (startValue - min) / safeSpan));
+      return { ...item, progress: startProgress, start: startValue };
+    });
+
+    return { min, max, range: safeSpan, items };
+  }, [rows]);
+
+  const [isAvatarMoving, setIsAvatarMoving] = useState(false);
+  const avatarMoveTimeout = useRef<number | null>(null);
+  const previousIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const itemCount = timelineData?.items.length ?? 0;
+
+    if (!timelineData || itemCount <= 1) {
+      if (avatarMoveTimeout.current) {
+        window.clearTimeout(avatarMoveTimeout.current);
+        avatarMoveTimeout.current = null;
+      }
+      previousIndexRef.current = selectedIndex;
+      setIsAvatarMoving(false);
+      return;
+    }
+
+    const prevIndex = previousIndexRef.current;
+    if (prevIndex !== null && prevIndex !== selectedIndex) {
+      setIsAvatarMoving(true);
+      if (avatarMoveTimeout.current) {
+        window.clearTimeout(avatarMoveTimeout.current);
+      }
+      avatarMoveTimeout.current = window.setTimeout(() => {
+        setIsAvatarMoving(false);
+        avatarMoveTimeout.current = null;
+      }, 900);
+    }
+
+    previousIndexRef.current = selectedIndex;
+  }, [selectedIndex, timelineData?.items.length]);
+
+  useEffect(() => () => {
+    if (avatarMoveTimeout.current) {
+      window.clearTimeout(avatarMoveTimeout.current);
+      avatarMoveTimeout.current = null;
+    }
+  }, []);
+
+  const avatarProgress = useMemo(() => {
+    if (!timelineData || !timelineData.items.length) return 0;
+    const currentId = current?.id;
+    const fallback = timelineData.items[0];
+    const target = currentId
+      ? timelineData.items.find((item) => item.ev.id === currentId) || fallback
+      : fallback;
+    return target ? target.progress : 0;
+  }, [timelineData, current?.id]);
+
+  const timelineTicks = useMemo(() => {
+    if (!timelineData) return [];
+    return buildTimelineTicks(timelineData.min, timelineData.max);
+  }, [timelineData]);
+
   // ------------ Derived text ------------
   const geTitle = (geTr?.title || ge?.title || "Journey").toString();
   const geSubtitle = (geTr?.pitch || ge?.pitch || "").toString();
@@ -629,10 +879,79 @@ export default function GroupEventModulePage() {
   }
 
   // ---------- UI ----------
-  const current = rows[selectedIndex];
 
   return (
     <div className="flex min-h-screen flex-col bg-white">
+      {timelineData ? (
+        <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 via-white to-white/80">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-sm sm:pr-6">
+              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{geTitle}</h2>
+              {geSubtitle ? (
+                <p className="mt-3 text-sm leading-6 text-slate-600">{geSubtitle}</p>
+              ) : null}
+            </div>
+
+            <div className="flex-1 sm:flex sm:justify-end">
+              <div className="w-full max-w-[720px] rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-sm sm:px-6 sm:py-5">
+                <div className="relative ml-auto h-[84px] w-full max-w-[820px] sm:h-[108px]">
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
+                    <div className="relative mx-auto h-4 w-full max-w-[780px]">
+                      <div
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          background: 'linear-gradient(180deg, #f8fafc 0%, #e2e8f0 40%, #cbd5f5 100%)',
+                          boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.7), inset 0 -4px 8px rgba(30,64,175,0.35), 0 14px 16px rgba(15,23,42,0.18)'
+                        }}
+                      />
+                      <div className="absolute left-1/2 top-full h-4 w-[92%] -translate-x-1/2 -translate-y-1 rounded-full bg-slate-900/15 blur-md" />
+                    </div>
+                  </div>
+
+                  <div
+                    className="pointer-events-none absolute top-[calc(50%-42px)] sm:top-[calc(50%-52px)]"
+                    style={{
+                      left: `${avatarProgress * 100}%`,
+                      transform: "translate(-50%, 0)",
+                      transition: "left 360ms cubic-bezier(0.22, 1, 0.36, 1)",
+                    }}
+                  >
+                    <CartoonGuy
+                      animated={isAvatarMoving}
+                      className="h-16 w-16 sm:h-20 sm:w-20 drop-shadow-[0_8px_22px_rgba(15,23,42,0.22)]"
+                    />
+                  </div>
+
+                  <div className="absolute inset-x-0 top-[calc(50%+10px)]">
+                    <div className="relative h-9">
+                      {timelineTicks.map((tick) => (
+                        <div
+                          key={`timeline-tick-${tick}`}
+                          className="absolute -translate-x-1/2 text-center"
+                          style={{
+                            left: `${((tick - timelineData.min) / timelineData.range) * 100}%`,
+                          }}
+                        >
+                          <div className="mx-auto h-4 w-[2px] rounded-full bg-slate-300" />
+                          <div className="mt-1 whitespace-nowrap text-[10px] font-medium text-slate-500">
+                            {formatTimelineYearLabel(tick)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="absolute inset-x-0 top-[calc(50%+30px)] flex justify-between text-[11px] font-semibold text-slate-600">
+                    <span>{formatTimelineYearLabel(timelineData.min)}</span>
+                    <span>{formatTimelineYearLabel(timelineData.max)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {/* ============== MOBILE (<lg) ============== */}
       <div className="mx-auto w-full max-w-7xl flex-1 lg:hidden">
         {/* MAPPA — mezzo schermo */}
@@ -651,6 +970,8 @@ export default function GroupEventModulePage() {
             <div className="flex items-stretch gap-3 px-4 py-3 min-w-max">
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
+                const span = buildTimelineSpan(ev);
+                const label = span ? formatTimelineYearLabel(span.start) : formatWhen(ev);
                 return (
                   <button
                     key={ev.id}
@@ -886,19 +1207,20 @@ export default function GroupEventModulePage() {
           </section>
         </div>
 
-        {/* BANDA EVENTI (2 righe x 3 colonne, max 6 eventi) */}
-        <aside className="h-[38svh] bg-white/90 backdrop-blur">
-          <div ref={bottomListRef} className="h-full overflow-y-auto px-4 py-3">
+        {/* BANDA EVENTI (singola riga scrollabile) */}
+        <aside className="h-[32svh] bg-white/90 backdrop-blur">
+          <div ref={bottomListRef} className="h-full overflow-hidden px-4 py-3">
             <div className="mb-2 text-sm font-medium text-gray-900">Eventi (ordine cronologico)</div>
-            <ol className="grid grid-cols-3 grid-rows-2 gap-2">
-              {rows.slice(0, 6).map((ev, idx) => {
-                const active = (rows.indexOf(ev) === selectedIndex);
-                const shownIndex = rows.indexOf(ev); // mantiene numerazione reale
+            <ol className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
+              {rows.map((ev, idx) => {
+                const active = idx === selectedIndex;
+                const span = buildTimelineSpan(ev);
+                const label = span ? formatTimelineYearLabel(span.start) : formatWhen(ev);
                 return (
-                  <li key={ev.id} className="min-w-0">
+                  <li key={ev.id} className="min-w-[240px] flex-shrink-0">
                     <button
                       ref={(el) => { if (el) itemRefs.current.set(ev.id, el!); }}
-                      onClick={() => setSelectedIndex(shownIndex)}
+                      onClick={() => setSelectedIndex(idx)}
                       className={`w-full text-left rounded-xl border transition px-3 py-2 ${
                         active
                           ? "border-black bg-black text-white shadow-sm"
@@ -910,14 +1232,14 @@ export default function GroupEventModulePage() {
                         <div className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
                           active ? "bg-white text-black" : "bg-gray-900 text-white"
                         }`}>
-                          {shownIndex + 1}
+                          {idx + 1}
                         </div>
                         <div className="min-w-0">
                           <div className={`truncate text-[13.5px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
                             {ev.title}
                           </div>
                           <div className={`text-[12px] ${active ? "text-white/80" : "text-gray-600"}`}>
-                            {formatWhen(ev)}{ev.location ? ` • ${ev.location}` : ""}
+                            {label}{ev.location ? ` - ${ev.location}` : ""}
                           </div>
                         </div>
                       </div>
@@ -932,3 +1254,4 @@ export default function GroupEventModulePage() {
     </div>
   );
 }
+

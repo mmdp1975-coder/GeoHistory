@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 /** --------------------------------------------------------------------
- *  THEME (estetica STUDENT • HIGH)
+ *  THEME (estetica STUDENT â€¢ HIGH)
  *  ------------------------------------------------------------------*/
 const theme = {
-  label: "STUDENT • HIGH",
+  label: "STUDENT â€¢ HIGH",
   from: "from-violet-600",
   via: "via-violet-500",
   to: "to-violet-400",
@@ -22,10 +22,10 @@ type DbWidget = {
   id: string;                 // uuid
   key?: string | null;
   title: string;
-  description?: string | null; // in DB è "description"
+  description?: string | null; // in DB Ã¨ "description"
   route?: string | null;
   category?: string | null;
-  icon?: string | null;       // es: "✨"
+  icon?: string | null;       // es: "âœ¨"
   status?: string | null;
   sort_order?: number | null; // campo su widgets
 };
@@ -65,13 +65,16 @@ export default function StudHighLanding() {
     const resolveUserAndPersona = async (userId: string) => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("username, personas(id, code)")
+        .select("full_name, username, personas(id, code)")
         .eq("id", userId)
         .maybeSingle<ProfileRow>();
 
       if (error) throw error;
 
-      if (data?.username) setUsername(data.username);
+      if (data) {
+        const rawName = (data.full_name || data.username || "").trim();
+        if (rawName) setUsername(rawName);
+      }
       if (data?.personas?.id) setPersonaId(data.personas.id); // <-- mantieni stringa UUID
     };
 
@@ -107,7 +110,7 @@ export default function StudHighLanding() {
 
   /** ---------------------------------------------------------------
    *  2) Carico i widget (widget_personas -> widgets)
-   *     persona_id è UUID string: nessuna conversione numerica.
+   *     persona_id Ã¨ UUID string: nessuna conversione numerica.
    * --------------------------------------------------------------*/
   const loadWidgets = async () => {
     try {
@@ -226,7 +229,7 @@ export default function StudHighLanding() {
         {!loading && widgets.length > 0 && (
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {widgets.map((w) => {
-              const icon = w.icon ?? "🧭";
+              const icon = w.icon ?? "ðŸ§­";
               const title = w.title ?? "Untitled";
               const subtitle = w.description ?? "";
               const href = w.route ?? "#";
@@ -272,3 +275,6 @@ export default function StudHighLanding() {
     </>
   );
 }
+
+
+

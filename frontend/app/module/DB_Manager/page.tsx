@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -7,10 +7,10 @@ type TableMetaCol = { column_name: string; data_type: string };
 type TableMeta = { table: string; columns: TableMetaCol[] };
 
 const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_BYPASS_TOKEN || "";
-const devHeaders = DEV_BYPASS ? { "x-dev-bypass": DEV_BYPASS } : {};
+const devHeaders: Record<string, string> = DEV_BYPASS ? { "x-dev-bypass": DEV_BYPASS } : ({} as Record<string, string>);
 
 export default function DBManagerPage() {
-  // NON usiamo più onTokenChange: teniamo un token “vuoto” e
+  // NON usiamo piÃ¹ onTokenChange: teniamo un token â€œvuotoâ€ e
   // lasciamo che sia il DEV_BYPASS ad autorizzare le chiamate.
   const [token] = useState<string | null>("");
 
@@ -51,12 +51,12 @@ export default function DBManagerPage() {
     (async () => {
       try {
         setTablesLoading(true); setTablesErr(null);
-        const res = await fetch("/api/admin-db/tables", {
+        const res = await fetch("/api/admin/tables", {
           cache: "no-store",
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...devHeaders,
-          },
+          } as HeadersInit,
         });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading tables");
@@ -79,12 +79,12 @@ export default function DBManagerPage() {
     (async () => {
       try {
         setMetaLoading(true); setMetaErr(null);
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/meta`, {
+        const res = await fetch(`/api/admin/tables/${encodeURIComponent(table)}/meta`, {
           cache: "no-store",
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...devHeaders,
-          },
+          } as HeadersInit,
         });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading meta");
@@ -101,12 +101,12 @@ export default function DBManagerPage() {
       try {
         setRowsLoading(true); setRowsErr(null);
         const qs = new URLSearchParams({ page: String(1), pageSize: String(pageSize) }).toString();
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, {
+        const res = await fetch(`/api/admin/tables/${encodeURIComponent(table)}?${qs}`, {
           cache: "no-store",
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...devHeaders,
-          },
+          } as HeadersInit,
         });
         const j: any = await safeJson(res);
         if (!res.ok) throw new Error(j?.error || "Failed loading rows");
@@ -153,12 +153,12 @@ export default function DBManagerPage() {
 
   const refreshRows = async () => {
     const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString();
-    const r = await fetch(`/api/admin-db/${encodeURIComponent(table)}?${qs}`, {
+    const r = await fetch(`/api/admin/tables/${encodeURIComponent(table)}?${qs}`, {
       cache: "no-store",
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...devHeaders,
-      },
+          } as HeadersInit,
     });
     const j: any = await r.json().catch(() => ({}));
     if (r.ok) {
@@ -171,26 +171,26 @@ export default function DBManagerPage() {
     try {
       if (editing.mode === "edit") {
         const id = editing.id;
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
+        const res = await fetch(`/api/admin/tables/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...devHeaders,
-          },
+          } as HeadersInit,
           body: JSON.stringify(editing.values),
         });
         const json: any = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json?.error || "Update failed");
         setOpMsg(`Updated ${(json.updated?.length ?? 0)} row(s).`);
       } else if (editing.mode === "create") {
-        const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}`, {
+        const res = await fetch(`/api/admin/tables/${encodeURIComponent(table)}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...devHeaders,
-          },
+          } as HeadersInit,
           body: JSON.stringify(editing.values),
         });
         const json: any = await res.json().catch(() => ({}));
@@ -209,12 +209,12 @@ export default function DBManagerPage() {
     const id = String(row[primaryKey]);
     if (!confirm(`Delete row with ${primaryKey} = ${id}?`)) return;
     try {
-      const res = await fetch(`/api/admin-db/${encodeURIComponent(table)}/${encodeURIComponent(id)}`, {
+      const res = await fetch(`/api/admin/tables/${encodeURIComponent(table)}/rows/${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...devHeaders,
-        },
+          } as HeadersInit,
       });
       const json: any = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error || "Delete failed");
@@ -232,8 +232,8 @@ export default function DBManagerPage() {
       <div className="flex items-center gap-3">
         <h1 className="text-2xl font-semibold">DB Manager</h1>
         <div className="ml-auto flex gap-2">
-          <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey →</Link>
-          <Link href="/module/DB_Manager/Users_edit" className="rounded-lg border px-3 py-2 text-sm">Users →</Link>
+          <Link href="/module/DB_Manager/journey_edit" className="rounded-lg border px-3 py-2 text-sm">Journey {'->'}</Link>
+          <Link href="/module/DB_Manager/users_edit" className="rounded-lg border px-3 py-2 text-sm">Users {'->'}</Link>
         </div>
       </div>
 
@@ -245,11 +245,11 @@ export default function DBManagerPage() {
           onChange={(e) => setTable(e.target.value)}
           disabled={tablesLoading || !tables.length}
         >
-          {!tables.length && <option value="">—</option>}
+          {!tables.length && <option value="">â€”</option>}
           {tables.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
 
-        {tablesLoading && <span className="text-sm text-slate-500">loading…</span>}
+        {tablesLoading && <span className="text-sm text-slate-500">loadingâ€¦</span>}
         {tablesErr && <span className="text-sm text-red-600">{tablesErr}</span>}
 
         <button className="ml-auto rounded-lg border px-3 py-2 text-sm" onClick={startCreate} disabled={!columns.length}>
@@ -257,7 +257,7 @@ export default function DBManagerPage() {
         </button>
       </div>
 
-      {metaLoading && <p className="text-sm text-slate-500 mt-2">loading meta…</p>}
+      {metaLoading && <p className="text-sm text-slate-500 mt-2">loading metaâ€¦</p>}
       {metaErr && <p className="text-sm text-red-600 mt-2">{metaErr}</p>}
 
       {opMsg && <div className="mt-3 rounded border bg-slate-50 p-2 text-xs">{opMsg}</div>}
@@ -272,7 +272,7 @@ export default function DBManagerPage() {
           </thead>
           <tbody>
             {rowsLoading ? (
-              <tr><td className="px-3 py-3 text-slate-500" colSpan={columns.length + 1}>loading rows…</td></tr>
+              <tr><td className="px-3 py-3 text-slate-500" colSpan={columns.length + 1}>loading rowsâ€¦</td></tr>
             ) : rowsErr ? (
               <tr><td className="px-3 py-3 text-red-600" colSpan={columns.length + 1}>{rowsErr}</td></tr>
             ) : rows.length === 0 ? (
@@ -308,14 +308,31 @@ export default function DBManagerPage() {
       </div>
 
       <div className="mt-3 flex items-center gap-3 text-sm">
-        <span className="text-slate-600">Page {page} / {totalPages} · {total} rows</span>
+        <span className="text-slate-600">Page {page} / {totalPages} Â· {total} rows</span>
       </div>
     </div>
   );
 }
 
 function formatCell(v: any) {
-  if (v === null || v === undefined) return "—";
+  if (v === null || v === undefined) return "â€”";
   if (typeof v === "object") { try { return JSON.stringify(v); } catch { return String(v); } }
   return String(v);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
