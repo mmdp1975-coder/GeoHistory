@@ -1,8 +1,8 @@
 // frontend/app/module/group_event/page_inner.tsx
 "use client";
 
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -179,99 +179,39 @@ function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
   return ticks;
 }
 
-function CartoonGuy({ className = "h-16 w-16", animated = false }: { className?: string; animated?: boolean }): JSX.Element {
+const POINTER_STYLE = `
+@keyframes timeline-pointer-glow { 0% { opacity: 0.45; transform: scale(0.9); } 50% { opacity: 0.7; transform: scale(1.05); } 100% { opacity: 0.45; transform: scale(0.9); } }
+`;
+
+function TimelinePointer({ className = "", animated = false }: { className?: string; animated?: boolean }): JSX.Element {
   return (
-    <svg
-      viewBox="0 0 120 160"
-      className={className}
-      role="img"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="walker-coat" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#1d4ed8" />
-          <stop offset="80%" stopColor="#1e3a8a" />
-        </linearGradient>
-        <linearGradient id="walker-trouser" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0%" stopColor="#0f172a" />
-          <stop offset="90%" stopColor="#1e293b" />
-        </linearGradient>
-      </defs>
-      <style>
-        {`
-          .walker-limb--back,
-          .walker-arm--back {
-            opacity: 0.78;
-          }
-          .walker-animated .walker-limb,
-          .walker-animated .walker-arm,
-          .walker-animated .walker-body {
-            transform-box: fill-box;
-          }
-          .walker-animated .walker-limb {
-            transform-origin: center;
-            animation: walker-swing 0.9s ease-in-out infinite alternate;
-          }
-          .walker-animated .walker-limb--back {
-            animation-delay: 0.45s;
-          }
-          .walker-animated .walker-arm {
-            transform-origin: center;
-            animation: walker-arm 0.9s ease-in-out infinite alternate;
-          }
-          .walker-animated .walker-arm--back {
-            animation-delay: 0.45s;
-          }
-          .walker-animated .walker-body {
-            transform-origin: center;
-            animation: walker-bob 0.9s ease-in-out infinite alternate;
-          }
-          @keyframes walker-swing {
-            from { transform: rotate(-9deg); }
-            to { transform: rotate(11deg); }
-          }
-          @keyframes walker-arm {
-            from { transform: rotate(9deg); }
-            to { transform: rotate(-9deg); }
-          }
-          @keyframes walker-bob {
-            from { transform: translateY(-1.5px); }
-            to { transform: translateY(1.5px); }
-          }
-        `}
-      </style>
-      <rect x="30" y="92" width="34" height="26" rx="12" fill="#1f2937" opacity="0.18" />
-      <g className={animated ? "walker-animated" : undefined}>
-        <g className="walker-body">
-          <path d="M56 18c14-6 28 2 30 14" stroke="#0b1120" strokeWidth="4" strokeLinecap="round" fill="none" />
-          <circle cx="60" cy="36" r="18" fill="#fed7aa" stroke="#f97316" strokeWidth="3.5" />
-          <path d="M70 32c5 0 9 2 11 6" stroke="#9a3412" strokeWidth="2.2" strokeLinecap="round" fill="none" />
-          <circle cx="72" cy="30" r="3.8" fill="#0f172a" />
-          <path d="M66 44c4 2.8 9.6 2.8 14-0.2" stroke="#0f172a" strokeWidth="2.8" strokeLinecap="round" fill="none" />
-          <path d="M60 58c12 0 22 10 22 26v10c0 3.7-2.9 6.4-6.6 6.4H44.2c-3.7 0-6.6-2.7-6.6-6.4V84c0-14.5 9.6-26 22-26Z" fill="url(#walker-coat)" stroke="#1e3a8a" strokeWidth="4" />
-          <path d="M50 66h8l-3.2 16H42" fill="#1e3a8a" stroke="#1e3a8a" strokeWidth="2" opacity="0.35" />
-          <g className="walker-arm walker-arm--back" style={{ transformOrigin: "42px 72px" }}>
-            <path d="M44 66c-5.2 8.2-9.8 20-6.4 26.5L50 90" fill="#fed7aa" stroke="#f97316" strokeWidth="5.5" strokeLinecap="round" />
-          </g>
-          <g className="walker-arm" style={{ transformOrigin: "84px 72px" }}>
-            <path d="M82 66c5.2 8.2 9.8 20 6.4 26.5L72 90" fill="#fed7aa" stroke="#f97316" strokeWidth="5.5" strokeLinecap="round" />
-          </g>
-        </g>
-        <g className="walker-limb walker-limb--back" style={{ transformOrigin: "48px 124px" }}>
-          <path d="M52 100l-18 28 9 8 18-22" fill="url(#walker-trouser)" stroke="#0f172a" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M38 136c-5 6-6 11-1 12s14-2 18-6" stroke="#0f172a" strokeWidth="5.5" strokeLinecap="round" />
-        </g>
-        <g className="walker-limb" style={{ transformOrigin: "74px 124px" }}>
-          <path d="M70 100l24 20-6 10-20-12" fill="url(#walker-trouser)" stroke="#0f172a" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M88 130c6 6 10 9 7 13-2.5 4-12 4-18 1" stroke="#0f172a" strokeWidth="5.5" strokeLinecap="round" />
-        </g>
-      </g>
-    </svg>
+    <span className={className} role="presentation">
+      <style>{POINTER_STYLE}</style>
+      <span className="relative block h-full w-full">
+        <span
+          className="absolute inset-0 -translate-y-[35%] rounded-full bg-gradient-to-br from-indigo-400/40 via-sky-500/30 to-blue-600/25 blur-sm"
+          style={animated ? { animation: "timeline-pointer-glow 2.6s ease-in-out infinite" } : undefined}
+        />
+        <svg viewBox="0 0 38 34" className="relative h-full w-full">
+          <defs>
+            <linearGradient id="timeline-pointer-fill" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#f8fafc" />
+              <stop offset="40%" stopColor="#dbeafe" />
+              <stop offset="100%" stopColor="#1d4ed8" />
+            </linearGradient>
+            <linearGradient id="timeline-pointer-edge" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#1e3a8a" />
+              <stop offset="100%" stopColor="#0f172a" />
+            </linearGradient>
+          </defs>
+          <polygon points="19 2 34 28 4 28" fill="url(#timeline-pointer-fill)" />
+          <polygon points="19 2 26 28 12 28" fill="rgba(255,255,255,0.25)" />
+          <path d="M4 28h30" stroke="url(#timeline-pointer-edge)" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </span>
+    </span>
   );
 }
-
-
-
 
 // Stile OSM fallback (se manca MAPTILER)
 const OSM_STYLE: any = {
@@ -853,6 +793,21 @@ export default function GroupEventModulePage() {
     return buildTimelineTicks(timelineData.min, timelineData.max);
   }, [timelineData]);
 
+  const timelineMinorTicks = useMemo(() => {
+    if (!timelineData) return [];
+    if (!timelineTicks.length) return [];
+    const points = [timelineData.min, ...timelineTicks, timelineData.max];
+    const mids: number[] = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i];
+      const end = points[i + 1];
+      if (!Number.isFinite(start) || !Number.isFinite(end)) continue;
+      const mid = (start + end) / 2;
+      if (mid > timelineData.min && mid < timelineData.max) mids.push(mid);
+    }
+    return mids;
+  }, [timelineData, timelineTicks]);
+
   // ------------ Derived text ------------
   const geTitle = (geTr?.title || ge?.title || "Journey").toString();
   const geSubtitle = (geTr?.pitch || ge?.pitch || "").toString();
@@ -903,37 +858,38 @@ export default function GroupEventModulePage() {
             </div>
 
             <div className="flex-1 sm:flex sm:justify-end">
-              <div className="w-full max-w-[720px] rounded-3xl border border-slate-200 bg-white/95 px-4 py-4 shadow-sm sm:px-6 sm:py-5">
-                <div className="relative ml-auto h-[84px] w-full max-w-[820px] sm:h-[108px]">
+              <div className="w-full max-w-[1180px] rounded-3xl border border-blue-400/40 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-950 px-4 py-4 text-white shadow-lg sm:px-6 sm:py-4">
+                <div className="relative ml-auto h-[52px] w-full max-w-[1060px] sm:h-[72px]">
                   <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
-                    <div className="relative mx-auto h-4 w-full max-w-[780px]">
+                    <div className="relative mx-auto h-3 w-full max-w-[1000px]">
                       <div
                         className="absolute inset-0 rounded-full"
                         style={{
-                          background: 'linear-gradient(180deg, #f8fafc 0%, #e2e8f0 40%, #cbd5f5 100%)',
-                          boxShadow: 'inset 0 2px 4px rgba(255,255,255,0.7), inset 0 -4px 8px rgba(30,64,175,0.35), 0 14px 16px rgba(15,23,42,0.18)'
+                          background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(242,242,242,0.9) 55%, rgba(225,225,225,0.88) 100%)",
+                          boxShadow: "inset 0 2px 4px rgba(255,255,255,0.85), inset 0 -5px 10px rgba(15,23,42,0.25), 0 10px 16px rgba(0,0,0,0.24)"
                         }}
                       />
-                      <div className="absolute left-1/2 top-full h-4 w-[92%] -translate-x-1/2 -translate-y-1 rounded-full bg-slate-900/15 blur-md" />
+                      <div className="absolute left-1/2 top-full h-4 w-[92%] -translate-x-1/2 -translate-y-1 rounded-full bg-blue-950/35 blur-md" />
                     </div>
                   </div>
 
                   <div
-                    className="pointer-events-none absolute top-[calc(50%-42px)] sm:top-[calc(50%-52px)]"
+                    className="pointer-events-none absolute top-[calc(50%-18px)] sm:top-[calc(50%-22px)]"
                     style={{
                       left: `${avatarProgress * 100}%`,
                       transform: "translate(-50%, 0)",
                       transition: "left 360ms cubic-bezier(0.22, 1, 0.36, 1)",
+                      zIndex: 6,
                     }}
                   >
-                    <CartoonGuy
+                    <TimelinePointer
                       animated={isAvatarMoving}
-                      className="h-16 w-16 sm:h-20 sm:w-20 drop-shadow-[0_8px_22px_rgba(15,23,42,0.22)]"
+                      className="block h-8 w-8 sm:h-10 sm:w-10"
                     />
                   </div>
 
-                  <div className="absolute inset-x-0 top-[calc(50%+10px)]">
-                    <div className="relative h-9">
+                  <div className="absolute inset-x-0 top-[calc(50%+4px)]">
+                    <div className="relative h-8">
                       {timelineTicks.map((tick) => (
                         <div
                           key={`timeline-tick-${tick}`}
@@ -943,15 +899,26 @@ export default function GroupEventModulePage() {
                           }}
                         >
                           <div className="mx-auto h-4 w-[2px] rounded-full bg-slate-300" />
-                          <div className="mt-1 whitespace-nowrap text-[10px] font-medium text-slate-500">
+                          <div className="mt-1 whitespace-nowrap text-[10px] font-medium text-blue-100/80">
                             {formatTimelineYearLabel(tick)}
                           </div>
+                        </div>
+                      ))}
+                      {timelineMinorTicks.map((tick) => (
+                        <div
+                          key={`timeline-minor-tick-${tick}`}
+                          className="absolute -translate-x-1/2"
+                          style={{
+                            left: `${((tick - timelineData.min) / timelineData.range) * 100}%`,
+                          }}
+                        >
+                          <div className="mx-auto h-2.5 w-px rounded-full bg-slate-300/70" />
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="absolute inset-x-0 top-[calc(50%+30px)] flex justify-between text-[11px] font-semibold text-slate-600">
+                  <div className="absolute inset-x-0 top-[calc(50%+20px)] flex justify-between text-[11px] font-semibold text-blue-50">
                     <span>{formatTimelineYearLabel(timelineData.min)}</span>
                     <span>{formatTimelineYearLabel(timelineData.max)}</span>
                   </div>
