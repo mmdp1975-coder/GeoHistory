@@ -293,9 +293,15 @@ async function insertMediaAsset(supabase: ReturnType<typeof createServerActionCl
   if (mm.credits) insert[COL.ma.credits] = mm.credits;
   if (mm.metadata) insert[COL.ma.metadata] = mm.metadata;
 
-  const { data, error } = await supabase.from(TBL.mediaAssets).insert(insert).select().single();
+  const { data, error } = await supabase
+    .from(TBL.mediaAssets)
+    .insert([insert as any])    // 👈 array + cast per fixare il build
+    .select('id')
+    .single();
+
   if (error) throw error;
-  return data[COL.ma.id] as string;
+  return data.id as string;
+
 }
 
 // Collega un media_id a group_event/event in media_attachments
