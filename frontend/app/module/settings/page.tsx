@@ -37,6 +37,7 @@ export default function SettingsPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [currentPersonaCode, setCurrentPersonaCode] = useState<string | null>(null);
 
   const personaLabel = useMemo(() => {
     return (p: Persona | undefined, lang: string | null) => {
@@ -67,6 +68,7 @@ export default function SettingsPage() {
       }
       if (alive) setUser(user);
 
+      // Profilo
       const { data: prof, error: perr } = await supabase
         .from('profiles')
         .select('id, language_code, persona_id')
@@ -79,6 +81,7 @@ export default function SettingsPage() {
         setProfile(prof as Profile);
       }
 
+      // Tutte le personas
       const { data: pers, error: persErr } = await supabase
         .from('personas')
         .select('id, code, name_it, name_en')
@@ -86,8 +89,18 @@ export default function SettingsPage() {
 
       if (persErr) {
         if (alive) setError(persErr.message);
-      } else if (alive) {
-        setPersonas((pers || []) as Persona[]);
+      } else if (alive && pers) {
+        setPersonas(pers as Persona[]);
+      }
+
+      // Codice persona attuale
+      if (prof?.persona_id) {
+        const { data: persona } = await supabase
+          .from('personas')
+          .select('code')
+          .eq('id', prof.persona_id)
+          .single();
+        if (alive) setCurrentPersonaCode(persona?.code || null);
       }
 
       if (alive) setLoading(false);
@@ -95,6 +108,31 @@ export default function SettingsPage() {
 
     return () => { alive = false; };
   }, [supabase, router]);
+
+  const isAdmin = (currentPersonaCode || '').toUpperCase() === 'ADMIN';
+  const isModerator = (currentPersonaCode || '').toUpperCase() === 'MODERATOR';
+
+  // Mappa per ricavare il code dalla persona scelta
+  const personasById = useMemo(() => {
+    const m = new Map<string, Persona>();
+    personas.forEach(p => m.set(p.id, p));
+    return m;
+  }, [personas]);
+
+  // Regole di visibilità:
+  // - Se sei ADMIN o MODERATOR: non puoi cambiare persona dal self-service (select disabilitata).
+  // - Se NON sei ADMIN/MODERATOR: non vedi ADMIN/MODERATOR tra le opzioni.
+  const filteredPersonas: Persona[] = useMemo(() => {
+    if (isAdmin || isModerator) {
+      // Mostra solo la persona attuale, select disabilitata
+      return personas.filter(p => p.id === profile?.persona_id);
+    }
+    // Per tutti gli altri, nascondi ADMIN e MODERATOR
+    return personas.filter(p => {
+      const code = (p.code || '').toUpperCase();
+      return code !== 'ADMIN' && code !== 'MODERATOR';
+    });
+  }, [isAdmin, isModerator, personas, profile?.persona_id]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -105,6 +143,22 @@ export default function SettingsPage() {
     setOk(null);
 
     try {
+      // Controlli client-side sui ruoli
+      const target = profile.persona_id ? personasById.get(profile.persona_id) : null;
+      const targetCode = (target?.code || '').toUpperCase();
+
+      // Nessuno può auto-assegnarsi ADMIN o MODERATOR
+      if (targetCode === 'ADMIN' || targetCode === 'MODERATOR') {
+        // Eccezione esplicita NON prevista: anche un ADMIN non usa questo modulo per assegnare MODERATOR ad altri.
+        // Per coerenza delle policy, blocchiamo sempre la selezione di ruoli privilegiati da qui.
+        throw new Error('Non puoi selezionare ruoli privilegiati (ADMIN/MODERATOR) da questa pagina.');
+      }
+
+      // Un MODERATOR non può diventare ADMIN
+      if (isModerator && targetCode === 'ADMIN') {
+        throw new Error('Un MODERATOR non può diventare ADMIN.');
+      }
+
       const resp = await fetch('/api/profile/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,7 +198,6 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-[calc(100vh-0px)] w-full bg-gray-50">
-      {/* Body (header removed) */}
       <div className="mx-auto max-w-5xl px-4 py-8">
         <div className="rounded-2xl bg-white shadow p-6">
           <h2 className="text-base font-semibold mb-6">Profile preferences</h2>
@@ -176,19 +229,22 @@ export default function SettingsPage() {
               <select
                 className="w-full rounded-xl border px-3 py-2"
                 value={profile?.persona_id || ''}
+                disabled={saving || isAdmin || isModerator}
                 onChange={(e) =>
                   setProfile(prev => prev ? { ...prev, persona_id: e.target.value } : prev)
                 }
               >
                 <option value="">Choose persona…</option>
-                {personas.map(p => (
+                {filteredPersonas.map(p => (
                   <option key={p.id} value={p.id}>
                     {personaLabel(p, profile?.language_code || 'en')}
                   </option>
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Scegli il tuo profilo (es. Student, Researcher, Fan, Admin…).
+                {isAdmin || isModerator
+                  ? 'Il tuo ruolo è gestito dagli amministratori. Modifiche non consentite da questa pagina.'
+                  : 'Scegli il tuo profilo (es. Student, Researcher, Fan…). I ruoli ADMIN/MODERATOR non sono auto-assegnabili.'}
               </p>
             </div>
 
