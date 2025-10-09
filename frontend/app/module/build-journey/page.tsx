@@ -1,603 +1,474 @@
-"use client";
+'use client';
 
-import { useMemo, useState, useTransition } from "react";
-import { createJourneyWithEvents } from "./actions";
+/**
+ * GeoHistory – Build Journey (UI) — FULL REPLACEMENT
+ * Due modalità:
+ * 1) From scratch (form guidato)
+ * 2) From video URL (auto-build)
+ *
+ * Nessuna dipendenza extra. Tailwind per lo styling.
+ */
 
-/** ===== Tipi UI ===== */
-type Era = "AD" | "BC";
+import React, { useMemo, useState } from 'react';
+import {
+  buildJourneyFromScratch,
+  buildJourneyFromVideo,
+  type JourneyI18n,
+  type MiniEvent,
+  type MiniMedia,
+  type BuildJourneyFromScratchPayload,
+} from './actions';
 
-type EventRow = {
-  id: string;
-  // campi compatibili con events_list
-  year_from?: number | "";
-  year_to?: number | "";
-  exact_date?: string;
-  era: Era;
-  continent?: string | null;
-  country?: string | null;
-  location?: string | null;
-  lat?: number | "";
-  lon?: number | "";
-  // campi solo UI / event_translations
-  title?: string;
-  description?: string;
-};
+// =========================== PAGE ============================
 
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
-}
+type Tab = 'scratch' | 'video';
 
-/** ===== Pagina ===== */
 export default function BuildJourneyPage() {
-  const [tab, setTab] = useState<"manual" | "import">("import");
-
-  /** ===== Stato Journey (manual) ===== */
-  const [title, setTitle] = useState("");
-  const [slugManual, setSlugManual] = useState("");
-  const [slugAuto, setSlugAuto] = useState(true);
-  const computedSlug = useMemo(() => {
-    if (!slugAuto) return slugManual;
-    return title
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .slice(0, 80);
-  }, [title, slugAuto, slugManual]);
-
-  const [visibility, setVisibility] = useState<"PRIVATE" | "SHARED" | "PUBLIC">("PRIVATE");
-  const [status, setStatus] = useState<"DRAFT" | "REVIEW" | "PUBLISHED">("DRAFT");
-  const [shortDesc, setShortDesc] = useState("");
-  const [longDesc, setLongDesc] = useState("");
-  const [coverUrl, setCoverUrl] = useState("");
-  const [tags, setTags] = useState("");
-
-  const [yearFromJ, setYearFromJ] = useState<number | "">("");
-  const [yearToJ, setYearToJ] = useState<number | "">("");
-  const [eraJ, setEraJ] = useState<Era>("AD");
-  const [journeyPlace, setJourneyPlace] = useState("");
-  const [journeyLat, setJourneyLat] = useState<number | "">("");
-  const [journeyLon, setJourneyLon] = useState<number | "">("");
-
-  const [events, setEvents] = useState<EventRow[]>([
-    { id: uid(), era: "AD", year_from: "", year_to: "", location: "", lat: "", lon: "" },
-  ]);
-
-  const derivedPeriod = useMemo(() => {
-    const starts = events
-      .filter((e) => e.year_from !== "" && typeof e.year_from === "number")
-      .map((e) => e.year_from as number);
-    if (!starts.length) return null;
-    const min = Math.min(...starts);
-    const ends = events
-      .map((e) => (typeof e.year_to === "number" ? e.year_to : (typeof e.year_from === "number" ? e.year_from : undefined)))
-      .filter((x): x is number => typeof x === "number");
-    const max = ends.length ? Math.max(...ends) : min;
-    return { min, max };
-  }, [events]);
-
-  const canSaveDraft =
-    title.trim().length > 0 &&
-    computedSlug.trim().length > 0 &&
-    events.some((e) => (e.year_from !== "" || e.year_to !== "" || (e.location ?? "").trim().length > 0));
-
-  /** ===== Stato Import (AI) ===== */
-  const [videoUrl, setVideoUrl] = useState("");
-  const [importStage, setImportStage] = useState<"idle" | "fetching" | "review" | "error">("idle");
-  const [debugMsg, setDebugMsg] = useState<string>("");
-  const [propJourneyTitle, setPropJourneyTitle] = useState<string>("");
-  const [propJourneyDesc, setPropJourneyDesc] = useState<string>("");
-  const [propCover, setPropCover] = useState<string>("");
-  const [propEvents, setPropEvents] = useState<EventRow[]>([]);
-
-  const [isPending, startTransition] = useTransition();
-  const [toast, setToast] = useState<string | null>(null);
-
-  /** ===== Helpers eventi (manual) ===== */
-  function addEventRow() {
-    setEvents((prev) => [...prev, { id: uid(), era: "AD", year_from: "", year_to: "", location: "", lat: "", lon: "" }]);
-  }
-  function removeEventRow(id: string) {
-    setEvents((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
-  }
-  function updateEvent<T extends keyof EventRow>(id: string, key: T, value: EventRow[T]) {
-    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, [key]: value } : e)));
-  }
-
-  /** ===== CREATE Journey (manual) ===== */
-  async function onCreateJourneyManual() {
-    const payload = {
-      title: title.trim(),
-      slug: computedSlug.trim(),
-      pitch: shortDesc || null,
-      cover_url: coverUrl || null,
-      description: longDesc || null,
-      visibility,
-      status,
-      year_from: typeof yearFromJ === "number" ? yearFromJ : null,
-      year_to: typeof yearToJ === "number" ? yearToJ : null,
-      era: eraJ,
-      journey_location: journeyPlace || null,
-      journey_latitude: typeof journeyLat === "number" ? journeyLat : null,
-      journey_longitude: typeof journeyLon === "number" ? journeyLon : null,
-      events: events.map((e) => ({
-        year_from: typeof e.year_from === "number" ? e.year_from : null,
-        year_to: typeof e.year_to === "number" ? e.year_to : null,
-        exact_date: e.exact_date || null,
-        era: e.era,
-        continent: e.continent ?? null,
-        country: (e.country || "") || null,
-        location: (e.location || "") || null,
-        latitude: typeof e.lat === "number" ? e.lat : null,
-        longitude: typeof e.lon === "number" ? e.lon : null,
-        // manual: opzionalmente puoi abilitare anche titolo/descrizione
-        title_text: (e.title || "").trim() || null,
-        description_text: (e.description || "").trim() || null,
-      })),
-    } as const;
-
-    setToast(null);
-    startTransition(async () => {
-      const res = await createJourneyWithEvents(payload as any);
-      if (!res || !("ok" in res)) { setToast("Errore imprevisto nella creazione."); return; }
-      if (!res.ok) { setToast(res.error || "Errore nella creazione."); return; }
-      setToast("Journey creato con successo. ID: " + res.group_event_id);
-    });
-  }
-
-  /** ===== IMPORT: chiama l’API di ingestione ===== */
-  async function runIngest() {
-    if (!videoUrl.trim()) { alert("Inserisci un URL video valido"); return; }
-    setImportStage("fetching");
-    setDebugMsg("Analisi (chunking transcript + AI + geocoding)…");
-    setPropJourneyTitle(""); setPropJourneyDesc(""); setPropCover(""); setPropEvents([]);
-
-    try {
-      const res = await fetch("/api/ingest/video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: videoUrl.trim() })
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Errore ingest");
-      const p = data.proposal;
-      setPropJourneyTitle(p?.journey?.title || "Journey importato");
-      setPropJourneyDesc(p?.journey?.description || "");
-      setPropCover(p?.journey?.cover || "");
-      setPropEvents(
-        (p?.events || []).map((e: any) => ({
-          id: uid(),
-          era: (e.era === "BC" ? "BC" : "AD"),
-          year_from: e.year_from ?? "",
-          year_to: e.year_to ?? "",
-          location: e.location ?? "",
-          country: e.country ?? "",
-          continent: e.continent ?? null,
-          lat: typeof e.latitude === "number" ? e.latitude : "",
-          lon: typeof e.longitude === "number" ? e.longitude : "",
-          title: e.title ?? "",
-          description: e.description ?? ""
-        }))
-      );
-      setImportStage("review");
-      setDebugMsg("Review pronta");
-    } catch (err: any) {
-      setImportStage("error");
-      setDebugMsg("Errore: " + (err?.message || "ingest fallita"));
-    }
-  }
-
-  /** ===== IMPORT: salva bozza (DB) ===== */
-  async function importAsDraftFromReview() {
-    if (!propJourneyTitle || propEvents.length === 0) {
-      alert("Nessun dato da importare.");
-      return;
-    }
-    const slug = propJourneyTitle
-      .toLowerCase().trim()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .slice(0, 80);
-
-    const payload = {
-      title: propJourneyTitle,
-      slug,
-      pitch: `Imported from: ${videoUrl}`,
-      cover_url: propCover || null,
-      description: propJourneyDesc || null,
-      visibility: "PRIVATE",
-      status: "DRAFT",
-      year_from: null,
-      year_to: null,
-      era: "AD",
-      journey_location: null,
-      journey_latitude: null,
-      journey_longitude: null,
-      events: propEvents.map((e) => ({
-        // events_list
-        year_from: typeof e.year_from === "number" ? e.year_from : null,
-        year_to: typeof e.year_to === "number" ? e.year_to : null,
-        exact_date: null,
-        era: e.era,
-        continent: e.continent ?? null,
-        country: (e.country || "").trim() || null,
-        location: (e.location || "").trim() || null,
-        latitude: typeof e.lat === "number" ? e.lat : null,
-        longitude: typeof e.lon === "number" ? e.lon : null,
-        // event_translations
-        title_text: (e.title || "").trim() || null,
-        description_text: (e.description || "").trim() || null,
-      })),
-    } as const;
-
-    setToast(null);
-    startTransition(async () => {
-      const res = await createJourneyWithEvents(payload as any);
-      if (!res || !("ok" in res)) { setToast("Errore imprevisto (import)."); return; }
-      if (!res.ok) { setToast(res.error || "Errore nella creazione (import)."); return; }
-      setToast("Journey importato come bozza. ID: " + res.group_event_id);
-    });
-  }
+  const [tab, setTab] = useState<Tab>('scratch');
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={() => history.back()} className="rounded-xl px-3 py-2 border hover:bg-gray-50" aria-label="Indietro">
-            ← Indietro
+    <div className="min-h-screen bg-neutral-50 text-neutral-900 px-4 py-6 md:px-8 lg:px-10">
+      <div className="mx-auto max-w-6xl">
+        <header className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-semibold">Build Journey</h1>
+          <p className="text-sm md:text-base text-neutral-600">
+            Crea un Journey (group_event) con eventi, traduzioni e media — oppure genera tutto partendo da un link video.
+          </p>
+        </header>
+
+        <div className="mb-4 flex gap-2">
+          <button
+            onClick={() => setTab('scratch')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium border ${tab === 'scratch' ? 'bg-white shadow' : 'bg-neutral-100 hover:bg-white'}`}
+          >
+            From scratch
           </button>
-          <h1 className="text-2xl font-bold">Journey Builder</h1>
+          <button
+            onClick={() => setTab('video')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium border ${tab === 'video' ? 'bg-white shadow' : 'bg-neutral-100 hover:bg-white'}`}
+          >
+            From video URL
+          </button>
         </div>
-        <div className="text-sm text-gray-500">Modulo: <code>/module/build-journey</code></div>
+
+        {tab === 'scratch' ? <ScratchForm /> : <VideoForm />}
       </div>
-
-      {/* Tabs */}
-      <div className="mb-6">
-        <div className="inline-flex rounded-2xl border overflow-hidden">
-          <button className={`px-4 py-2 ${tab === "manual" ? "bg-gray-900 text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setTab("manual")}>
-            Creazione manuale
-          </button>
-          <button className={`px-4 py-2 ${tab === "import" ? "bg-gray-900 text-white" : "bg-white hover:bg-gray-50"}`} onClick={() => setTab("import")}>
-            Import da video (AI)
-          </button>
-        </div>
-      </div>
-
-      {/* ===== IMPORT TAB ===== */}
-      {tab === "import" && (
-        <div className="space-y-6">
-          <section className="border rounded-2xl p-5">
-            <h2 className="text-lg font-semibold mb-4">Import da video (AI)</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">URL video</label>
-                <input
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2"
-                  placeholder="https://www.youtube.com/watch?v=…"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <button type="button" onClick={runIngest} className="rounded-xl px-4 py-2 bg-gray-900 text-white hover:opacity-90">
-                  Analizza
-                </button>
-                <button type="button" onClick={() => { setImportStage("idle"); setPropEvents([]); setDebugMsg(""); }} className="rounded-xl px-4 py-2 border hover:bg-gray-50">
-                  Reset
-                </button>
-              </div>
-            </div>
-
-            {/* Stato */}
-            <div className="mt-4 text-sm text-gray-600">
-              Stato: <b>{importStage}</b> {debugMsg ? `— ${debugMsg}` : ""}
-            </div>
-
-            {/* Review */}
-            {importStage === "review" && (
-              <div className="mt-6 rounded-2xl border p-4 bg-gray-50">
-                <h3 className="font-semibold mb-3">Review proposta</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium mb-1">Titolo Journey</label>
-                    <input value={propJourneyTitle} onChange={(e) => setPropJourneyTitle(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Cover (URL)</label>
-                    <input value={propCover} onChange={(e) => setPropCover(e.target.value)} className="w-full rounded-xl border px-3 py-2" />
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <label className="block text-sm font-medium mb-1">Descrizione Journey</label>
-                  <textarea value={propJourneyDesc} onChange={(e) => setPropJourneyDesc(e.target.value)} className="w-full rounded-xl border px-3 py-2 min-h-[72px]" />
-                </div>
-
-                <div className="overflow-auto mt-4">
-                  <table className="min-w-full border rounded-xl overflow-hidden text-sm">
-                    <thead className="bg-gray-100">
-                      <tr>
-                        <th className="px-3 py-2 border">Titolo</th>
-                        <th className="px-3 py-2 border">Da</th>
-                        <th className="px-3 py-2 border">A</th>
-                        <th className="px-3 py-2 border">Era</th>
-                        <th className="px-3 py-2 border">Luogo</th>
-                        <th className="px-3 py-2 border">Paese</th>
-                        <th className="px-3 py-2 border">Lat</th>
-                        <th className="px-3 py-2 border">Lon</th>
-                        <th className="px-3 py-2 border">Descrizione</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {propEvents.map((e, idx) => (
-                        <tr key={e.id} className="align-top">
-                          <td className="px-3 py-2 border min-w-[180px]">
-                            <input value={e.title ?? ""} onChange={(ev) => setPropEvents((p) => p.map((x,i) => i===idx ? ({...x, title: ev.target.value}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[90px]">
-                            <input inputMode="numeric" value={e.year_from ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, year_from: ev.target.value===""? "" : Number(ev.target.value)}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[90px]">
-                            <input inputMode="numeric" value={e.year_to ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, year_to: ev.target.value===""? "" : Number(ev.target.value)}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[80px]">
-                            <select value={e.era} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, era: ev.target.value as Era}) : x))} className="w-full rounded-lg border px-2 py-1">
-                              <option value="AD">AD</option>
-                              <option value="BC">BC</option>
-                            </select>
-                          </td>
-                          <td className="px-3 py-2 border min-w-[200px]">
-                            <input value={e.location ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, location: ev.target.value}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[140px]">
-                            <input value={e.country ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, country: ev.target.value}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[110px]">
-                            <input inputMode="decimal" value={e.lat ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, lat: ev.target.value===""? "" : Number(ev.target.value)}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[110px]">
-                            <input inputMode="decimal" value={e.lon ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, lon: ev.target.value===""? "" : Number(ev.target.value)}) : x))} className="w-full rounded-lg border px-2 py-1" />
-                          </td>
-                          <td className="px-3 py-2 border min-w-[260px]">
-                            <textarea value={e.description ?? ""} onChange={(ev) => setPropEvents((p)=>p.map((x,i)=> i===idx ? ({...x, description: ev.target.value}) : x))} className="w-full rounded-lg border px-2 py-1 min-h-[44px]" />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 mt-4">
-                  <button type="button" className="rounded-xl px-4 py-2 border hover:bg-gray-50" onClick={() => { setImportStage("idle"); setPropEvents([]); setDebugMsg(""); }}>
-                    Annulla
-                  </button>
-                  <button type="button" className="rounded-xl px-4 py-2 bg-gray-900 text-white hover:opacity-90" onClick={importAsDraftFromReview} disabled={isPending}>
-                    {isPending ? "Importo..." : "Importa come bozza"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          {toast && (
-            <div className="text-sm p-3 rounded-lg border bg-gray-50">
-              {toast}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ===== MANUAL TAB ===== */}
-      {tab === "manual" && (
-        <div className="space-y-8">
-          {/* Journey core */}
-          <section className="border rounded-2xl p-5">
-            <h2 className="text-lg font-semibold mb-4">Dettagli Journey</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Titolo *</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-xl border px-3 py-2" placeholder="Es. Age of Exploration" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Slug *</label>
-                <div className="flex items-center gap-2">
-                  <input value={computedSlug} onChange={(e) => setSlugManual(e.target.value)} disabled={slugAuto} className="w-full rounded-xl border px-3 py-2" placeholder="auto-generato dal titolo" />
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={slugAuto} onChange={(e) => setSlugAuto(e.target.checked)} /> Auto
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Visibilità *</label>
-                <select value={visibility} onChange={(e) => setVisibility(e.target.value as any)} className="w-full rounded-xl border px-3 py-2">
-                  <option value="PRIVATE">Privato</option>
-                  <option value="SHARED">Condiviso</option>
-                  <option value="PUBLIC">Pubblico</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Stato *</label>
-                <select value={status} onChange={(e) => setStatus(e.target.value as any)} className="w-full rounded-xl border px-3 py-2">
-                  <option value="DRAFT">Bozza</option>
-                  <option value="REVIEW">Revisione</option>
-                  <option value="PUBLISHED">Pubblicato</option>
-                </select>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Cover (URL)</label>
-                <input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} className="w-full rounded-xl border px-3 py-2" placeholder="https://…" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Descrizione breve</label>
-                <textarea value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} className="w-full rounded-xl border px-3 py-2 min-h-[72px]" placeholder="1-2 frasi" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Descrizione estesa</label>
-                <textarea value={longDesc} onChange={(e) => setLongDesc(e.target.value)} className="w-full rounded-xl border px-3 py-2 min-h-[72px]" placeholder="Testo narrativo del Journey" />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-1">Tag (separati da virgola)</label>
-                <input value={tags} onChange={(e) => setTags(e.target.value)} className="w-full rounded-xl border px-3 py-2" placeholder="exploration, navigation, colonial" />
-              </div>
-            </div>
-          </section>
-
-          {/* Tempo & Geografia */}
-          <section className="border rounded-2xl p-5">
-            <h2 className="text-lg font-semibold mb-4">Tempo & Geografia</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Anno da</label>
-                <input inputMode="numeric" value={yearFromJ} onChange={(e) => setYearFromJ(e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-xl border px-3 py-2" placeholder="es. 1400" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Anno a</label>
-                <input inputMode="numeric" value={yearToJ} onChange={(e) => setYearToJ(e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-xl border px-3 py-2" placeholder="es. 1600" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Era</label>
-                <select value={eraJ} onChange={(e) => setEraJ(e.target.value as Era)} className="w-full rounded-xl border px-3 py-2">
-                  <option value="AD">AD</option>
-                  <option value="BC">BC</option>
-                </select>
-              </div>
-            </div>
-
-            {derivedPeriod && (
-              <p className="text-sm text-gray-500 mt-3">
-                Periodo derivato dagli eventi: <strong>{derivedPeriod.min}</strong> → <strong>{derivedPeriod.max}</strong>
-              </p>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium mb-1">Luogo principale del Journey</label>
-                <input value={journeyPlace} onChange={(e) => setJourneyPlace(e.target.value)} className="w-full rounded-xl border px-3 py-2" placeholder="Es. Lisbon, Portugal" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Latitudine</label>
-                <input inputMode="decimal" value={journeyLat} onChange={(e) => setJourneyLat(e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-xl border px-3 py-2" placeholder="es. 38.7223" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Longitudine</label>
-                <input inputMode="decimal" value={journeyLon} onChange={(e) => setJourneyLon(e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-xl border px-3 py-2" placeholder="-9.1393" />
-              </div>
-            </div>
-          </section>
-
-          {/* EVENTS editor (manual) */}
-          <section className="border rounded-2xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Eventi</h2>
-              <button type="button" onClick={addEventRow} className="rounded-xl px-3 py-2 border hover:bg-gray-50">+ Aggiungi evento</button>
-            </div>
-
-            <div className="overflow-auto">
-              <table className="min-w-full border rounded-xl overflow-hidden">
-                <thead className="bg-gray-50 text-sm">
-                  <tr>
-                    <th className="px-3 py-2 border">Titolo</th>
-                    <th className="px-3 py-2 border">Da</th>
-                    <th className="px-3 py-2 border">A</th>
-                    <th className="px-3 py-2 border">Data esatta</th>
-                    <th className="px-3 py-2 border">Era</th>
-                    <th className="px-3 py-2 border">Continente</th>
-                    <th className="px-3 py-2 border">Paese</th>
-                    <th className="px-3 py-2 border">Luogo</th>
-                    <th className="px-3 py-2 border">Lat</th>
-                    <th className="px-3 py-2 border">Lon</th>
-                    <th className="px-3 py-2 border">Descrizione</th>
-                    <th className="px-3 py-2 border">Azioni</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {events.map((ev) => (
-                    <tr key={ev.id} className="align-top">
-                      <td className="px-3 py-2 border min-w-[180px]">
-                        <input value={ev.title ?? ""} onChange={(e) => updateEvent(ev.id, "title", e.target.value)} className="w-full rounded-lg border px-2 py-1" placeholder="Titolo evento" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[90px]">
-                        <input inputMode="numeric" value={ev.year_from ?? ""} onChange={(e) => updateEvent(ev.id, "year_from", e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-lg border px-2 py-1" placeholder="1492" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[90px]">
-                        <input inputMode="numeric" value={ev.year_to ?? ""} onChange={(e) => updateEvent(ev.id, "year_to", e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-lg border px-2 py-1" placeholder="1493" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[130px]">
-                        <input value={ev.exact_date ?? ""} onChange={(e) => updateEvent(ev.id, "exact_date", e.target.value)} className="w-full rounded-lg border px-2 py-1" placeholder="YYYY-MM-DD" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[80px]">
-                        <select value={ev.era} onChange={(e) => updateEvent(ev.id, "era", e.target.value as Era)} className="w-full rounded-lg border px-2 py-1">
-                          <option value="AD">AD</option>
-                          <option value="BC">BC</option>
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 border min-w-[130px]">
-                        <input value={ev.continent ?? ""} onChange={(e) => updateEvent(ev.id, "continent", e.target.value)} className="w-full rounded-lg border px-2 py-1" placeholder="Europe" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[130px]">
-                        <input value={ev.country ?? ""} onChange={(e) => updateEvent(ev.id, "country", e.target.value)} className="w-full rounded-lg border px-2 py-1" placeholder="Italy" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[200px]">
-                        <input value={ev.location ?? ""} onChange={(e) => updateEvent(ev.id, "location", e.target.value)} className="w-full rounded-lg border px-2 py-1" placeholder="Genoa, Liguria" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[110px]">
-                        <input inputMode="decimal" value={ev.lat ?? ""} onChange={(e) => updateEvent(ev.id, "lat", e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-lg border px-2 py-1" placeholder="44.4056" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[110px]">
-                        <input inputMode="decimal" value={ev.lon ?? ""} onChange={(e) => updateEvent(ev.id, "lon", e.target.value === "" ? "" : Number(e.target.value))} className="w-full rounded-lg border px-2 py-1" placeholder="8.9463" />
-                      </td>
-                      <td className="px-3 py-2 border min-w-[220px]">
-                        <textarea value={ev.description ?? ""} onChange={(e) => updateEvent(ev.id, "description", e.target.value)} className="w-full rounded-lg border px-2 py-1 min-h-[44px]" placeholder="2–3 frasi" />
-                      </td>
-                      <td className="px-3 py-2 border">
-                        <button type="button" onClick={() => removeEventRow(ev.id)} className="rounded-lg px-2 py-1 border hover:bg-gray-50" title="Rimuovi">🗑️</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="flex flex-wrap gap-2 mt-3 text-sm">
-                <button type="button" className="rounded-xl px-3 py-2 border hover:bg-gray-50"
-                  onClick={() => setEvents((prev) => prev.map((e) => ({ ...e, era: "AD" })))}>
-                  Imposta era = AD (tutti)
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {/* CTA */}
-          <div className="flex items-center justify-end gap-3">
-            <button
-              type="button"
-              disabled={!canSaveDraft || isPending}
-              className={`rounded-xl px-4 py-2 border ${canSaveDraft && !isPending ? "hover:bg-gray-50" : "opacity-50 cursor-not-allowed"}`}
-              onClick={onCreateJourneyManual}
-              title={!canSaveDraft ? "Compila: Titolo, Slug e almeno un evento con dati minimi" : ""}
-            >
-              {isPending ? "Salvataggio..." : "Crea Journey"}
-            </button>
-          </div>
-
-          {toast && (
-            <div className="mt-3 text-sm p-3 rounded-lg border bg-gray-50">
-              {toast}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
+
+// ====================== FROM SCRATCH FORM ======================
+
+function ScratchForm() {
+  // Core journey
+  const [slug, setSlug] = useState('');
+  const [title, setTitle] = useState('');
+  const [pitch, setPitch] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
+  const [description, setDescription] = useState('');
+  const [visibility, setVisibility] = useState('private');
+  const [status, setStatus] = useState('draft');
+  const [isOfficial, setIsOfficial] = useState(false);
+  const [ownerUserRef, setOwnerUserRef] = useState('');
+  const [ownerProfileId, setOwnerProfileId] = useState('');
+  const [colorHex, setColorHex] = useState('');
+  const [iconName, setIconName] = useState('');
+
+  // i18n
+  const [i18n, setI18n] = useState<JourneyI18n[]>([{ lang: 'en', title: '' }]);
+
+  // events
+  const [events, setEvents] = useState<MiniEvent[]>([]);
+
+  // journey-level media
+  const [media, setMedia] = useState<MiniMedia[]>([]);
+
+  // UX state
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const canSubmit = useMemo(() => {
+    return slug.trim() && title.trim();
+  }, [slug, title]);
+
+  async function onSubmit() {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+
+    const payload: BuildJourneyFromScratchPayload = {
+      core: {
+        slug: slug.trim(),
+        title: title.trim(),
+        pitch: pitch || null,
+        cover_url: coverUrl || null,
+        description: description || null,
+        visibility,
+        status,
+        is_official: isOfficial,
+        owner_user_ref: ownerUserRef || null,
+        owner_profile_id: ownerProfileId || null,
+        color_hex: colorHex || null,
+        icon_name: iconName || null,
+      },
+      i18n,
+      events,
+      media,
+    };
+
+    try {
+      const res = await buildJourneyFromScratch(payload);
+      setMsg(`✅ ${res.message} (id: ${res.group_event_id})`);
+    } catch (e: any) {
+      setErr(`❌ ${e?.message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 md:p-6 shadow-sm">
+      <Section title="1) Journey core">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Text label="Slug *" value={slug} onChange={setSlug} placeholder="my-journey-slug" />
+          <Text label="Title *" value={title} onChange={setTitle} placeholder="Journey title" />
+          <Select label="Visibility" value={visibility} onChange={setVisibility} options={['private','shared','public']} />
+          <Select label="Status" value={status} onChange={setStatus} options={['draft','review','published','archived']} />
+          <Checkbox label="Is official" checked={isOfficial} onChange={setIsOfficial} />
+          <Text label="Owner user ref" value={ownerUserRef} onChange={setOwnerUserRef} />
+          <Text label="Owner profile id (uuid)" value={ownerProfileId} onChange={setOwnerProfileId} />
+          <Text label="Color HEX" value={colorHex} onChange={setColorHex} placeholder="#0b3b60" />
+          <Text label="Icon name" value={iconName} onChange={setIconName} placeholder="History" className="md:col-span-2" />
+          <Text label="Cover URL" value={coverUrl} onChange={setCoverUrl} className="md:col-span-3" />
+          <Textarea label="Pitch" value={pitch} onChange={setPitch} className="md:col-span-3" />
+          <Textarea label="Description" value={description} onChange={setDescription} className="md:col-span-3" />
+        </div>
+      </Section>
+
+      <Section title="2) Translations (Journey)">
+        {i18n.map((t, idx) => (
+          <div key={idx} className="mb-3 rounded-xl border p-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Text label="Lang *" value={t.lang} onChange={(v)=>editI18n(setI18n, idx, { lang: v })} />
+              <Text label="Title *" value={t.title} onChange={(v)=>editI18n(setI18n, idx, { title: v })} className="md:col-span-2" />
+              <Text label="Short name" value={t.short_name ?? ''} onChange={(v)=>editI18n(setI18n, idx, { short_name: v })} />
+              <Text label="Video URL" value={t.video_url ?? ''} onChange={(v)=>editI18n(setI18n, idx, { video_url: v })} />
+              <Textarea label="Description" value={t.description ?? ''} onChange={(v)=>editI18n(setI18n, idx, { description: v })} className="md:col-span-3" />
+            </div>
+            <div className="mt-2">
+              {i18n.length > 1 && (
+                <button className="text-xs rounded-lg border px-2 py-1" onClick={()=>removeAt(setI18n, idx)}>Remove</button>
+              )}
+            </div>
+          </div>
+        ))}
+        <button className="rounded-lg border px-3 py-1 text-sm" onClick={()=>setI18n([...i18n, { lang: 'it', title: '' }])}>+ Add language</button>
+      </Section>
+
+      <Section title="3) Events">
+        <EventEditor events={events} setEvents={setEvents} />
+      </Section>
+
+      <Section title="4) Journey Media">
+        <MediaEditor media={media} setMedia={setMedia} />
+      </Section>
+
+      <div className="mt-6 flex items-center gap-3">
+        <button
+          onClick={onSubmit}
+          disabled={!canSubmit || busy}
+          className="rounded-xl bg-neutral-900 text-white px-4 py-2 text-sm disabled:opacity-60"
+        >
+          {busy ? 'Saving…' : 'Save Journey'}
+        </button>
+        {msg && <span className="text-green-700 text-sm">{msg}</span>}
+        {err && <span className="text-red-700 text-sm">{err}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ====================== FROM VIDEO FORM ======================
+
+function VideoForm() {
+  const [url, setUrl] = useState('');
+  const [lang, setLang] = useState('en');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onBuild() {
+    setBusy(true);
+    setMsg(null);
+    setErr(null);
+    try {
+      const res = await buildJourneyFromVideo({ videoUrl: url.trim(), lang });
+      setMsg(`✅ ${res.message} (id: ${res.group_event_id})`);
+    } catch (e: any) {
+      setErr(`❌ ${e?.message ?? e}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border bg-white p-4 md:p-6 shadow-sm">
+      <Section title="Auto-build from video">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Text label="Video URL *" value={url} onChange={setUrl} placeholder="https://www.youtube.com/watch?v=..." className="md:col-span-2" />
+          <Text label="Language" value={lang} onChange={setLang} />
+        </div>
+        <p className="mt-2 text-xs text-neutral-600">
+          Verrà effettuato un oEmbed (YouTube/Vimeo), usati titolo/descrizione/thumbnail e creati eventi dai capitoli (timestamp) se presenti.
+        </p>
+
+        <div className="mt-4">
+          <button
+            onClick={onBuild}
+            disabled={!url.trim() || busy}
+            className="rounded-xl bg-neutral-900 text-white px-4 py-2 text-sm disabled:opacity-60"
+          >
+            {busy ? 'Building…' : 'Build Journey'}
+          </button>
+        </div>
+
+        {msg && <p className="mt-3 text-green-700 text-sm">{msg}</p>}
+        {err && <p className="mt-3 text-red-700 text-sm">{err}</p>}
+      </Section>
+    </div>
+  );
+}
+
+// ========================= REUSABLE UI =========================
+
+function Section(props: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mb-6">
+      <h2 className="mb-3 text-lg font-semibold">{props.title}</h2>
+      {props.children}
+    </section>
+  );
+}
+function Text(props: { label: string; value: string; onChange: (v: string)=>void; placeholder?: string; className?: string }) {
+  return (
+    <label className={`block ${props.className ?? ''}`}>
+      <span className="text-xs text-neutral-600">{props.label}</span>
+      <input
+        type="text"
+        value={props.value}
+        onChange={e => props.onChange(e.target.value)}
+        placeholder={props.placeholder}
+        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+function Textarea(props: { label: string; value: string; onChange: (v: string)=>void; className?: string }) {
+  return (
+    <label className={`block ${props.className ?? ''}`}>
+      <span className="text-xs text-neutral-600">{props.label}</span>
+      <textarea
+        value={props.value}
+        onChange={e => props.onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+        rows={4}
+      />
+    </label>
+  );
+}
+function NumberInput(props: { label: string; value: number|''; onChange: (v: number|'')=>void; className?: string }) {
+  return (
+    <label className={`block ${props.className ?? ''}`}>
+      <span className="text-xs text-neutral-600">{props.label}</span>
+      <input
+        type="number"
+        value={props.value}
+        onChange={e => props.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+function Select(props: { label: string; value: string; onChange: (v: string)=>void; options: string[]; className?: string }) {
+  return (
+    <label className={`block ${props.className ?? ''}`}>
+      <span className="text-xs text-neutral-600">{props.label}</span>
+      <select
+        value={props.value}
+        onChange={e => props.onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white"
+      >
+        {props.options.map(o => <option key={o} value={o}>{o || '(empty)'}</option>)}
+      </select>
+    </label>
+  );
+}
+function Checkbox(props: { label: string; checked: boolean; onChange: (v: boolean)=>void }) {
+  return (
+    <label className="inline-flex items-center gap-2">
+      <input type="checkbox" checked={props.checked} onChange={e => props.onChange(e.target.checked)} />
+      <span className="text-sm">{props.label}</span>
+    </label>
+  );
+}
+function removeAt<T>(setter: React.Dispatch<React.SetStateAction<T[]>>, idx: number) {
+  setter(prev => prev.filter((_, i) => i !== idx));
+}
+function editI18n(setter: React.Dispatch<React.SetStateAction<JourneyI18n[]>>, idx: number, patch: Partial<JourneyI18n>) {
+  setter(prev => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
+}
+
+// --------------------- Events Editor ---------------------
+
+function EventEditor(props: { events: MiniEvent[]; setEvents: (v: MiniEvent[]) => void }) {
+  const { events, setEvents } = props;
+
+  function addEvent() {
+    setEvents([
+      ...events,
+      {
+        year_from: new Date().getFullYear(),
+        year_to: new Date().getFullYear(),
+        era: 'AD',
+        translations: [{ lang: 'en', title: '' }],
+      } as MiniEvent,
+    ]);
+  }
+  function edit(idx: number, patch: Partial<MiniEvent>) {
+    setEvents(events.map((e, i) => (i === idx ? { ...e, ...patch } : e)));
+  }
+  function remove(idx: number) {
+    setEvents(events.filter((_, i) => i !== idx));
+  }
+
+  return (
+    <div>
+      {events.map((e, idx) => (
+        <div key={idx} className="mb-4 rounded-xl border p-3 bg-neutral-50/50">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <NumberInput label="Year from *" value={(e.year_from as any) ?? ''} onChange={(v)=>edit(idx,{ year_from: (v === '' ? ('' as any) : Number(v)) as any })} />
+            <NumberInput label="Year to" value={(e.year_to as any) ?? ''} onChange={(v)=>edit(idx,{ year_to: (v === '' ? null : Number(v)) as any })} />
+            <Text label="Era" value={e.era ?? ''} onChange={(v)=>edit(idx,{ era: v || null })} />
+
+            <Text label="Continent" value={e.continent ?? ''} onChange={(v)=>edit(idx,{ continent: v || null })} />
+            <Text label="Country" value={e.country ?? ''} onChange={(v)=>edit(idx,{ country: v || null })} />
+            <Text label="Location" value={e.location ?? ''} onChange={(v)=>edit(idx,{ location: v || null })} />
+
+            <NumberInput label="Latitude" value={(e.latitude as any) ?? ''} onChange={(v)=>edit(idx,{ latitude: (v === '' ? null : Number(v)) as any })} />
+            <NumberInput label="Longitude" value={(e.longitude as any) ?? ''} onChange={(v)=>edit(idx,{ longitude: (v === '' ? null : Number(v)) as any })} />
+
+            <Text label="Exact date (YYYY-MM-DD)" value={e.exact_date ?? ''} onChange={(v)=>edit(idx,{ exact_date: v || null })} />
+            <Text label="Image URL" value={e.image_url ?? ''} onChange={(v)=>edit(idx,{ image_url: v || null })} className="md:col-span-2" />
+          </div>
+
+          <div className="mt-3">
+            <h4 className="text-sm font-medium mb-2">Translations (Event)</h4>
+            <EventTranslationsEditor
+              value={e.translations}
+              onChange={(value)=>edit(idx, { translations: value })}
+            />
+          </div>
+
+          <div className="mt-3">
+            <MediaEditor title="Event media" media={e.media ?? []} setMedia={(m)=>edit(idx, { media: m })} />
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <button className="text-xs rounded-lg border px-2 py-1" onClick={()=>remove(idx)}>Remove event</button>
+          </div>
+        </div>
+      ))}
+
+      <button className="rounded-lg border px-3 py-1 text-sm" onClick={addEvent}>+ Add event</button>
+    </div>
+  );
+}
+
+function EventTranslationsEditor(props: {
+  value: MiniEvent['translations'];
+  onChange: (v: MiniEvent['translations']) => void;
+}) {
+  const value = props.value ?? [{ lang: 'en', title: '' }];
+
+  function add() {
+    props.onChange([ ...(value || []), { lang: 'en', title: '' } ]);
+  }
+  function edit(i: number, patch: Partial<MiniEvent['translations'][number]>) {
+    props.onChange(value.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  }
+  function remove(i: number) {
+    props.onChange(value.filter((_, idx) => idx !== i));
+  }
+
+  return (
+    <div>
+      {value.map((t, i) => (
+        <div key={i} className="mb-2 rounded-lg border p-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Text label="Lang *" value={t.lang} onChange={(v)=>edit(i, { lang: v })} />
+            <Text label="Title *" value={t.title} onChange={(v)=>edit(i, { title: v })} className="md:col-span-2" />
+            <Textarea label="Description" value={t.description ?? ''} onChange={(v)=>edit(i, { description: v })} className="md:col-span-3" />
+            <Text label="Short description" value={t.description_short ?? ''} onChange={(v)=>edit(i, { description_short: v })} />
+            <Text label="Wikipedia URL" value={t.wikipedia_url ?? ''} onChange={(v)=>edit(i, { wikipedia_url: v })} />
+            <Text label="Video URL" value={t.video_url ?? ''} onChange={(v)=>edit(i, { video_url: v })} />
+          </div>
+          <div className="mt-2">
+            {value.length > 1 && <button className="text-xs rounded-lg border px-2 py-1" onClick={()=>remove(i)}>Remove</button>}
+          </div>
+        </div>
+      ))}
+      <button className="rounded-lg border px-3 py-1 text-sm" onClick={add}>+ Add translation</button>
+    </div>
+  );
+}
+
+// --------------------- Media Editor ---------------------
+
+function MediaEditor(props: { media: MiniMedia[]; setMedia: (v: MiniMedia[]) => void; title?: string }) {
+  const media = props.media ?? [];
+  const setMedia = props.setMedia;
+
+  function add() {
+    setMedia([ ...(media || []), { url: '', role: '', media_type: '' } as any ]);
+  }
+  function edit(idx: number, patch: Partial<MiniMedia>) {
+    setMedia(media.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  }
+  function remove(idx: number) {
+    setMedia(media.filter((_, i) => i !== idx));
+  }
+
+  return (
+    <div>
+      {props.title && <h3 className="mb-2 text-sm font-medium">{props.title}</h3>}
+      {(media || []).map((m, idx) => (
+        <div key={idx} className="mb-3 rounded-lg border p-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Text label="URL *" value={m.url} onChange={(v)=>edit(idx, { url: v })} className="md:col-span-3" />
+            <Text label="Media type" value={m.media_type ?? ''} onChange={(v)=>edit(idx, { media_type: v || null })} />
+            <Text label="Role" value={m.role ?? ''} onChange={(v)=>edit(idx, { role: v || null })} />
+            <Text label="Title" value={m.title ?? ''} onChange={(v)=>edit(idx, { title: v || null })} className="md:col-span-2" />
+            <Textarea label="Caption" value={m.caption ?? ''} onChange={(v)=>edit(idx, { caption: v || null })} className="md:col-span-3" />
+            <Text label="Alt text" value={m.alt_text ?? ''} onChange={(v)=>edit(idx, { alt_text: v || null })} />
+            <Text label="Preview URL" value={m.preview_url ?? ''} onChange={(v)=>edit(idx, { preview_url: v || null })} />
+            <Text label="Credits" value={m.credits ?? ''} onChange={(v)=>edit(idx, { credits: v || null })} />
+            <NumberInput label="Sort order" value={(m.sort_order as any) ?? ''} onChange={(v)=>edit(idx, { sort_order: (v === '' ? null : Number(v)) as any })} />
+          </div>
+          <div className="mt-2">
+            <button className="text-xs rounded-lg border px-2 py-1" onClick={()=>remove(idx)}>Remove media</button>
+          </div>
+        </div>
+      ))}
+      <button className="rounded-lg border px-3 py-1 text-sm" onClick={add}>+ Add media</button>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+

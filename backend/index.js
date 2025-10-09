@@ -112,7 +112,8 @@ app.get("/api/events", async (req, res) => {
           "latitude", "longitude",
           "wikipedia_en", "wikipedia_it",
           "year_from", "year_to", "exact_date", "event_year",
-          "created_at"
+          "created_at",
+          "image_url"
         ].join(","),
         { count: "exact" }
       );
@@ -154,8 +155,119 @@ app.get("/api/events", async (req, res) => {
     const { data, error } = await query;
     if (error) throw error;
 
+    const baseEvents = data || [];
+    const eventIds = baseEvents.map(r => r.id).filter(Boolean);
+    const coverByEvent = new Map();
+    const galleryByEvent = new Map();
+
+    const shapeAttachment = (row) => ({
+      attachment_id: row.id,
+      media_id: row.media_id,
+      role: row.role,
+      title: row.title,
+      caption: row.caption,
+      alt_text: row.alt_text,
+      is_primary: Boolean(row.is_primary),
+      sort_order: typeof row.sort_order === "number" ? row.sort_order : 0,
+      storage_bucket: row.storage_bucket,
+      storage_path: row.storage_path,
+      media_type: row.media_type,
+      status: row.status,
+      mime_type: row.mime_type,
+      original_filename: row.original_filename,
+      file_size_bytes: row.file_size_bytes,
+      checksum_sha256: row.checksum_sha256,
+      width: row.width,
+      height: row.height,
+      duration_seconds: row.duration_seconds,
+      public_url: row.public_url,
+      preview_url: row.preview_url,
+      source_url: row.source_url,
+      credits: row.credits,
+      attachment_metadata: row.attachment_metadata || {},
+      asset_metadata: row.asset_metadata || {}
+    });
+
+    if (eventIds.length) {
+      try {
+        const attachmentColumns = [
+          "id",
+          "media_id",
+          "event_id",
+          "role",
+          "title",
+          "caption",
+          "alt_text",
+          "is_primary",
+          "sort_order",
+          "storage_bucket",
+          "storage_path",
+          "media_type",
+          "status",
+          "mime_type",
+          "original_filename",
+          "file_size_bytes",
+          "checksum_sha256",
+          "width",
+          "height",
+          "duration_seconds",
+          "public_url",
+          "preview_url",
+          "source_url",
+          "credits",
+          "attachment_metadata",
+          "asset_metadata"
+        ].join(",");
+
+        const { data: mediaRows, error: mediaError } = await supabase
+          .from("media_attachments_expanded")
+          .select(attachmentColumns)
+          .in("event_id", eventIds);
+
+        if (mediaError) throw mediaError;
+
+        for (const row of mediaRows || []) {
+          if (!row || !row.event_id) continue;
+          const shaped = shapeAttachment(row);
+          if (row.role === "cover") {
+            const existing = coverByEvent.get(row.event_id);
+            if (!existing) {
+              coverByEvent.set(row.event_id, shaped);
+              continue;
+            }
+            const scoreExisting = (existing.is_primary ? 1 : 0);
+            const scoreIncoming = (shaped.is_primary ? 1 : 0);
+            if (scoreIncoming > scoreExisting) {
+              coverByEvent.set(row.event_id, shaped);
+            } else if (scoreIncoming === scoreExisting) {
+              const sortExisting = existing.sort_order ?? 0;
+              const sortIncoming = shaped.sort_order ?? 0;
+              if (sortIncoming < sortExisting) {
+                coverByEvent.set(row.event_id, shaped);
+              }
+            }
+          } else {
+            const list = galleryByEvent.get(row.event_id) || [];
+            list.push(shaped);
+            galleryByEvent.set(row.event_id, list);
+          }
+        }
+
+        for (const list of galleryByEvent.values()) {
+          list.sort((a, b) => {
+            const sortDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+            if (sortDiff !== 0) return sortDiff;
+            if (a.is_primary === b.is_primary) return 0;
+            return a.is_primary ? -1 : 1;
+          });
+        }
+      } catch (mediaErr) {
+        console.warn("Media lookup fallback error:", mediaErr?.message || mediaErr);
+      }
+    }
+
     const upperLang = String(lang).toUpperCase();
-    const rows = (data || []).map(r => {
+    const rows = baseEvents.map(r => {
       const { from_year, to_year } = computeYears(r);
       const event =
         upperLang === "IT" ? (r.event_it ?? r.event_en) : (r.event_en ?? r.event_it);
@@ -167,6 +279,15 @@ app.get("/api/events", async (req, res) => {
         upperLang === "IT" ? (r.group_event_it ?? r.group_event_en) : (r.group_event_en ?? r.group_event_it);
       const wikipedia =
         upperLang === "IT" ? (r.wikipedia_it ?? r.wikipedia_en) : (r.wikipedia_en ?? r.wikipedia_it);
+
+      const coverAttachment = coverByEvent.get(r.id) || null;
+      const gallery = galleryByEvent.get(r.id) || [];
+      const coverUrl = coverAttachment
+        ? (coverAttachment.public_url || coverAttachment.preview_url || coverAttachment.source_url)
+        : (r.image_url ?? null);
+      const galleryUrls = gallery
+        .map(item => item.public_url || item.preview_url || item.source_url)
+        .filter(Boolean);
 
       return {
         id: r.id,
@@ -181,7 +302,13 @@ app.get("/api/events", async (req, res) => {
         longitude: r.longitude,
         wikipedia,
         from_year,
-        to_year
+        to_year,
+        image_url: coverUrl,
+        images: galleryUrls,
+        media: {
+          cover: coverAttachment,
+          gallery
+        }
       };
     });
 
