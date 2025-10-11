@@ -1,6 +1,7 @@
 // lib/supabaseServerClient.ts
 // USO: SOLO in route/server (mai in componenti client)
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
@@ -26,6 +27,7 @@ function readEnvLocalVar(name: string): string | null {
     const re = new RegExp(`^${name}=(.*)$`, "m");
     const m = txt.match(re);
     if (!m) return null;
+
     let v = (m[1] || "").trim();
     // rimuove eventuali apici
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
@@ -46,7 +48,7 @@ function resolveServiceRoleKey(): string | null {
   );
 }
 
-/** Risolve la anon key per il server client (prima ENV, poi .env.local). */
+/** Risolve la anon key in modo robusto (prima ENV, poi .env.local). */
 function resolveAnonKey(): string | null {
   return (
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -80,30 +82,49 @@ if (!anonKey) {
 
 /**
  * Client ADMIN (service-role): usalo SOLO in route server protette (es. /api/admin/*).
- * Disabilitiamo persistenza token e auto-refresh.
+ * ⚠️ Mai esporre al client. Non persiste la sessione.
  */
 export const supabaseAdmin = createAdminClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
 });
 
 /**
- * Client SERVER per leggere sessione utente nelle API (anon key + cookies).
- * Da usare dentro route handlers (Next.js App Router).
+ * Ritorna un Supabase SSR client basato su cookies.
+ * - Se siamo in ambiente Next (headers/cookies disponibili), usa i relativi store
+ * - Altrimenti, se viene passato un adapter cookies custom, usa quello
+ * - Fallback: crea un server client con adapter cookies "vuoto" (per test/unit)
  */
 export function getServerSupabase(cookies?: {
-  get: (name: string) => string | undefined;
-  set: (name: string, value: string, options: CookieOptions) => void;
-  remove: (name: string, options: CookieOptions) => void;
-}) {
-  // Se non passano un gestore cookies, usiamo quello di Next (caricato lazy per evitare import lato edge quando non serve)
-  if (!cookies) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const headers = require("next/headers");
-    const cookieStore = headers.cookies();
+  get(name: string): string | undefined;
+  set(name: string, value: string, options: CookieOptions): void;
+  remove(name: string, options: CookieOptions): void;
+}): SupabaseClient {
+  // Caso Next.js runtime: usa headers/cookies native APIs
+  let nextHeadersFn: any = null;
+  let nextCookiesFn: any = null;
+  try {
+    // import lazy per evitare errori in ambienti senza Next runtime
+    const nh = require("next/headers");
+    nextHeadersFn = nh.headers;
+    nextCookiesFn = nh.cookies;
+  } catch {
+    // ignoriamo: non siamo in Next runtime
+  }
+
+  if (typeof nextHeadersFn === "function" && typeof nextCookiesFn === "function") {
+    const cookieStore = nextCookiesFn();
     return createServerClient(supabaseUrl!, anonKey!, {
       cookies: {
         get(name: string) {
-          return cookieStore.get(name)?.value;
+          try {
+            const c = cookieStore.get(name);
+            return c?.value;
+          } catch {
+            return undefined;
+          }
         },
         set(name: string, value: string, options: CookieOptions) {
           try {
@@ -119,6 +140,31 @@ export function getServerSupabase(cookies?: {
     });
   }
 
+  // Caso adapter custom fornito da chi invoca
+  if (cookies) {
+    return createServerClient(supabaseUrl!, anonKey!, {
+      cookies: {
+        get: cookies.get,
+        set: cookies.set,
+        remove: cookies.remove,
+      },
+    });
+  }
+
   // Caso custom (test/unit)
-  return createServerClient(supabaseUrl!, anonKey!, { cookies });
+  return createServerClient(supabaseUrl!, anonKey!, { cookies: {
+    get: () => undefined,
+    set: () => {},
+    remove: () => {},
+  } });
+}
+
+/**
+ * ✅ EXPORT RICHIESTO DAL TUO CODICE
+ * Thin wrapper per compatibilità con chi fa:
+ *   import { createClient } from '@/lib/supabaseServerClient'
+ * Restituisce un client SSR pronto all'uso in Server Actions / Route Handlers.
+ */
+export function createClient(): SupabaseClient {
+  return getServerSupabase();
 }
