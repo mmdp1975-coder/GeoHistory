@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseBrowserClient";
+import RatingSummary from "../../components/RatingSummary"; // ⬅️ NEW: media + conteggio, sola lettura
 
 type UUID = string;
 
@@ -370,10 +371,10 @@ export default function TimelinePage() {
 
         const ids = groupEvents.map(g => g.id);
         const { data, error: favErr } = await supabase
-          .from("group_event_favourites")              // ⬅️ table name updated
+          .from("group_event_favourites")
           .select("group_event_id")
           .in("group_event_id", ids)
-          .eq("profile_id", user.id);                  // ⬅️ column name updated
+          .eq("profile_id", user.id);
         if (favErr) return;
         const s = new Set<UUID>((data || []).map((r: any) => r.group_event_id as UUID));
         if (!cancelled) setFavs(s);
@@ -394,14 +395,14 @@ export default function TimelinePage() {
       if (isFav) next.delete(groupEventId); else next.add(groupEventId);
       setFavs(next);
       if (isFav) {
-        const { error } = await supabase.from("group_event_favourites") // ⬅️ table name updated
+        const { error } = await supabase.from("group_event_favourites")
           .delete()
-          .eq("profile_id", user.id)                                   // ⬅️ column name updated
+          .eq("profile_id", user.id)
           .eq("group_event_id", groupEventId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("group_event_favourites") // ⬅️ table name updated
-          .insert({ profile_id: user.id, group_event_id: groupEventId }); // ⬅️ column name updated
+        const { error } = await supabase.from("group_event_favourites")
+          .insert({ profile_id: user.id, group_event_id: groupEventId });
         if (error) throw error;
       }
     } catch (e: any) {
@@ -782,7 +783,7 @@ export default function TimelinePage() {
                       </div>
                     )}
 
-                    {/* Favourite pill */}
+                    {/* Favourite heart */}
                     <button
                       type="button"
                       role="button"
@@ -792,24 +793,56 @@ export default function TimelinePage() {
                         e.stopPropagation();
                         toggleFavourite(e, g.id);
                       }}
-                      className="absolute left-3 top-3 z-20 pointer-events-auto inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-xs font-medium ring-1 ring-white hover:bg-white"
+                      className="absolute left-3 top-3 z-20 pointer-events-auto inline-flex items-center gap-1 rounded-full bg-white/90 p-2 text-xs font-medium ring-1 ring-white hover:bg-white"
                       style={{ color: accent }}
                       title={isFav ? "Remove from favourites" : "Add to favourites"}
                     >
-                      <span aria-hidden="true">{isFav ? "★" : "☆"}</span>
-                      <span>Favourite</span>
+                      {isFav ? (
+                        // cuore pieno
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+                          <path
+                            className="text-red-500"
+                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C12.09 5.01 13.76 4 15.5 4 18 4 20 6 20 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+                          />
+                        </svg>
+                      ) : (
+                        // cuore vuoto (outline)
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path
+                            className="text-slate-500"
+                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"
+                          />
+                        </svg>
+                      )}
                     </button>
+
                   </div>
 
                   <div className="p-4">
                     <div className="mb-1 line-clamp-1 text-[15px] font-semibold tracking-tight">
                       {g.title || g.slug || "Untitled"}
                     </div>
-                    <div className="text-sm text-neutral-600">
-                      {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
-                      {typeof g.earliest_year === "number" && (
-                        <span className="text-neutral-400"> • from {formatYear(g.earliest_year)}</span>
-                      )}
+
+                    {/* ROW: info a sinistra, rating summary a destra */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm text-neutral-600">
+                        {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
+                        {typeof g.earliest_year === "number" && (
+                          <span className="text-neutral-400"> • from {formatYear(g.earliest_year)}</span>
+                        )}
+                      </div>
+                      <div className="shrink-0">
+                        <RatingSummary groupEventId={g.id} />
+                      </div>
                     </div>
                   </div>
                 </Link>
@@ -821,4 +854,3 @@ export default function TimelinePage() {
     </div>
   );
 }
-

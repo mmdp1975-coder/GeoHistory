@@ -6,21 +6,25 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseBrowserClient";
+import RatingSummary from "../../components/RatingSummary"; // ⬅️ NEW
+
+/** === Config percorso Timeline ===
+ * Se la tua Timeline ha un path diverso, cambia qui.
+ */
+const TIMELINE_PATH = "/module/timeline";
 
 /* -------- Types -------- */
 type AnyObj = Record<string, any>;
-type AggRow = { group_event_id: string; favourites_count: number; last_added_at: string | null };
 type CardModel = {
   id: string;
   title: string;
   subtitle?: string;
   imageUrl?: string | null;
   addedAt?: string | null;
-  count: number;
-  mine: boolean;
+  mine: boolean; // in questa pagina è sempre true
 };
 
-/* -------- Helpers data -------- */
+/* -------- Helpers -------- */
 function pickFirst<T = any>(obj: AnyObj, keys: string[]): T | undefined {
   for (const k of keys) {
     const v = obj?.[k];
@@ -44,6 +48,21 @@ function referrerLandingPath(): string | null {
   }
 }
 
+/* -------- UI: Heart Icon -------- */
+function HeartIcon({ filled }: { filled: boolean }) {
+  if (filled) {
+    return (
+      <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
+        <path
+          className="text-red-500"
+          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C12.09 5.01 13.76 4 15.5 4 18 4 20 6 20 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+        />
+      </svg>
+    );
+  }
+  return null;
+}
+
 /* -------- Page -------- */
 export default function FavouritesPage() {
   const router = useRouter();
@@ -52,6 +71,7 @@ export default function FavouritesPage() {
   const [landingHref, setLandingHref] = useState<string>("/landing");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [uid, setUid] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -61,17 +81,20 @@ export default function FavouritesPage() {
         setLoading(true);
         setErr(null);
 
+        // Auth
         const { data: userData, error: userErr } = await supabase.auth.getUser();
         if (userErr) throw userErr;
-        const uid = userData?.user?.id ?? null;
+        const myUid = userData?.user?.id ?? null;
+        setUid(myUid);
 
+        // Landing
         const fromRef = referrerLandingPath();
         if (fromRef) setLandingHref(fromRef);
-        else if (uid) {
+        else if (myUid) {
           const { data: prof } = await supabase
             .from("profiles")
             .select("landing_slug, persona, persona_code")
-            .eq("id", uid)
+            .eq("id", myUid)
             .maybeSingle();
           const slug =
             (prof as any)?.landing_slug ??
@@ -83,37 +106,38 @@ export default function FavouritesPage() {
           setLandingHref("/landing");
         }
 
-        const { data: agg, error: aggErr } = await supabase.rpc("get_favourites_all");
-        if (aggErr) throw aggErr;
-        const rows = (agg ?? []) as AggRow[];
-        if (!rows.length) {
+        // Non loggato: niente preferiti
+        if (!myUid) {
           if (active) setCards([]);
           return;
         }
 
-        let mySet = new Set<string>();
-        if (uid) {
-          const { data: mine, error: mineErr } = await supabase
-            .from("group_event_favourites")
-            .select("group_event_id")
-            .eq("profile_id", uid);
-          if (mineErr) throw mineErr;
-          mySet = new Set((mine ?? []).map((r: any) => String(r.group_event_id)));
+        // === SOLO I MIEI PREFERITI ===
+        const { data: favRows, error: favErr } = await supabase
+          .from("group_event_favourites")
+          .select("group_event_id, created_at")
+          .eq("profile_id", myUid);
+        if (favErr) throw favErr;
+
+        const ids = (favRows ?? []).map((r: any) => r.group_event_id);
+        if (!ids.length) {
+          if (active) setCards([]);
+          return;
         }
 
-        const ids = rows.map((r) => r.group_event_id);
+        // Group events
         const { data: ges, error: geErr } = await supabase
           .from("group_events")
           .select("*")
           .in("id", ids);
         if (geErr) throw geErr;
 
-        const byId = new Map<string, AggRow>(rows.map((r) => [r.group_event_id, r]));
+        const createdMap = new Map<string, string | null>();
+        (favRows ?? []).forEach((r: any) => createdMap.set(String(r.group_event_id), r.created_at ?? null));
+
         const mapped: CardModel[] = (ges ?? []).map((raw: AnyObj) => {
           const id = String(raw.id);
-          const a = byId.get(id);
-          const title =
-            pickFirst<string>(raw, ["title", "name"]) ?? `Journey ${id.slice(0, 8)}…`;
+          const title = pickFirst<string>(raw, ["title", "name"]) ?? `Journey ${id.slice(0, 8)}…`;
           const subtitle =
             pickFirst<string>(raw, ["subtitle", "summary"]) ??
             truncate(pickFirst<string>(raw, ["description"]), 140) ??
@@ -121,22 +145,21 @@ export default function FavouritesPage() {
           const imageUrl =
             pickFirst<string>(raw, ["cover_image_url", "image_url", "thumbnail_url", "coverUrl"]) ??
             null;
-
           return {
             id,
             title,
             subtitle,
             imageUrl,
-            addedAt: a?.last_added_at ?? null,
-            count: a?.favourites_count ?? 0,
-            mine: mySet.has(id),
+            addedAt: createdMap.get(id) ?? null,
+            mine: true,
           };
         });
 
         mapped.sort((a, b) => {
           const ta = a.addedAt ? new Date(a.addedAt).getTime() : 0;
           const tb = b.addedAt ? new Date(b.addedAt).getTime() : 0;
-          return tb - ta;
+          if (tb !== ta) return tb - ta;
+          return a.title.localeCompare(b.title);
         });
 
         if (active) setCards(mapped);
@@ -152,37 +175,21 @@ export default function FavouritesPage() {
     };
   }, []);
 
-  async function onToggleStar(groupEventId: string, mine: boolean) {
+  // Toggle: qui serve solo a rimuovere (unfavourite) e nascondere la card
+  async function onToggleHeart(groupEventId: string) {
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const uid = userData?.user?.id ?? null;
-      if (!uid) throw new Error("Not authenticated");
+      const myUid = userData?.user?.id ?? null;
+      if (!myUid) throw new Error("Not authenticated");
 
-      if (mine) {
-        const { error } = await supabase
-          .from("group_event_favourites")
-          .delete()
-          .eq("profile_id", uid)
-          .eq("group_event_id", groupEventId);
-        if (error) throw error;
+      const { error } = await supabase
+        .from("group_event_favourites")
+        .delete()
+        .eq("profile_id", myUid)
+        .eq("group_event_id", groupEventId);
+      if (error) throw error;
 
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === groupEventId ? { ...c, mine: false, count: Math.max(0, (c.count ?? 0) - 1) } : c
-          )
-        );
-      } else {
-        const { error } = await supabase
-          .from("group_event_favourites")
-          .insert([{ profile_id: uid, group_event_id: groupEventId }]);
-        if (error && (error as any).code !== "23505") throw error;
-
-        setCards((prev) =>
-          prev.map((c) =>
-            c.id === groupEventId ? { ...c, mine: true, count: (c.count ?? 0) + 1 } : c
-          )
-        );
-      }
+      setCards((prev) => prev.filter((c) => c.id !== groupEventId));
     } catch (e: any) {
       setErr(e?.message ?? "Toggle error");
     }
@@ -208,7 +215,9 @@ export default function FavouritesPage() {
         </div>
       )}
 
-      {!loading && !hasCards && <EmptyState />}
+      {!loading && !uid && <NotLogged landingHref={landingHref} />}
+
+      {!loading && uid && !hasCards && <EmptyState />}
 
       {/* Grid */}
       <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -231,15 +240,15 @@ export default function FavouritesPage() {
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-amber-100 to-slate-100" />
                   )}
+
+                  {/* Cuore: sempre pieno */}
                   <button
-                    onClick={() => onToggleStar(c.id, c.mine)}
-                    className="absolute left-2 top-2 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-sm font-semibold text-slate-900 shadow-sm backdrop-blur transition hover:bg-white"
-                    title={c.mine ? "Remove from my favourites" : "Add to my favourites"}
+                    onClick={() => onToggleHeart(c.id)}
+                    className="absolute left-2 top-2 inline-flex items-center rounded-full bg-white/90 p-2 text-sm font-semibold text-slate-900 shadow-sm backdrop-blur transition hover:bg-white"
+                    title="Rimuovi dai miei preferiti"
+                    aria-pressed={true}
                   >
-                    <span aria-hidden className="text-xl" style={{ lineHeight: 1 }}>
-                      {c.mine ? "★" : "☆"}
-                    </span>
-                    <span className="text-xs text-slate-700">{c.count}</span>
+                    <HeartIcon filled={true} />
                   </button>
                 </div>
 
@@ -256,11 +265,12 @@ export default function FavouritesPage() {
                   {c.subtitle && <p className="line-clamp-3 text-sm text-slate-600">{c.subtitle}</p>}
                   {c.addedAt && (
                     <p className="pt-1 text-xs text-slate-500">
-                      Last added {new Date(c.addedAt).toLocaleString()}
+                      Added {new Date(c.addedAt).toLocaleString()}
                     </p>
                   )}
                 </div>
 
+                {/* Footer: Open • RatingSummary • Share */}
                 <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
                   <button
                     onClick={() => onOpen(c.id)}
@@ -269,6 +279,10 @@ export default function FavouritesPage() {
                   >
                     Open
                   </button>
+
+                  {/* ⬇️ media • conteggio */}
+                  <RatingSummary groupEventId={c.id} />
+
                   <Link
                     href={`/share/journey/${c.id}`}
                     className="text-slate-600 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-500"
@@ -283,20 +297,37 @@ export default function FavouritesPage() {
   );
 }
 
-/* ---------- Helpers UI ---------- */
+/* ---------- UI helpers ---------- */
+function NotLogged({ landingHref }: { landingHref: string }) {
+  return (
+    <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900 shadow-sm">
+      <h3 className="mb-1 text-lg font-semibold">Accedi per vedere i tuoi preferiti</h3>
+      <p className="mb-4 text-sm">
+        I preferiti sono legati al tuo profilo. Entra per ritrovarli su qualsiasi dispositivo.
+      </p>
+      <Link
+        href={landingHref || "/landing"}
+        className="inline-flex items-center rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm transition hover:bg-amber-50"
+      >
+        Vai alla pagina iniziale
+      </Link>
+    </div>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-gradient-to-br from-amber-200 to-amber-100" />
+      <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-gradient-to-br from-rose-200 to-rose-100" />
       <h3 className="mb-1 text-lg font-semibold">No favourites yet</h3>
       <p className="mb-4 text-sm text-slate-600">
-        Quando i profili aggiungono preferiti, appariranno qui.
+        Aggiungi ai preferiti (cuore) i tuoi Group Event: appariranno qui. Puoi cercarli dalla Timeline.
       </p>
       <Link
-        href="/explore"
+        href={TIMELINE_PATH}
         className="inline-flex items-center rounded-xl border border-slate-300 px-3 py-2 text-sm transition hover:bg-slate-50"
       >
-        Explore Journeys
+        Open Timeline
       </Link>
     </div>
   );

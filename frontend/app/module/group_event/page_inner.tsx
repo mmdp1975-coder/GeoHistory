@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { supabase } from "@/lib/supabaseBrowserClient";
+import RatingStars from "../../components/RatingStars"; // ★ stelle rating (media + voti)
 
 /* =========================================================================
    SCHEMA (campi usati)
@@ -15,8 +16,7 @@ import { supabase } from "@/lib/supabaseBrowserClient";
    - event_group_event: event_id, group_event_id
    - events_list: id, latitude, longitude, era, year_from, year_to, exact_date, location, image_url
    - event_translations: event_id, lang, title, description, description_short, wikipedia_url, video_url
-   - event_type_map: event_id, type_code
-   - event_types: code, icon, icon_name
+   - group_event_favourites: id, group_event_id, profile_id, created_at   <-- per CUORE
    ========================================================================= */
 
 type AnyObj = Record<string, any>;
@@ -30,35 +30,21 @@ type EventCore = {
   year_to?: number | null;
   exact_date?: string | null;
   location?: string | null;
-  image_url?: string | null;   // <-- immagine non localizzata
+  image_url?: string | null;
 };
 
 type EventVM = EventCore & {
   title: string;
   description: string;
   wiki_url: string | null;
-  video_url: string | null;    // <-- video localizzato
-  order_key: number;           // era + year_from (fallback year_to)
+  video_url: string | null;
+  order_key: number;
 };
 
 // ===== Icone inline (fallback) =====
 const MODERN_ICONS: Record<string, string> = {
   pin: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
-  battle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9l-1-1 7-7 1 1-7 7z"/><path d="M3 21l6-6"/><path d="M3 17l4 4"/></svg>`,
-  castle: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V8l3-2 3 2 3-2 3 2 3-2 3 2v14"/><path d="M3 14h18"/><path d="M8 22v-6h8v6"/></svg>`,
-  museum: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-6 9 6"/><path d="M21 10v9H3V10"/><path d="M7 21v-8m5 8v-8m5 8v-8"/></svg>`,
-  ship: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 19s3 2 9 2 9-2 9-2"/><path d="M5 18l2-7h10l2 7"/><path d="M7 11V6h10v5"/></svg>`,
-  church: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><path d="M8 8h8"/><path d="M6 22V12l6-4 6 4v10"/><path d="M10 22v-6h4v6"/></svg>`,
-  monument: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h4l3 6-5 5-5-5 3-6z"/><path d="M4 21h16"/></svg>`,
-  dig: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M7 22v-7l4-4 4 4v7"/></svg>`,
-  person: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.5 8.5 0 0 1 13 0"/></svg>`,
 };
-function normalizeIconKey(s?: string | null): string | null {
-  if (!s) return null;
-  const k = s.toLowerCase().trim();
-  const key = k.replace(/[^a-z0-9_-]+/g, "");
-  return key || null;
-}
 const isUrlIcon = (s: string) => {
   const t = s.toLowerCase();
   return (
@@ -77,15 +63,33 @@ const isEmojiish = (s: string) => s.trim().length <= 4;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Normalizza l'era in "BC" | "AD" (default AD) */
+// ---- Cuore (SVG) ----
+function HeartIcon({ filled, className = "" }: { filled: boolean; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      role="img"
+      width="22"
+      height="22"
+    >
+      <path
+        d="M12.001 20.727s-7.2-4.397-9.6-8.318C.77 9.55 2.027 6.5 4.93 5.57c1.91-.61 4.06.03 5.37 1.65 1.31-1.62 3.46-2.26 5.37-1.65 2.903.93 4.16 3.98 2.53 6.84-2.4 3.92-9.6 8.317-9.6 8.317Z"
+        fill={filled ? "#ef4444" : "none"}
+        stroke="#ef4444"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
 function normEra(era?: string | null): "BC" | "AD" {
   if (!era) return "AD";
   const e = era.toUpperCase().trim();
   if (e === "BC" || e === "BCE") return "BC";
   return "AD";
 }
-
-/** Chiave di ordinamento cronologico */
 function chronoOrderKey(e: { era?: string | null; year_from?: number | null; year_to?: number | null }) {
   const era = normEra(e.era);
   const from = typeof e.year_from === "number" ? e.year_from : null;
@@ -97,8 +101,6 @@ function chronoOrderKey(e: { era?: string | null; year_from?: number | null; yea
   if (!isFinite(y)) return 9_999_999_999;
   return y * 100 + bias;
 }
-
-/** Formattazione date/anni */
 function formatWhen(ev: EventVM) {
   const e = normEra(ev.era);
   if (typeof ev.year_from === "number" && typeof ev.year_to === "number" && ev.year_to !== ev.year_from) {
@@ -109,28 +111,18 @@ function formatWhen(ev: EventVM) {
   if (ev.exact_date) { try { return new Date(ev.exact_date).toLocaleDateString(); } catch {} }
   return "—";
 }
-
 function parseExactDateYear(date?: string | null): number | null {
   if (!date) return null;
-  try {
-    const d = new Date(date);
-    if (Number.isNaN(d.getTime())) return null;
-    return d.getUTCFullYear();
-  } catch {
-    return null;
-  }
+  try { const d = new Date(date); if (Number.isNaN(d.getTime())) return null; return d.getUTCFullYear(); } catch { return null; }
 }
-
 function signedYear(value: number | null | undefined, era?: string | null): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   const abs = Math.abs(value);
   return normEra(era) === "BC" ? -abs : abs;
 }
-
 type TimelineSpan = { min: number; max: number; center: number; start: number };
 type TimelineItem = { ev: EventVM; index: number; min: number; max: number; center: number; start: number; progress: number };
 type TimelineData = { min: number; max: number; range: number; items: TimelineItem[] };
-
 function buildTimelineSpan(ev: EventVM): TimelineSpan | null {
   const values: number[] = [];
   const from = signedYear(ev.year_from, ev.era);
@@ -148,7 +140,6 @@ function buildTimelineSpan(ev: EventVM): TimelineSpan | null {
   const start = from != null ? from : values[0];
   return { min, max, center, start };
 }
-
 function formatTimelineYearLabel(year: number) {
   if (!Number.isFinite(year)) return "n/a";
   const rounded = Math.round(year);
@@ -156,7 +147,6 @@ function formatTimelineYearLabel(year: number) {
   if (rounded === 0) return "0";
   return `${rounded} AD`;
 }
-
 function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [];
   const span = Math.abs(max - min);
@@ -178,11 +168,9 @@ function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
   }
   return ticks;
 }
-
 const POINTER_STYLE = `
 @keyframes timeline-pointer-glow { 0% { opacity: 0.45; transform: scale(0.9); } 50% { opacity: 0.7; transform: scale(1.05); } 100% { opacity: 0.45; transform: scale(0.9); } }
 `;
-
 function TimelinePointer({ className = "", animated = false }: { className?: string; animated?: boolean }): JSX.Element {
   return (
     <span className={className} role="presentation">
@@ -243,6 +231,9 @@ export default function GroupEventModulePage() {
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
+  // ---- Utente corrente (serve per CUORE) ----
+  const [userId, setUserId] = useState<string | null>(null);
+
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
     if (raw) {
@@ -260,7 +251,7 @@ export default function GroupEventModulePage() {
     }
   }, [sp]);
 
-  // ---------- Landing ----------
+  // ---------- Landing + utente ----------
   useEffect(() => {
     (async () => {
       try {
@@ -270,20 +261,20 @@ export default function GroupEventModulePage() {
             const u = new URL(ref);
             if (/^\/landing\/[^/]+$/i.test(u.pathname)) {
               setLandingHref(u.pathname);
-              return;
             }
           } catch {}
         }
         const { data: userData } = await supabase.auth.getUser();
-        const uid = userData?.user?.id ?? null;
-        if (!uid) {
+        const myUid = userData?.user?.id ?? null;
+        setUserId(myUid);
+        if (!myUid) {
           setLandingHref("/landing");
           return;
         }
         const { data: prof } = await supabase
           .from("profiles")
           .select("landing_slug, persona, persona_code")
-          .eq("id", uid)
+          .eq("id", myUid)
           .maybeSingle();
         const slug =
           (prof as any)?.landing_slug ?? (prof as any)?.persona ?? (prof as any)?.persona_code ?? null;
@@ -301,17 +292,19 @@ export default function GroupEventModulePage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  // Icone per event type
   const [iconByEventId, setIconByEventId] = useState<Map<string, { raw: string; keyword: string | null }>>(new Map());
 
-  // ---------- MAPPA ----------
+  // ---------- MAPPA (unico blocco) ----------
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Contenitore visibile per la mappa (mobile/desktop)
+  // Liste/scroll refs (unico blocco)
+  const mobileListRef = useRef<HTMLDivElement | null>(null);
+  const bottomListRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
   function getVisibleMapContainer(): HTMLElement | null {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-map="gehj"]'));
     for (const el of nodes) {
@@ -324,7 +317,6 @@ export default function GroupEventModulePage() {
     return null;
   }
 
-  // Init mappa robusto
   useEffect(() => {
     if (typeof window === "undefined" || mapRef.current) return;
 
@@ -385,7 +377,6 @@ export default function GroupEventModulePage() {
         setLoading(true);
         setErr(null);
 
-        // group_event base
         const { data: geRows, error: geErr } = await supabase
           .from("group_events")
           .select("*")
@@ -395,7 +386,6 @@ export default function GroupEventModulePage() {
         if (!geRows?.length) throw new Error("Group event not found");
         const geData = geRows[0];
 
-        // group_event_translations (per lingua desiderata, fallback a qualsiasi)
         let geTrData: any = null;
         const { data: geTrExact } = await supabase
           .from("group_event_translations")
@@ -414,7 +404,6 @@ export default function GroupEventModulePage() {
           geTrData = geTrAny?.[0] || null;
         }
 
-        // event links
         const { data: links, error: linkErr } = await supabase
           .from("event_group_event")
           .select("event_id, events_list(*)")
@@ -434,12 +423,11 @@ export default function GroupEventModulePage() {
               year_to: e.year_to ?? null,
               exact_date: e.exact_date ?? null,
               location: e.location ?? null,
-              image_url: e.image_url ?? null, // <-- nuova cover evento
+              image_url: e.image_url ?? null,
             })) || [];
 
         const ids = cores.map((c) => c.id);
 
-        // event_translations: mappa per event_id con priorità desiredLang
         const trMap = new Map<string, { title?: string | null; description?: string | null; description_short?: string | null; wikipedia_url?: string | null; video_url?: string | null }>();
         if (ids.length) {
           const { data: trs } = await supabase
@@ -447,17 +435,14 @@ export default function GroupEventModulePage() {
             .select("event_id, lang, title, description, description_short, wikipedia_url, video_url")
             .in("event_id", ids);
 
-          // fallback generico
           (trs ?? []).forEach((t: any) => {
             if (!trMap.has(t.event_id)) trMap.set(t.event_id, t);
           });
-          // override lingua desiderata
           (trs ?? [])
             .filter((t: any) => t.lang?.toLowerCase() === desiredLang)
             .forEach((t: any) => trMap.set(t.event_id, t));
         }
 
-        // ViewModels + ordine
         const vms: EventVM[] = cores.map((c) => {
           const tr = trMap.get(c.id) || ({} as any);
           return {
@@ -471,44 +456,9 @@ export default function GroupEventModulePage() {
         });
         vms.sort((a, b) => a.order_key - b.order_key);
 
-        // Icone type
-        const iconMap = new Map<string, { raw: string; keyword: string | null }>();
-        if (ids.length) {
-          const { data: etmRows } = await supabase
-            .from("event_type_map")
-            .select("event_id, type_code")
-            .in("event_id", ids);
-
-          const typeCodes = Array.from(new Set((etmRows ?? []).map((r: any) => String(r.type_code)).filter(Boolean)));
-          let typeInfo = new Map<string, { raw?: string | null; name?: string | null }>();
-          if (typeCodes.length) {
-            const { data: teRows } = await supabase
-              .from("event_types")
-              .select("code, icon, icon_name")
-              .in("code", typeCodes);
-            (teRows ?? []).forEach((t: any) => {
-              typeInfo.set(String(t.code), { raw: t.icon ?? null, name: t.icon_name ?? null });
-            });
-          }
-          (etmRows ?? []).forEach((m: any) => {
-            const evId = String(m.event_id);
-            if (iconMap.has(evId)) return;
-            const code = m?.type_code ? String(m.type_code) : null;
-            if (!code) return;
-            const t = typeInfo.get(code);
-            const raw = (t?.raw && t.raw.trim())
-              ? t.raw.trim()
-              : (t?.name && t.name.trim())
-              ? t.name.trim()
-              : code.trim();
-            iconMap.set(evId, { raw, keyword: normalizeIconKey(raw) || normalizeIconKey(code) });
-          });
-        }
-
         setGe(geData);
         setGeTr(geTrData);
         setRows(vms);
-        setIconByEventId(iconMap);
         setSelectedIndex(0);
       } catch (e: any) {
         setErr(e?.message ?? "Unknown error");
@@ -519,7 +469,83 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang]);
 
-  // ---------- MARKERS con anti-overlap + selezione grande ----------
+  // ---------- Preferiti (CUORE) ----------
+  const [isFav, setIsFav] = useState<boolean>(false);
+  const [savingFav, setSavingFav] = useState<boolean>(false);
+
+  useEffect(() => {
+    (async () => {
+      if (!gid) return;
+      if (!userId) { setIsFav(false); return; }
+      try {
+        // prova con profile_id (schema più probabile)
+        let { data, error } = await supabase
+          .from("group_event_favourites")
+          .select("id")
+          .eq("group_event_id", gid)
+          .eq("profile_id", userId)
+          .maybeSingle();
+        if (error) {
+          // fallback: alcuni schemi usano user_id
+          const alt = await supabase
+            .from("group_event_favourites")
+            .select("id")
+            .eq("group_event_id", gid)
+            .eq("user_id", userId)
+            .maybeSingle();
+          data = alt.data as any;
+        }
+        setIsFav(!!data);
+      } catch (e) {
+        // in caso di errore lascio false senza rompere la UI
+        setIsFav(false);
+      }
+    })();
+  }, [gid, userId]);
+
+  async function toggleFavourite() {
+    if (!gid) return;
+    if (!userId) {
+      alert("Per usare i preferiti devi accedere.");
+      router.push(landingHref || "/landing");
+      return;
+    }
+    if (savingFav) return;
+    setSavingFav(true);
+    try {
+      if (isFav) {
+        // DELETE
+        const del1 = await supabase
+          .from("group_event_favourites")
+          .delete()
+          .eq("group_event_id", gid)
+          .eq("profile_id", userId);
+        if (del1.error) {
+          await supabase
+            .from("group_event_favourites")
+            .delete()
+            .eq("group_event_id", gid)
+            .eq("user_id", userId);
+        }
+        setIsFav(false);
+      } else {
+        // INSERT
+        const ins = await supabase
+          .from("group_event_favourites")
+          .insert({ group_event_id: gid, profile_id: userId, created_at: new Date().toISOString() } as any);
+        if (ins.error) {
+          await supabase
+            .from("group_event_favourites")
+            .insert({ group_event_id: gid, user_id: userId, created_at: new Date().toISOString() } as any);
+        }
+        setIsFav(true);
+      }
+    } finally {
+      setSavingFav(false);
+    }
+  }
+
+  // ---------- MARKERS con anti-overlap + selezione ----------
   function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
     const n = ids.length;
     const arr: [number, number][] = [];
@@ -532,11 +558,6 @@ export default function GroupEventModulePage() {
     return arr;
   }
 
-  // Refs per auto-scroll
-  const mobileListRef = useRef<HTMLDivElement | null>(null);
-  const bottomListRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
-
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -544,7 +565,6 @@ export default function GroupEventModulePage() {
     (markersRef.current || []).forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Gruppi stesse coordinate
     const groups = new Map<string, { ids: string[]; lng: number; lat: number }>();
     rows.forEach((ev) => {
       if (ev.latitude == null || ev.longitude == null) return;
@@ -562,9 +582,6 @@ export default function GroupEventModulePage() {
     const pts: [number, number][] = [];
 
     function makeMarkerEl(ev: EventVM, idx: number) {
-      const iconInfo = iconByEventId.get(ev.id);
-      const raw = iconInfo?.raw ?? "";
-      const keyword = iconInfo?.keyword ?? null;
       const isSelected = idx === selectedIndex;
 
       const wrap = document.createElement("div");
@@ -580,44 +597,17 @@ export default function GroupEventModulePage() {
         wrap.style.zIndex = "1000";
       }
 
-      if (raw) {
-        if (isUrlIcon(raw)) {
-          const img = document.createElement("img");
-          img.src = raw;
-          img.alt = "icon";
-          img.style.width = isSelected ? "30px" : "22px";
-          img.style.height = isSelected ? "30px" : "22px";
-          img.style.objectFit = "contain";
-          img.referrerPolicy = "no-referrer";
-          wrap.appendChild(img);
-          return wrap;
-        }
-        if (isEmojiish(raw) && !MODERN_ICONS[keyword || ""]) {
-          const span = document.createElement("span");
-          span.textContent = raw;
-          span.style.fontSize = isSelected ? "24px" : "18px";
-          span.style.lineHeight = "1";
-          wrap.appendChild(span);
-          return wrap;
-        }
-      }
-
-      const svgHtml = (keyword && MODERN_ICONS[keyword]) || MODERN_ICONS["pin"];
+      // basic pin
       const holder = document.createElement("div");
-      holder.innerHTML = svgHtml;
+      holder.innerHTML = MODERN_ICONS["pin"];
       const svg = holder.firstChild as SVGElement | null;
       if (svg) {
         svg.setAttribute("width", isSelected ? "28" : "22");
         svg.setAttribute("height", isSelected ? "28" : "22");
         (svg as any).style.color = "#111827";
         wrap.appendChild(svg);
-      } else {
-        const span = document.createElement("span");
-        span.textContent = String(idx + 1);
-        span.style.fontSize = isSelected ? "14px" : "12px";
-        span.style.fontWeight = "700";
-        wrap.appendChild(span);
       }
+
       return wrap;
     }
 
@@ -653,9 +643,8 @@ export default function GroupEventModulePage() {
         map.flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
       }
     } catch {}
-  }, [rows, mapReady, selectedIndex, iconByEventId]);
+  }, [rows, mapReady, selectedIndex]);
 
-  // Pan selezione + autoplay
   useEffect(() => {
     const map = mapRef.current;
     const ev = rows[selectedIndex];
@@ -666,15 +655,7 @@ export default function GroupEventModulePage() {
     }
   }, [selectedIndex, rows]);
 
-  useEffect(() => {
-    let t: any = null;
-    if (isPlaying && rows.length > 0) {
-      t = setInterval(() => setSelectedIndex((i) => (i + 1) % rows.length), 3200);
-    }
-    return () => t && clearInterval(t);
-  }, [isPlaying, rows.length]);
-
-  // Auto-scroll dell'evento selezionato (mobile orizzontale, desktop verticale)
+  // ---- scroll attivo nelle liste ----
   useEffect(() => {
     const ev = rows[selectedIndex];
     if (!ev) return;
@@ -697,10 +678,7 @@ export default function GroupEventModulePage() {
     router.push(landingHref || "/landing");
   }
 
-
-  const current = rows[selectedIndex] ?? null;
-
-  const timelineData = useMemo<TimelineData | null>(() => {
+  const timelineData = useMemo(() => {
     if (!rows.length) return null;
 
     const annotated: { ev: EventVM; index: number; min: number; max: number; center: number }[] = [];
@@ -717,7 +695,6 @@ export default function GroupEventModulePage() {
       }
     });
 
-
     if (!annotated.length) return null;
 
     let min = annotated[0].min;
@@ -730,63 +707,14 @@ export default function GroupEventModulePage() {
     const spanValue = max - min;
     const safeSpan = spanValue === 0 ? 1 : spanValue;
 
-    const items: TimelineItem[] = annotated.map((item) => {
-      const startValue = item.min; // ← prima era item.start
+    const items = annotated.map((item) => {
+      const startValue = item.min;
       const startProgress = Math.min(1, Math.max(0, (startValue - min) / safeSpan));
-      return { ...item, progress: startProgress, start: startValue };
+      return { ...item, progress: startProgress, start: startValue } as TimelineItem;
     });
 
-    return { min, max, range: safeSpan, items };
+    return { min, max, range: safeSpan, items } as TimelineData;
   }, [rows]);
-
-  const [isAvatarMoving, setIsAvatarMoving] = useState(false);
-  const avatarMoveTimeout = useRef<number | null>(null);
-  const previousIndexRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const itemCount = timelineData?.items.length ?? 0;
-
-    if (!timelineData || itemCount <= 1) {
-      if (avatarMoveTimeout.current) {
-        window.clearTimeout(avatarMoveTimeout.current);
-        avatarMoveTimeout.current = null;
-      }
-      previousIndexRef.current = selectedIndex;
-      setIsAvatarMoving(false);
-      return;
-    }
-
-    const prevIndex = previousIndexRef.current;
-    if (prevIndex !== null && prevIndex !== selectedIndex) {
-      setIsAvatarMoving(true);
-      if (avatarMoveTimeout.current) {
-        window.clearTimeout(avatarMoveTimeout.current);
-      }
-      avatarMoveTimeout.current = window.setTimeout(() => {
-        setIsAvatarMoving(false);
-        avatarMoveTimeout.current = null;
-      }, 900);
-    }
-
-    previousIndexRef.current = selectedIndex;
-  }, [selectedIndex, timelineData?.items.length]);
-
-  useEffect(() => () => {
-    if (avatarMoveTimeout.current) {
-      window.clearTimeout(avatarMoveTimeout.current);
-      avatarMoveTimeout.current = null;
-    }
-  }, []);
-
-  const avatarProgress = useMemo(() => {
-    if (!timelineData || !timelineData.items.length) return 0;
-    const currentId = current?.id;
-    const fallback = timelineData.items[0];
-    const target = currentId
-      ? timelineData.items.find((item) => item.ev.id === currentId) || fallback
-      : fallback;
-    return target ? target.progress : 0;
-  }, [timelineData, current?.id]);
 
   const timelineTicks = useMemo(() => {
     if (!timelineData) return [];
@@ -808,11 +736,19 @@ export default function GroupEventModulePage() {
     return mids;
   }, [timelineData, timelineTicks]);
 
-  // ------------ Derived text ------------
+  // ——— Progress avatar (spostato prima dei return condizionali) ———
+  const avatarProgress = useMemo(() => {
+    if (!timelineData || !timelineData.items.length) return 0;
+    const currentId = rows[selectedIndex]?.id;
+    const fallback = timelineData.items[0];
+    const target = currentId
+      ? timelineData.items.find((item) => item.ev.id === currentId) || fallback
+      : fallback;
+    return target ? target.progress : 0;
+  }, [timelineData, rows, selectedIndex]);
+
   const geTitle = (geTr?.title || ge?.title || "Journey").toString();
   const geSubtitle = (geTr?.pitch || ge?.pitch || "").toString();
-  const geCover = ge?.cover_url ?? null;
-  const geVideo = geTr?.video_url || null;
 
   if (loading) {
     return (
@@ -843,20 +779,44 @@ export default function GroupEventModulePage() {
     );
   }
 
-  // ---------- UI ----------
-
   return (
     <div className="flex min-h-screen flex-col bg-white">
       {timelineData ? (
         <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 via-white to-white/80">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-sm sm:pr-6">
-              <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{geTitle}</h2>
+              <div className="flex items-start gap-3">
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{geTitle}</h2>
+
+                {/* ---- Cuore (favourite) + rating stelle sotto ---- */}
+                {gid && (
+                  <div className="inline-flex flex-col items-center gap-1">
+                    <button
+                      onClick={toggleFavourite}
+                      disabled={savingFav}
+                      aria-pressed={isFav}
+                      title={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                        isFav
+                          ? "border-rose-200 bg-rose-50 hover:bg-rose-100"
+                          : "border-gray-200 bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      <HeartIcon filled={isFav} />
+                    </button>
+
+                    {/* Stelle rating (media • voti) */}
+                    <RatingStars groupEventId={gid} size={18} />
+                  </div>
+                )}
+              </div>
+
               {geSubtitle ? (
                 <p className="mt-3 text-sm leading-6 text-slate-600">{geSubtitle}</p>
               ) : null}
             </div>
 
+            {/* Timeline header a destra */}
             <div className="flex-1 sm:flex sm:justify-end">
               <div className="w-full max-w-[1180px] rounded-3xl border border-blue-400/40 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-950 px-4 py-4 text-white shadow-lg sm:px-6 sm:py-4">
                 <div className="relative ml-auto h-[52px] w-full max-w-[1060px] sm:h-[72px]">
@@ -874,7 +834,7 @@ export default function GroupEventModulePage() {
                   </div>
 
                   <div
-                    className="pointer-events-none absolute top-[calc(50%-18px)] sm:top-[calc(50%-22px)]"
+                    className="pointer-events-none absolute top=[calc(50%-18px)] sm:top-[calc(50%-22px)]"
                     style={{
                       left: `${avatarProgress * 100}%`,
                       transform: "translate(-50%, 0)",
@@ -883,20 +843,18 @@ export default function GroupEventModulePage() {
                     }}
                   >
                     <TimelinePointer
-                      animated={isAvatarMoving}
+                      animated={true}
                       className="block h-8 w-8 sm:h-10 sm:w-10"
                     />
                   </div>
 
-                  <div className="absolute inset-x-0 top-[calc(50%+4px)]">
+                  <div className="absolute inset-x-0 top=[calc(50%+4px)] sm:top-[calc(50%+4px)]">
                     <div className="relative h-8">
                       {timelineTicks.map((tick) => (
                         <div
                           key={`timeline-tick-${tick}`}
                           className="absolute -translate-x-1/2 text-center"
-                          style={{
-                            left: `${((tick - timelineData.min) / timelineData.range) * 100}%`,
-                          }}
+                          style={{ left: `${((tick - timelineData.min) / timelineData.range) * 100}%` }}
                         >
                           <div className="mx-auto h-4 w-[2px] rounded-full bg-slate-300" />
                           <div className="mt-1 whitespace-nowrap text-[10px] font-medium text-blue-100/80">
@@ -908,9 +866,7 @@ export default function GroupEventModulePage() {
                         <div
                           key={`timeline-minor-tick-${tick}`}
                           className="absolute -translate-x-1/2"
-                          style={{
-                            left: `${((tick - timelineData.min) / timelineData.range) * 100}%`,
-                          }}
+                          style={{ left: `${((tick - timelineData.min) / timelineData.range) * 100}%` }}
                         >
                           <div className="mx-auto h-2.5 w-px rounded-full bg-slate-300/70" />
                         </div>
@@ -947,8 +903,6 @@ export default function GroupEventModulePage() {
             <div className="flex items-stretch gap-3 px-4 py-3 min-w-max">
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
-                const span = buildTimelineSpan(ev);
-                const label = span ? formatTimelineYearLabel(span.start) : formatWhen(ev);
                 return (
                   <button
                     key={ev.id}
@@ -983,41 +937,39 @@ export default function GroupEventModulePage() {
           </div>
         </section>
 
-        {/* DESCRIZIONE — box con immagine evento (se presente), testo scroll, wikipedia, player e video */}
+        {/* DESCRIZIONE */}
         <section className="bg-white/70 backdrop-blur">
           <div className="px-4 py-3">
             <div className="mx-auto w-full max-w-[820px]">
               <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col">
                 {/* Header sintetico */}
                 <div className="px-4 pt-3">
-                  <div className="text-sm font-semibold text-gray-900 truncate">{current?.title ?? "—"}</div>
+                  <div className="text-sm font-semibold text-gray-900 truncate">{rows[selectedIndex]?.title ?? "—"}</div>
                   <div className="text-[12.5px] text-gray-600">
-                    {current ? formatWhen(current as EventVM) : "—"}
-                    {current?.location ? ` • ${current.location}` : ""}
+                    {rows[selectedIndex] ? formatWhen(rows[selectedIndex] as EventVM) : "—"}
+                    {rows[selectedIndex]?.location ? ` • ${rows[selectedIndex]!.location}` : ""}
                   </div>
                 </div>
 
-                {/* Immagine evento (se presente) */}
-                {current?.image_url ? (
+                {rows[selectedIndex]?.image_url ? (
                   <div className="px-4 pt-3">
                     <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                      <img src={current.image_url} alt={current.title} className="h-48 w-full object-cover" />
+                      <img src={rows[selectedIndex]!.image_url!} alt={rows[selectedIndex]!.title} className="h-48 w-full object-cover" />
                     </div>
                   </div>
                 ) : null}
 
-                {/* Area testo scrollabile */}
                 <div className="px-4 pt-3">
                   <div
                     className="h-[28svh] overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap"
                     style={{ scrollbarWidth: "thin" }}
                   >
-                    {current?.description || "No description available."}
+                    {rows[selectedIndex]?.description || "No description available."}
                   </div>
-                  {current?.wiki_url ? (
+                  {rows[selectedIndex]?.wiki_url ? (
                     <div className="pt-2">
                       <a
-                        href={current.wiki_url}
+                        href={rows[selectedIndex]!.wiki_url!}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -1028,7 +980,6 @@ export default function GroupEventModulePage() {
                   ) : null}
                 </div>
 
-                {/* PLAYER */}
                 <div className="mt-3 border-t border-black/10 bg-white/95 px-3 py-2 rounded-b-2xl">
                   <div className="flex items-center gap-2">
                     <button
@@ -1053,25 +1004,24 @@ export default function GroupEventModulePage() {
                       ⏭
                     </button>
 
-                    <div className="ml-auto text-[12px] text-gray-600">
+                    <div className="ml-auto text:[12px] text-gray-600">
                       {rows.length ? <>Event <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span></> : "No events"}
                     </div>
-                  </div>
 
-                  {/* Bottone video evento (se presente) */}
-                  {current?.video_url ? (
-                    <div className="pt-2">
-                      <a
-                        href={current.video_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-                        title="Guarda il video dell'evento"
-                      >
-                        ▶ Guarda il video dell'evento
-                      </a>
-                    </div>
-                  ) : null}
+                    {rows[selectedIndex]?.video_url ? (
+                      <div className="pt-2">
+                        <a
+                          href={rows[selectedIndex]!.video_url!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                          title="Guarda il video dell'evento"
+                        >
+                          ▶ Guarda il video dell'evento
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1081,41 +1031,33 @@ export default function GroupEventModulePage() {
 
       {/* ============== DESKTOP (≥lg) ============== */}
       <div className="mx-auto hidden w-full max-w-7xl flex-1 lg:block">
-        <div
-          className="
-            grid
-            grid-cols-[500px_minmax(0,1fr)]
-            gap-0
-            h-[calc(100svh-38svh)]
-          "
-        >
-          {/* PANNELLO SINISTRO: descrizione + player + video evento */}
+        <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0 h-[calc(100svh-38svh)]">
+          {/* PANNELLO SINISTRO */}
           <section className="overflow-y-auto bg-white/70 backdrop-blur">
             <div className="px-4 py-4">
               <div className="mb-2 text-sm font-semibold text-gray-900">
-                {current?.title ?? "—"}
+                {rows[selectedIndex]?.title ?? "—"}
               </div>
               <div className="text-[12.5px] text-gray-600 mb-2">
-                {current ? formatWhen(current as EventVM) : "—"}
-                {current?.location ? ` • ${current.location}` : ""}
+                {rows[selectedIndex] ? formatWhen(rows[selectedIndex] as EventVM) : "—"}
+                {rows[selectedIndex]?.location ? ` • ${rows[selectedIndex]!.location}` : ""}
               </div>
 
-              {/* Immagine evento (se presente) */}
-              {current?.image_url ? (
+              {rows[selectedIndex]?.image_url ? (
                 <div className="mb-3">
                   <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                    <img src={current.image_url} alt={current.title} className="h-44 w-full object-cover" />
+                    <img src={rows[selectedIndex]!.image_url!} alt={rows[selectedIndex]!.title} className="h-44 w-full object-cover" />
                   </div>
                 </div>
               ) : null}
 
               <div className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
-                {current?.description || "No description available."}
+                {rows[selectedIndex]?.description || "No description available."}
               </div>
-              {current?.wiki_url ? (
+              {rows[selectedIndex]?.wiki_url ? (
                 <div className="pt-2">
                   <a
-                    href={current.wiki_url}
+                    href={rows[selectedIndex]!.wiki_url!}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -1125,11 +1067,10 @@ export default function GroupEventModulePage() {
                 </div>
               ) : null}
 
-              {/* Bottone video evento (se presente) */}
-              {current?.video_url ? (
+              {rows[selectedIndex]?.video_url ? (
                 <div className="pt-3">
                   <a
-                    href={current.video_url}
+                    href={rows[selectedIndex]!.video_url!}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -1141,7 +1082,6 @@ export default function GroupEventModulePage() {
               ) : null}
             </div>
 
-            {/* Player */}
             <div className="sticky bottom-0 border-t border-black/10 bg-white/80 px-4 py-3 backdrop-blur">
               <div className="flex items-center gap-2">
                 <button
@@ -1184,7 +1124,7 @@ export default function GroupEventModulePage() {
           </section>
         </div>
 
-        {/* BANDA EVENTI (singola riga scrollabile) */}
+        {/* BANDA EVENTI */}
         <aside className="h-[32svh] bg-white/90 backdrop-blur">
           <div ref={bottomListRef} className="h-full overflow-hidden px-4 py-3">
             <div className="mb-2 text-sm font-medium text-gray-900">Eventi (ordine cronologico)</div>
@@ -1231,4 +1171,3 @@ export default function GroupEventModulePage() {
     </div>
   );
 }
-
