@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import supabase from "@/lib/supabaseBrowserClient"; // ⬅️ usa l'istanza DEFAULT (client browser)
+import supabase from "@/lib/supabaseBrowserClient"; // ✅ default export (coerente prod)
 import RatingStars from "../../components/RatingStars";
 
 /* ===================== Tipi ===================== */
@@ -167,16 +167,23 @@ export default function GroupEventModulePage() {
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
-  // === AUTH STATE: session + listener (affidabile in produzione) ===
+  // ===== AUTH STATO COERENTE (prod) =====
   const [userId, setUserId] = useState<string | null>(null);
+
+  // helper: sessione aggiornata al momento (evita falsi “non loggato”)
+  async function getUserIdNow(): Promise<string | null> {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id ?? null;
+    if (uid && uid !== userId) setUserId(uid);
+    return uid;
+  }
+
+  // mount: prendi sessione e rimani in ascolto
   useEffect(() => {
     let sub: { subscription?: { unsubscribe?: () => void } } | null = null;
     (async () => {
-      // 1) prendi subito la sessione corrente
       const { data: { session } } = await supabase.auth.getSession();
       setUserId(session?.user?.id ?? null);
-
-      // 2) rimani in ascolto dei cambi
       const { data } = supabase.auth.onAuthStateChange((_event, session) => {
         setUserId(session?.user?.id ?? null);
       });
@@ -377,79 +384,56 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang]);
 
-  // preferiti: stato e load coerenti con userId
+  // preferiti
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
+  // carica stato preferito quando ho gid e (se presente) userId
   useEffect(() => {
     (async () => {
       if (!gid) return;
-      // se l'utente non è ancora noto, non forziamo alert
       if (!userId) { setIsFav(false); return; }
 
       try {
-        const { data: fav, error } = await supabase
-          .from("group_event_favourites")
-          .select("id")
-          .eq("group_event_id", gid)
-          .eq("profile_id", userId)
-          .maybeSingle();
-
+        let { data: fav, error } = await supabase
+          .from("group_event_favourites").select("id")
+          .eq("group_event_id", gid).eq("profile_id", userId).maybeSingle();
         if (error) {
-          const { data: alt } = await supabase
-            .from("group_event_favourites")
-            .select("id")
-            .eq("group_event_id", gid)
-            .eq("user_id", userId)
-            .maybeSingle();
-          setIsFav(!!alt);
-        } else {
-          setIsFav(!!fav);
-        }
-      } catch {
-        setIsFav(false);
-      }
+          const alt = await supabase
+            .from("group_event_favourites").select("id")
+            .eq("group_event_id", gid).eq("user_id", userId).maybeSingle();
+          setIsFav(!!alt.data);
+        } else setIsFav(!!fav);
+      } catch { setIsFav(false); }
     })();
   }, [gid, userId]);
 
+  // ✅ rilegge sessione al click (evita falsi popup in prod)
   async function toggleFavourite() {
     if (!gid) return;
-    // al click, se non loggato -> mostra messaggio (non prima)
-    if (!userId) { alert("Per usare i preferiti devi accedere."); return; }
+    const uid = await getUserIdNow();
+    if (!uid) { alert("Per usare i preferiti devi accedere."); return; }
     if (savingFav) return;
 
     setSavingFav(true);
     try {
       if (isFav) {
         const del1 = await supabase
-          .from("group_event_favourites")
-          .delete()
-          .eq("group_event_id", gid)
-          .eq("profile_id", userId);
+          .from("group_event_favourites").delete()
+          .eq("group_event_id", gid).eq("profile_id", uid);
         if (del1.error) {
-          await supabase
-            .from("group_event_favourites")
-            .delete()
-            .eq("group_event_id", gid)
-            .eq("user_id", userId);
+          await supabase.from("group_event_favourites").delete()
+            .eq("group_event_id", gid).eq("user_id", uid);
         }
         setIsFav(false);
       } else {
-        const ins = await supabase
-          .from("group_event_favourites")
-          .insert({
-            group_event_id: gid,
-            profile_id: userId,
-            created_at: new Date().toISOString(),
-          } as any);
+        const ins = await supabase.from("group_event_favourites").insert({
+          group_event_id: gid, profile_id: uid, created_at: new Date().toISOString(),
+        } as any);
         if (ins.error) {
-          await supabase
-            .from("group_event_favourites")
-            .insert({
-              group_event_id: gid,
-              user_id: userId,
-              created_at: new Date().toISOString(),
-            } as any);
+          await supabase.from("group_event_favourites").insert({
+            group_event_id: gid, user_id: uid, created_at: new Date().toISOString(),
+          } as any);
         }
         setIsFav(true);
       }
