@@ -7,7 +7,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { supabase } from "@/lib/supabaseBrowserClient";
 import RatingStars from "../../components/RatingStars";
 
-/* ===================== Tipi ===================== */
 type AnyObj = Record<string, any>;
 
 type EventCore = {
@@ -30,7 +29,6 @@ type EventVM = EventCore & {
   order_key: number;
 };
 
-/* ===================== Costanti/UI ===================== */
 const MODERN_ICONS: Record<string, string> = {
   pin: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
 };
@@ -38,7 +36,6 @@ const MODERN_ICONS: Record<string, string> = {
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/* ===================== Util date/ordine ===================== */
 function normEra(era?: string | null): "BC" | "AD" {
   if (!era) return "AD";
   const e = era.toUpperCase().trim();
@@ -56,6 +53,16 @@ function chronoOrderKey(e: { era?: string | null; year_from?: number | null; yea
   if (!isFinite(y)) return 9_999_999_999;
   return y * 100 + bias;
 }
+function formatWhen(ev: EventVM) {
+  const e = normEra(ev.era);
+  if (typeof ev.year_from === "number" && typeof ev.year_to === "number" && ev.year_to !== ev.year_from) {
+    return `${Math.abs(ev.year_from)} ${e === "BC" ? "BC" : "AD"} – ${Math.abs(ev.year_to)} ${e === "BC" ? "BC" : "AD"}`;
+  }
+  if (typeof ev.year_from === "number") return `${Math.abs(ev.year_from)} ${e === "BC" ? "BC" : "AD"}`;
+  if (typeof ev.year_to === "number") return `${Math.abs(ev.year_to)} ${e === "BC" ? "BC" : "AD"}`;
+  if (ev.exact_date) { try { return new Date(ev.exact_date).toLocaleDateString(); } catch {} }
+  return "—";
+}
 function parseExactDateYear(date?: string | null): number | null {
   if (!date) return null;
   try { const d = new Date(date); if (Number.isNaN(d.getTime())) return null; return d.getUTCFullYear(); } catch { return null; }
@@ -65,11 +72,9 @@ function signedYear(value: number | null | undefined, era?: string | null): numb
   const abs = Math.abs(value);
   return normEra(era) === "BC" ? -abs : abs;
 }
-
 type TimelineSpan = { min: number; max: number; center: number; start: number };
 type TimelineItem = { ev: EventVM; index: number; min: number; max: number; center: number; start: number; progress: number };
 type TimelineData = { min: number; max: number; range: number; items: TimelineItem[] };
-
 function buildTimelineSpan(ev: EventVM): TimelineSpan | null {
   const values: number[] = [];
   const from = signedYear(ev.year_from, ev.era);
@@ -116,7 +121,6 @@ function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
   return ticks;
 }
 
-/* ===================== Stile mappa fallback ===================== */
 const OSM_STYLE: any = {
   version: 8,
   sources: {
@@ -134,7 +138,7 @@ const OSM_STYLE: any = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-/** Hook semplice per desktop (≥lg) */
+/** Hook semplice per sapere se siamo in desktop (breakpoint lg) */
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
@@ -148,19 +152,15 @@ function useIsDesktop() {
   return isDesktop;
 }
 
-/* ===================== Pagina ===================== */
 export default function GroupEventModulePage() {
   const router = useRouter();
   const sp = useSearchParams();
-  const isDesktop = useIsDesktop();
 
-  // lingua
   const desiredLang =
     (sp.get("lang") ||
       (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
       "it").toLowerCase();
 
-  // gid
   const [gid, setGid] = useState<string | null>(null);
   const group_event_id = gid;
 
@@ -189,17 +189,17 @@ export default function GroupEventModulePage() {
     }
   }, [sp]);
 
-  // landing ref
   useEffect(() => {
     try {
       const ref = (typeof document !== "undefined" && document.referrer) || "";
       if (!ref) return;
       const u = new URL(ref);
-      if (/^\/landing\/[^/]+$/i.test(u.pathname)) setLandingHref(u.pathname);
+      if (/^\/landing\/[^/]+$/i.test(u.pathname)) {
+        setLandingHref(u.pathname);
+      }
     } catch {}
   }, []);
 
-  // dati
   const [ge, setGe] = useState<AnyObj | null>(null);
   const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string } | null>(null);
   const [rows, setRows] = useState<EventVM[]>([]);
@@ -208,7 +208,7 @@ export default function GroupEventModulePage() {
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // mappa
+  // MAPPA
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
@@ -230,7 +230,6 @@ export default function GroupEventModulePage() {
     return null;
   }
 
-  // init map
   useEffect(() => {
     if (typeof window === "undefined" || mapRef.current) return;
 
@@ -282,7 +281,7 @@ export default function GroupEventModulePage() {
     return () => { cancelled = true; };
   }, []);
 
-  // fetch dati
+  // FETCH
   useEffect(() => {
     if (!gid) return;
     (async () => {
@@ -361,7 +360,7 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang]);
 
-  // preferiti
+  // Preferiti
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
@@ -381,7 +380,9 @@ export default function GroupEventModulePage() {
             .from("group_event_favourites").select("id")
             .eq("group_event_id", gid).eq("user_id", uid).maybeSingle();
           setIsFav(!!alt.data);
-        } else setIsFav(!!fav);
+        } else {
+          setIsFav(!!fav);
+        }
       } catch { setIsFav(false); }
     })();
   }, [gid]);
@@ -418,7 +419,7 @@ export default function GroupEventModulePage() {
     } finally { setSavingFav(false); }
   }
 
-  // markers
+  // MARKERS
   function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
     const n = ids.length;
     if (n === 1) return [[0, 0]] as [number, number][];
@@ -442,8 +443,7 @@ export default function GroupEventModulePage() {
     rows.forEach((ev) => {
       if (ev.latitude == null || ev.longitude == null) return;
       const key = `${ev.longitude.toFixed(6)}_${ev.latitude.toFixed(6)}`;
-      if (!groups.has(key))
-        groups.set(key, { ids: [], lng: ev.longitude!, lat: ev.latitude! });
+      if (!groups.has(key)) groups.set(key, { ids: [], lng: ev.longitude!, lat: ev.latitude! });
       groups.get(key)!.ids.push(ev.id);
     });
 
@@ -483,18 +483,13 @@ export default function GroupEventModulePage() {
 
     rows.forEach((ev, idx) => {
       if (ev.latitude == null || ev.longitude == null) return;
-
       const el = makeMarkerEl(idx);
       const pxOff = (pixelOffsetById.get(ev.id) as [number, number]) ?? [0, 0];
-
       const marker = new maplibregl.Marker({ element: el, offset: pxOff as any })
         .setLngLat([ev.longitude!, ev.latitude!])
         .addTo(map);
-
       try { (marker as any).setZIndex?.(idx === selectedIndex ? 1000 : 0); } catch {}
-
       el.addEventListener("click", () => setSelectedIndex(idx));
-
       markersRef.current.push(marker);
       pts.push([ev.longitude!, ev.latitude!]);
     });
@@ -502,14 +497,8 @@ export default function GroupEventModulePage() {
     try {
       if (pts.length) {
         const bounds = pts.reduce<[[number, number], [number, number]]>(
-          (b, c) => [
-            [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
-            [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
-          ],
-          [
-            [pts[0][0], pts[0][1]],
-            [pts[0][0], pts[0][1]],
-          ]
+          (b, c) => [[Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],[Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])]],
+          [[pts[0][0], pts[0][1]],[pts[0][0], pts[0][1]]]
         );
         map.fitBounds(bounds as any, { padding: 84, duration: 800 });
       } else {
@@ -528,7 +517,7 @@ export default function GroupEventModulePage() {
     }
   }, [selectedIndex, rows]);
 
-  // auto-scroll banda
+  // Auto-scroll della banda eventi
   useEffect(() => {
     const ev = rows[selectedIndex];
     if (!ev) return;
@@ -547,82 +536,77 @@ export default function GroupEventModulePage() {
     router.push(landingHref || "/landing");
   }
 
-  /* ===================== Timeline ===================== */
+  // TIMELINE DATA
   const timelineData = useMemo(() => {
     if (!rows.length) return null;
-
     const annotated: { ev: EventVM; index: number; min: number; max: number; center: number }[] = [];
     rows.forEach((ev, index) => {
       const span = buildTimelineSpan(ev);
       if (span) annotated.push({ ev, index, min: span.min, max: span.max, center: span.center });
     });
     if (!annotated.length) return null;
-
     let min = annotated[0].min, max = annotated[0].max;
     for (const item of annotated) { if (item.min < min) min = item.min; if (item.max > max) max = item.max; }
     const safeSpan = max - min === 0 ? 1 : max - min;
-
     const items = annotated.map((item) => {
       const startValue = item.min;
       const startProgress = Math.min(1, Math.max(0, (startValue - min) / safeSpan));
       return { ...item, progress: startProgress, start: startValue } as TimelineItem;
     });
-
     return { min, max, range: safeSpan, items } as TimelineData;
   }, [rows]);
 
   const geTitle = (geTr?.title || ge?.title || "Journey").toString();
 
+  // ===== Timeline component: più anni sotto l'asse su DESKTOP =====
   function Timeline3D() {
+    const isDesktop = useIsDesktop();
     const data = timelineData;
     if (!data) return null;
 
-    // più tick su desktop; meno su mobile
+    // più tick su desktop
     const ticks = buildTimelineTicks(data.min, data.max, isDesktop ? 12 : 6);
 
-    // mobile: asse 8px, rombo 14px; desktop: default 12px / 18px
-    const axisH = isDesktop ? "h-[12px]" : "h-[8px]";
-    const diamondSize = isDesktop ? 18 : 14;
-
-    // calcolo puntatore
-    let pct = 50;
-    {
-      const ev = rows[selectedIndex];
-      if (ev) {
-        const span = buildTimelineSpan(ev);
-        if (span) {
-          pct = ((span.start - data.min) / Math.max(1, data.range)) * 100;
-          pct = Math.max(0, Math.min(100, pct));
-        }
-      }
-    }
-
     return (
-      <div className={`relative flex flex-col items-center justify-center rounded-2xl border border-slate-300 bg-gradient-to-b from-white to-slate-50 px-6 ${isDesktop ? "py-6" : "py-3"} shadow-[inset_0_2px_10px_rgba(255,255,255,0.9),0_10px_18px_rgba(15,23,42,0.08)]`}>
+      <div className="relative flex flex-col items-center justify-center rounded-2xl border border-slate-300 bg-gradient-to-b from-white to-slate-50 px-6 py-6 shadow-[inset_0_2px_10px_rgba(255,255,255,0.9),0_10px_18px_rgba(15,23,42,0.08)]">
         {/* Asse */}
-        <div className={`relative w-full ${axisH} rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner`}>
+        <div className="relative w-full h-[12px] rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner">
           {/* Puntatore */}
-          <div
-            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-white bg-blue-500 shadow"
-            style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 8px rgba(30,64,175,0.55)" }}
-          />
-          {/* Ticks verticali */}
+          {(() => {
+            const ev = rows[selectedIndex];
+            let pct = 50;
+            if (ev) {
+              const span = buildTimelineSpan(ev);
+              if (span) {
+                pct = ((span.start - data.min) / Math.max(1, data.range)) * 100;
+                pct = Math.max(0, Math.min(100, pct));
+              }
+            }
+            return (
+              <div
+                className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-white bg-blue-500 shadow"
+                style={{ left: `${pct}%`, width: "18px", height: "18px", boxShadow: "0 0 8px rgba(30,64,175,0.55)" }}
+              />
+            );
+          })()}
+
+          {/* Ticks verticali sull'asse */}
           {ticks.map((t, i) => {
-            const pos = ((t - data.min) / data.range) * 100;
+            const pct = ((t - data.min) / data.range) * 100;
             return (
               <div
                 key={`tick-${i}`}
                 className="absolute top-0 h-[8px] w-[2px] -translate-x-1/2 bg-blue-900/60"
-                style={{ left: `${pos}%` }}
+                style={{ left: `${pct}%` }}
               />
             );
           })}
         </div>
 
-        {/* Etichette */}
+        {/* Etichette: mobile compatto (min/medio/max), desktop ricco (tutti i tick) */}
         {!isDesktop ? (
-          <div className="mt-1.5 relative w-full h-5">
-            <div className="absolute inset-x-0 -bottom-0 flex justify-between text-[11.5px] font-medium text-blue-800/90">
+          <div className="mt-1.5 relative w-full h-6">
+            <div className="absolute inset-x-0 -bottom-0 flex justify-between text-[12px] font-medium text-blue-800/90">
               <span>{formatTimelineYearLabel(data.min)}</span>
               <span>{formatTimelineYearLabel((data.min + data.max) / 2)}</span>
               <span>{formatTimelineYearLabel(data.max)}</span>
@@ -630,19 +614,21 @@ export default function GroupEventModulePage() {
           </div>
         ) : (
           <div className="mt-2 relative w-full" style={{ minHeight: 24 }}>
+            {/* min e max alle estremità */}
             <div className="absolute left-0 -bottom-0 translate-y-1 text-[12px] font-medium text-blue-800/90">
               {formatTimelineYearLabel(data.min)}
             </div>
             <div className="absolute right-0 -bottom-0 translate-y-1 text-[12px] font-medium text-blue-800/90">
               {formatTimelineYearLabel(data.max)}
             </div>
+            {/* etichette per ogni tick */}
             {ticks.map((t, i) => {
-              const pos = ((t - data.min) / data.range) * 100;
+              const pct = ((t - data.min) / data.range) * 100;
               return (
                 <div
                   key={`label-${i}`}
                   className="absolute -bottom-0 translate-y-1 -translate-x-1/2 text-[11.5px] text-blue-900/90"
-                  style={{ left: `${pos}%`, whiteSpace: "nowrap" }}
+                  style={{ left: `${pct}%`, whiteSpace: "nowrap" }}
                 >
                   {formatTimelineYearLabel(t)}
                 </div>
@@ -654,7 +640,6 @@ export default function GroupEventModulePage() {
     );
   }
 
-  /* ===================== UI states ===================== */
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
@@ -679,23 +664,22 @@ export default function GroupEventModulePage() {
     );
   }
 
-  /* ===================== RENDER ===================== */
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      {/* ===== HEADER: Titolo + Timeline ============ */}
+      {/* HEADER: Titolo + Timeline */}
       {timelineData ? (
         <section className="border-b border-slate-200 bg-white/95 shadow-sm">
-          <div className="mx-auto max-w-7xl px-4 py-2 lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center lg:gap-6 lg:px-8 lg:py-4">
-            {/* Colonna sinistra (titolo + preferiti) */}
-            <div className="flex flex-col justify-start rounded-xl border border-slate-200 bg-white p-3 lg:p-5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.06)]">
-              <h1 className="text-base lg:text-xl font-semibold text-slate-900 text-left leading-snug break-words whitespace-pre-line">
+          <div className="mx-auto max-w-7xl px-4 py-3 lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center lg:gap-6 lg:px-8 lg:py-4">
+            {/* Colonna sinistra: titolo + preferiti + rating + timeline mobile */}
+            <div className="flex flex-col justify-start rounded-xl border border-slate-200 bg-white p-4 shadow-[inset_0_2px_6px_rgba(0,0,0,0.06)] lg:p-5">
+              <h1 className="text-lg lg:text-xl font-semibold text-slate-900 text-left leading-snug break-words whitespace-pre-line">
                 {journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey"}
               </h1>
-              <div className="mt-2 flex items-center gap-2 lg:mt-3 lg:gap-3">
+              <div className="mt-3 flex items-center gap-3">
                 <button
                   onClick={toggleFavourite}
                   disabled={!group_event_id || savingFav}
-                  className={`rounded-full border px-3 py-1 text-xs lg:text-sm transition ${
+                  className={`rounded-full border px-3 py-1 text-sm transition ${
                     isFav ? "border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
@@ -703,14 +687,13 @@ export default function GroupEventModulePage() {
                 </button>
                 {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
               </div>
-
-              {/* Timeline sotto al titolo SOLO su mobile */}
-              <div className="mt-2 lg:hidden">
+              {/* Timeline sotto al titolo su mobile */}
+              <div className="mt-4 lg:hidden">
                 <Timeline3D />
               </div>
             </div>
 
-            {/* Colonna destra: timeline allineata al titolo su desktop */}
+            {/* Colonna destra: timeline allineata su desktop */}
             <div className="hidden lg:flex items-center">
               <div className="w-full">
                 <Timeline3D />
@@ -720,45 +703,45 @@ export default function GroupEventModulePage() {
         </section>
       ) : null}
 
-      {/* ===== BANDA EVENTI (sotto header) ===== */}
+      {/* BANDA EVENTI (sotto header) */}
       <section className="border-b border-black/10 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-2" ref={bandRef}>
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="text-[13px] font-medium text-gray-900">Eventi (ordine cronologico)</div>
+        <div className="mx-auto max-w-7xl px-4 py-3" ref={bandRef}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-sm font-medium text-gray-900">Eventi (ordine cronologico)</div>
             {rows.length ? (
-              <div className="text-[11.5px] text-gray-600">
+              <div className="text-[12px] text-gray-600">
                 Evento <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span>
               </div>
             ) : null}
           </div>
 
           <div className="overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: "thin" }}>
-            <div className="flex items-stretch gap-2 min-w-max">
+            <div className="flex items-stretch gap-3 min-w-max">
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
                 const span = buildTimelineSpan(ev);
-                const label = span ? formatTimelineYearLabel(span.start) : ""; // anni già in card (qui li mostriamo perché richiesti nella card)
+                const label = span ? formatTimelineYearLabel(span.start) : formatWhen(ev);
                 return (
                   <button
                     key={ev.id}
                     ref={(el) => { if (el) itemRefs.current.set(ev.id, el); }}
                     onClick={() => setSelectedIndex(idx)}
-                    className={`shrink-0 w-[60vw] md:w-[280px] max-w-[320px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
+                    className={`shrink-0 w-[78vw] md:w-[320px] max-w-[520px] rounded-xl border px-3 py-2 text-left transition ${
                       active ? "border-black bg-black text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
                     }`}
                     title={ev.title}
                   >
                     <div className="flex items-start gap-2">
-                      <div className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] ${
+                      <div className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
                         active ? "bg-white text-black" : "bg-gray-900 text-white"
                       }`}>
                         {idx + 1}
                       </div>
-                      <div className="min-w-0 leading-tight">
-                        <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+                      <div className="min-w-0">
+                        <div className={`truncate text-[13.5px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
                           {ev.title}
                         </div>
-                        <div className={`truncate text-[11.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
+                        <div className={`text-[12px] ${active ? "text-white/80" : "text-gray-600"}`}>
                           {label}{ev.location ? ` • ${ev.location}` : ""}
                         </div>
                       </div>
@@ -771,67 +754,64 @@ export default function GroupEventModulePage() {
         </div>
       </section>
 
-      {/* ===== MOBILE: layout panoramico senza scroll pagina ===== */}
-      <div className="mx-auto w-full max-w-7xl lg:hidden overflow-hidden">
-        {/* DESCRIZIONE (no titolo, no anni; h fissa con scroll interno al testo) */}
+      {/* MOBILE: Descrizione -> Mappa */}
+      <div className="mx-auto w-full max-w-7xl lg:hidden">
+        {/* DESCRIZIONE (senza titolo, senza anni; controlli in alto a destra) */}
         <section className="bg-white/70 backdrop-blur">
-          <div className="px-4 py-2">
+          <div className="px-4 py-3">
             <div className="mx-auto w-full max-w-[820px]">
-              <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm h-[30svh] flex flex-col">
+              <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm">
                 {/* Barra controlli in alto a destra */}
-                <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
+                <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-black/10">
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                     title="Previous"
                   >⏮</button>
                   <button
                     onClick={() => setIsPlaying((p) => !p)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                     title={isPlaying ? "Pause" : "Play"}
                   >{isPlaying ? "⏸" : "▶"}</button>
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                     title="Next"
                   >⏭</button>
                 </div>
 
                 {/* Immagine (se presente) */}
                 {rows[selectedIndex]?.image_url ? (
-                  <div className="px-3 pt-2">
+                  <div className="px-4 pt-3">
                     <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
                       <img
                         src={rows[selectedIndex]!.image_url!}
                         alt={rows[selectedIndex]!.title}
-                        className="h-32 w-full object-cover"
+                        className="h-48 w-full object-cover"
                       />
                     </div>
                   </div>
                 ) : null}
 
-                {/* SOLO località (anni rimossi; titolo già nella card) */}
+                {/* SOLO località (anni rimossi) */}
                 {rows[selectedIndex]?.location ? (
-                  <div className="px-3 pt-2 text-[11.5px] text-gray-600">
+                  <div className="px-4 pt-3 text-[12.5px] text-gray-600">
                     {rows[selectedIndex]!.location}
                   </div>
                 ) : null}
 
-                {/* Testo con scroll interno */}
-                <div className="px-3 pt-1 pb-2">
-                  <div className="h-[calc(30svh-40px-8px-8px-0.5rem)] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
-                       style={{ scrollbarWidth: "thin" }}>
+                {/* Testo */}
+                <div className="px-4 pt-2">
+                  <div className="h-[28svh] overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap" style={{ scrollbarWidth: "thin" }}>
                     {rows[selectedIndex]?.description || "No description available."}
                   </div>
-
-                  {/* Link utili */}
                   <div className="pt-2 flex items-center gap-3">
                     {rows[selectedIndex]?.wiki_url ? (
                       <a
                         href={rows[selectedIndex]!.wiki_url!}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                        className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
                       >
                         Wikipedia →
                       </a>
@@ -841,7 +821,7 @@ export default function GroupEventModulePage() {
                         href={rows[selectedIndex]!.video_url!}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
                         title="Guarda il video dell'evento"
                       >
                         ▶ Guarda il video
@@ -854,8 +834,8 @@ export default function GroupEventModulePage() {
           </div>
         </section>
 
-        {/* MAPPA compatta */}
-        <section className="relative h-[28svh] min-h-[240px] border-t border-black/10">
+        {/* MAPPA */}
+        <section className="relative h-[50svh] min-h-[320px] border-t border-black/10">
           <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
           {!mapLoaded && (
             <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
@@ -865,12 +845,13 @@ export default function GroupEventModulePage() {
         </section>
       </div>
 
-      {/* ===== DESKTOP: Descrizione (sx) -> Mappa (dx) ===== */}
+      {/* DESKTOP: Descrizione (sx) -> Mappa (dx) */}
       <div className="mx-auto hidden w-full max-w-7xl lg:block">
         <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0 h-[calc(100svh-36svh)]">
-          {/* DESCRIZIONE (senza titolo/anni; controlli in alto a destra) */}
+          {/* DESCRIZIONE (senza titolo, senza anni; controlli in alto a destra) */}
           <section className="overflow-y-auto bg-white/70 backdrop-blur">
             <div className="px-4 py-4">
+              {/* Barra controlli in alto a destra */}
               <div className="flex items-center justify-end gap-2 mb-3">
                 <button
                   onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
@@ -889,7 +870,7 @@ export default function GroupEventModulePage() {
                 >⏭</button>
               </div>
 
-              {/* SOLO località (anni/titolo rimossi) */}
+              {/* SOLO località (anni rimossi) */}
               {rows[selectedIndex]?.location ? (
                 <div className="text-[12.5px] text-gray-600 mb-2">
                   {rows[selectedIndex]!.location}
