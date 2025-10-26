@@ -204,7 +204,7 @@ export default function FavouritesPage() {
                   </p>
 
                   <div className="pt-2">
-                    <RatingSummary groupEventId={j.journey_id} compact />
+                    <RatingSummary groupEventId={j.journey_id} />
                   </div>
                 </div>
 
