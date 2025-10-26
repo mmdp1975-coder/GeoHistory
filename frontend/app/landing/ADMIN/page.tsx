@@ -1,8 +1,15 @@
-﻿"use client";
+﻿﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+// ✅ Aggiunto per tipizzare window.supabase ed eliminare l'errore TS
+declare global {
+  interface Window {
+    supabase?: import("@supabase/supabase-js").SupabaseClient<any>;
+  }
+}
 
 /** THEME (ADMIN) */
 const theme = {

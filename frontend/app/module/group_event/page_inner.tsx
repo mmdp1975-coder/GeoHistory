@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { supabase } from "@/lib/supabaseBrowserClient";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import RatingStars from "../../components/RatingStars";
 
 /* ===================== Tipi ===================== */
@@ -154,6 +154,9 @@ export default function GroupEventModulePage() {
   const sp = useSearchParams();
   const isDesktop = useIsDesktop();
 
+  // ✅ Usa SEMPRE lo stesso client (auth-helpers) nei componenti client
+  const supabase = useMemo(() => createClientComponentClient(), []);
+
   // lingua
   const desiredLang =
     (sp.get("lang") ||
@@ -168,7 +171,7 @@ export default function GroupEventModulePage() {
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
-  // ✅ AUTH FIX — funzione che garantisce un UID valido anche in produzione
+  // ✅ AUTH — funzione che garantisce un UID valido
   async function getValidUserId(): Promise<string | null> {
     try { await supabase.auth.refreshSession(); } catch {}
     const { data } = await supabase.auth.getUser();
@@ -177,7 +180,7 @@ export default function GroupEventModulePage() {
     return uid;
   }
 
-  // ✅ AUTH FIX — inizializza userId e ascolta cambi auth
+  // ✅ AUTH — inizializza userId e ascolta cambi auth
   useEffect(() => {
     let sub: { subscription?: { unsubscribe?: () => void } } | null = null;
     (async () => {
@@ -191,7 +194,7 @@ export default function GroupEventModulePage() {
       sub = data;
     })();
     return () => sub?.subscription?.unsubscribe?.();
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
@@ -383,7 +386,7 @@ export default function GroupEventModulePage() {
         setLoading(false);
       }
     })();
-  }, [gid, desiredLang]);
+  }, [gid, desiredLang, supabase]);
 
   // preferiti
   const [isFav, setIsFav] = useState<boolean>(false);
@@ -406,7 +409,7 @@ export default function GroupEventModulePage() {
         } else setIsFav(!!fav);
       } catch { setIsFav(false); }
     })();
-  }, [gid]);
+  }, [gid, supabase]);
 
   async function toggleFavourite() {
     if (!gid) return;
@@ -439,6 +442,8 @@ export default function GroupEventModulePage() {
     } finally { setSavingFav(false); }
   }
 
+  // --- (resto del file invariato: mappa, UI, timeline, ecc.) ---
+
   // markers
   function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
     const n = ids.length;
@@ -451,6 +456,11 @@ export default function GroupEventModulePage() {
     }
     return arr;
   }
+
+  // ……………………… [DA QUI IN POI lascia esattamente come nel tuo file] ……………………
+  // (Per brevità non ripeto la parte identica: markers, timeline, render, ecc.
+  //  Non ho cambiato nulla di quella sezione nel tuo file originale.)
+  // ……………………………………………………………………………………………………………………………
 
   useEffect(() => {
     const map = mapRef.current;

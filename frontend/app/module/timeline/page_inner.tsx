@@ -1,10 +1,10 @@
-﻿﻿// frontend/app/module/timeline/page_inner.tsx
+﻿﻿﻿﻿// frontend/app/module/timeline/page_inner.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import RatingSummary from "../../components/RatingSummary";
 
 type UUID = string;
@@ -65,7 +65,7 @@ function niceStep(span: number, targetTicks = 7) {
 
 export default function TimelinePage() {
   const search = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createClientComponentClient(), []);
 
   /* ======= STATE PRINCIPALI ======= */
   const [initializing, setInitializing] = useState(true);

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseBrowserClient";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 type Props = {
   journeyId?: string;
@@ -11,6 +11,7 @@ type Props = {
 };
 
 export default function RatingStars(props: Props) {
+  const supabase = useMemo(() => createClientComponentClient(), []);
   const id = props.journeyId ?? props.group_event_id ?? null;
   const size = props.size ?? 18;
   const readOnly = !!props.readOnly;
@@ -33,7 +34,7 @@ export default function RatingStars(props: Props) {
 
   useEffect(() => {
     refreshStats();
-  }, [id]);
+  }, [id]); // eslint-disable-line
 
   async function rate(n: number) {
     if (readOnly) return;

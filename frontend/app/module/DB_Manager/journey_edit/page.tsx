@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import supabase from "@/lib/supabaseBrowserClient";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import {
   Loader2,
   RefreshCcw,
