@@ -1,8 +1,37 @@
 // frontend/lib/supabase/server.ts
-import { cookies } from 'next/headers';
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+// Gestione Supabase server-side (Next.js 14 / App Router)
 
-// Factory per Server Components / Route Handlers / Server Actions
-export function createServerClient() {
-  return createServerComponentClient({ cookies });
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+export function getServerSupabase() {
+  const cookieStore = cookies();
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch {
+            /* ignored */
+          }
+        },
+        remove(name: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name, value: "", ...options });
+          } catch {
+            /* ignored */
+          }
+        },
+      },
+    }
+  );
+
+  return supabase;
 }
