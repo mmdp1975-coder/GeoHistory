@@ -4,21 +4,22 @@
  * GeoHistory Journey — DB Manager
  * Path: app/module/DB_Manager/journey_edit/page.tsx
  *
- * Permette la gestione CRUD dei group_events e relative tabelle collegate.
- * Versione aggiornata: rimossi riferimenti ai campi obsoleti is_official, color_hex, icon_name da group_events.
+ * Funzioni in questo step:
+ * - Lista e ricerca dei group_events (sidebar)
+ * - Dettaglio JSON del record selezionato
+ * - Save (update) e Delete sul record selezionato
+ *
+ * Usa l’istanza Supabase esportata di default da "@/lib/supabaseBrowserClient".
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import getBrowserSupabase from "@/lib/supabaseBrowserClient"; // ⬅️ default import
+import supabase from "@/lib/supabaseBrowserClient";
 import {
   Loader2,
   RefreshCcw,
   Search,
-  Plus,
   Save,
   Trash2,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 
 type UUID = string;
@@ -45,45 +46,18 @@ function tryParseJSON(s: string): any | Error {
 }
 
 /* ------------------------ GENERIC UI ------------------------ */
-function Section({
-  title,
-  right,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  right?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="rounded-xl border bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b px-4 py-2">
-        <button
-          className="flex items-center gap-2 text-left font-semibold text-neutral-800"
-          onClick={() => setOpen((o) => !o)}
-        >
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          {title}
-        </button>
-        <div>{right}</div>
-      </div>
-      {open && <div className="p-4">{children}</div>}
-    </div>
-  );
-}
-
 function ToolbarButton({
   children,
   onClick,
   disabled,
   title,
+  variant = "default",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
+  variant?: "default" | "danger";
 }) {
   return (
     <button
@@ -93,9 +67,11 @@ function ToolbarButton({
       disabled={disabled}
       className={cn(
         "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
-        disabled
-          ? "cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-400"
-          : "border-neutral-200 bg-white hover:bg-neutral-50"
+        disabled && "cursor-not-allowed opacity-60",
+        variant === "default" &&
+          "border-neutral-200 bg-white hover:bg-neutral-50",
+        variant === "danger" &&
+          "border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
       )}
     >
       {children}
@@ -121,6 +97,12 @@ function JsonEditor({
   const [text, setText] = useState(toPrettyJSON(initial ?? {}));
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    // quando cambia "initial", riallineo l’editor
+    setText(toPrettyJSON(initial ?? {}));
+    setErr(null);
+  }, [initial]);
+
   async function handleSave() {
     setErr(null);
     const parsed = tryParseJSON(text);
@@ -137,7 +119,7 @@ function JsonEditor({
       {pkHint && <div className="text-xs text-neutral-500">{pkHint}</div>}
       <textarea
         className="w-full resize-y rounded-md border border-neutral-300 bg-white p-3 font-mono text-xs outline-none focus:ring-2 focus:ring-blue-600"
-        rows={10}
+        rows={20}
         value={text}
         onChange={(e) => setText(e.target.value)}
         spellCheck={false}
@@ -145,10 +127,10 @@ function JsonEditor({
       />
       {err && <div className="text-sm text-red-600">JSON error: {err}</div>}
       <div className="flex gap-2">
-        <ToolbarButton onClick={onCancel} disabled={disabled}>
+        <ToolbarButton onClick={onCancel} disabled={disabled} title="Annulla modifiche">
           Cancel
         </ToolbarButton>
-        <ToolbarButton onClick={handleSave} disabled={disabled}>
+        <ToolbarButton onClick={handleSave} disabled={disabled} title="Salva modifiche">
           <Save className="h-4 w-4" />
           Save
         </ToolbarButton>
@@ -159,7 +141,7 @@ function JsonEditor({
 
 /* ------------------------ SUPABASE HOOK ------------------------ */
 function useSB() {
-  return useMemo(() => getBrowserSupabase(), []);
+  return useMemo(() => supabase, []);
 }
 
 /* ------------------------ TYPES ------------------------ */
@@ -172,7 +154,7 @@ type GroupEvent = {
   updated_at?: string | null;
 };
 
-/* ------------------------ MAIN HOOKS ------------------------ */
+/* ------------------------ DATA HOOK: LISTA ------------------------ */
 function useGroupEvents() {
   const sb = useSB();
   const [page, setPage] = useState(0);
@@ -217,19 +199,113 @@ function useGroupEvents() {
   return { rows: filtered, q, setQ, page, setPage, count, loading, reload: load };
 }
 
-/* ------------------------ COMPONENTE PRINCIPALE ------------------------ */
+/* ------------------------ DATA HOOK: DETTAGLIO ------------------------ */
+function useGroupEventDetail(selectedId: UUID | null) {
+  const sb = useSB();
+  const [loading, setLoading] = useState(false);
+  const [row, setRow] = useState<Row | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  async function load() {
+    if (!selectedId) {
+      setRow(null);
+      setErrorMsg(null);
+      return;
+    }
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const { data, error } = await sb
+        .from("group_events")
+        .select("*")
+        .eq("id", selectedId)
+        .single();
+      if (error) throw error;
+      setRow(data as Row);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "Error loading detail");
+      setRow(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  async function save(payload: Row) {
+    if (!selectedId) return;
+    // Mantiene l'id immutato
+    if (payload.id && payload.id !== selectedId) {
+      throw new Error("The 'id' field cannot be changed.");
+    }
+    const { error } = await sb
+      .from("group_events")
+      .update(payload)
+      .eq("id", selectedId);
+    if (error) throw error;
+    await load();
+  }
+
+  async function remove() {
+    if (!selectedId) return;
+    const { error } = await sb
+      .from("group_events")
+      .delete()
+      .eq("id", selectedId);
+    if (error) throw error;
+    setRow(null);
+  }
+
+  return { row, loading, errorMsg, reload: load, save, remove };
+}
+
+/* ------------------------ PAGE ------------------------ */
 export default function JourneyEditPage() {
-  const { rows: sidebarRows, q, setQ, page, setPage, count, loading: loadingSidebar, reload: reloadSidebar } =
-    useGroupEvents();
+  const {
+    rows: sidebarRows,
+    q,
+    setQ,
+    page,
+    setPage,
+    count,
+    loading: loadingSidebar,
+    reload: reloadSidebar,
+  } = useGroupEvents();
 
   const [selected, setSelected] = useState<UUID | null>(null);
+  const {
+    row: detail,
+    loading: loadingDetail,
+    errorMsg: errorDetail,
+    reload: reloadDetail,
+    save,
+    remove,
+  } = useGroupEventDetail(selected);
+
+  async function handleSave(payload: Row) {
+    await save(payload);
+    await reloadSidebar();
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    const ok = window.confirm("Confermi la cancellazione di questo Group Event?");
+    if (!ok) return;
+    await remove();
+    await reloadSidebar();
+    setSelected(null);
+  }
 
   return (
     <div className="flex min-h-screen bg-neutral-50">
+      {/* SIDEBAR */}
       <aside className="sticky top-0 h-screen w-[360px] shrink-0 border-r bg-white">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div className="text-base font-semibold">Group Events</div>
-          <ToolbarButton onClick={reloadSidebar} disabled={loadingSidebar}>
+          <ToolbarButton onClick={reloadSidebar} disabled={loadingSidebar} title="Reload list">
             <RefreshCcw className={cn("h-4 w-4", loadingSidebar && "animate-spin")} />
             Refresh
           </ToolbarButton>
@@ -303,11 +379,66 @@ export default function JourneyEditPage() {
         </div>
       </aside>
 
+      {/* MAIN */}
       <main className="mx-auto w-full max-w-6xl p-6">
-        <h1 className="text-lg font-semibold mb-4">Journey Maintenance</h1>
-        <div className="rounded-lg border bg-white p-8 text-center text-neutral-600">
-          Seleziona un <span className="font-medium">Group Event</span> dalla colonna di sinistra.
-        </div>
+        <h1 className="mb-4 text-lg font-semibold">Journey Maintenance</h1>
+
+        {!selected ? (
+          <div className="rounded-lg border bg-white p-8 text-center text-neutral-600">
+            Seleziona un <span className="font-medium">Group Event</span> dalla colonna di sinistra.
+          </div>
+        ) : (
+          <div className="rounded-xl border bg-white p-4">
+            <div className="flex items-center justify-between border-b px-2 pb-3">
+              <div className="text-sm font-medium">
+                Selected ID: <span className="font-mono">{selected}</span>
+              </div>
+              <div className="flex gap-2">
+                <ToolbarButton
+                  onClick={reloadDetail}
+                  disabled={loadingDetail}
+                  title="Ricarica dettaglio"
+                >
+                  <RefreshCcw className={cn("h-4 w-4", loadingDetail && "animate-spin")} />
+                  Reload
+                </ToolbarButton>
+                <ToolbarButton
+                  onClick={handleDelete}
+                  disabled={loadingDetail}
+                  title="Cancella"
+                  variant="danger"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </ToolbarButton>
+              </div>
+            </div>
+
+            <div className="p-4">
+              {loadingDetail ? (
+                <div className="flex items-center justify-center py-12 text-neutral-500">
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Loading detail…
+                </div>
+              ) : errorDetail ? (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+                  {errorDetail}
+                </div>
+              ) : !detail ? (
+                <div className="text-sm text-neutral-500">Nessun dato</div>
+              ) : (
+                <JsonEditor
+                  initial={detail}
+                  onSave={handleSave}
+                  onCancel={reloadDetail}
+                  disabled={loadingDetail}
+                  label="group_events — JSON editor"
+                  pkHint="Nota: il campo 'id' non può essere modificato."
+                />
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
