@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import { getBrowserSupabase } from "@/lib/supabaseBrowserClient";
+import getBrowserSupabase from "@/lib/supabaseBrowserClient"; // ⬅️ default import
 import {
   Loader2,
   RefreshCcw,
