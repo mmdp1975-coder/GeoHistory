@@ -31,6 +31,16 @@ type WidgetPersonaRow = { widgets: DbWidget | null };
 
 export default function AdminLanding() {
   const supabase = createClientComponentClient();
+
+  // 🔹 Espone il client globale per la console e altri moduli
+  if (typeof window !== "undefined" && !window.supabase) {
+    window.supabase = supabase;
+    // Log immediato dello user in console per verifica post-login
+    supabase.auth.getUser().then((u) => {
+      console.log("[ADMIN LANDING] USER:", u.data.user?.id, u.data.user?.email);
+    });
+  }
+
   const [username, setUsername] = useState("Admin");
   const [personaId, setPersonaId] = useState<string | null>(null);
   const [personaCode, setPersonaCode] = useState<string | null>(null);
@@ -241,6 +251,3 @@ export default function AdminLanding() {
     </>
   );
 }
-
-
-

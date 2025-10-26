@@ -4,131 +4,97 @@ import { cookies } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 
 type Body = {
-  language_code?: string | null;
-  persona_id?: string | null;
+  language_code?: string | null; // 'it' | 'en' | null
+  persona_id?: string | null;    // opzionale
+};
+
+// helper
+const isPrivilegedCode = (code?: string | null) => {
+  const u = (code || '').trim().toUpperCase();
+  return u.startsWith('ADMIN') || u.startsWith('MOD');
 };
 
 export async function POST(req: Request) {
   const supabase = createRouteHandlerClient({ cookies });
 
-  // 1) Autenticazione
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-
-  if (authErr || !user) {
-    return new NextResponse(authErr?.message || 'Unauthorized', { status: 401 });
-  }
-
-  // 2) Parse body
-  let payload: Body;
   try {
-    payload = (await req.json()) as Body;
-  } catch {
-    return new NextResponse('Invalid JSON body', { status: 400 });
-  }
+    const body = (await req.json()) as Body;
+    const lang = (body.language_code ?? null) as string | null;
+    const targetPersonaId = (body.persona_id ?? null) as string | null;
 
-  const language_code =
-    typeof payload.language_code === 'string' && payload.language_code.trim() !== ''
-      ? payload.language_code.trim()
-      : null;
-
-  const requested_persona_id =
-    typeof payload.persona_id === 'string' && payload.persona_id.trim() !== ''
-      ? payload.persona_id.trim()
-      : null;
-
-  // 3) Profilo corrente + persona corrente (code)
-  const { data: profile, error: profErr } = await supabase
-    .from('profiles')
-    .select('id, persona_id')
-    .eq('id', user.id)
-    .single();
-
-  if (profErr || !profile) {
-    return new NextResponse(profErr?.message || 'Profile not found', { status: 404 });
-  }
-
-  let currentPersonaCode: string | null = null;
-  if (profile.persona_id) {
-    const { data: curPersona, error: curPErr } = await supabase
-      .from('personas')
-      .select('code')
-      .eq('id', profile.persona_id)
-      .single();
-    if (curPErr) {
-      return new NextResponse(curPErr.message, { status: 500 });
+    // 1) utente
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) {
+      return NextResponse.json({ error: authErr?.message || 'Unauthorized' }, { status: 401 });
     }
-    currentPersonaCode = (curPersona?.code || null)?.toUpperCase() || null;
-  }
 
-  const isAdmin = currentPersonaCode === 'ADMIN';
-  const isModerator = currentPersonaCode === 'MODERATOR';
-
-  // 4) Se è stata richiesta una modifica persona, validiamo
-  let targetPersonaIdToApply: string | null = null;
-
-  if (requested_persona_id !== null) {
-    // recupero persona target per leggerne il code
-    const { data: targetPersona, error: tgtErr } = await supabase
-      .from('personas')
-      .select('id, code')
-      .eq('id', requested_persona_id)
+    // 2) profilo corrente
+    const { data: prof, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, language_code, persona_id')
+      .eq('id', user.id)
       .single();
 
-    if (tgtErr || !targetPersona) {
-      return new NextResponse('Requested persona not found', { status: 400 });
+    if (profErr || !prof) {
+      return NextResponse.json({ error: profErr?.message || 'Profile not found' }, { status: 404 });
     }
 
-    const targetCode = (targetPersona.code || '').toUpperCase();
+    const currentPersonaId = prof.persona_id as string | null;
 
-    // Regole:
-    // A) Nessuno può auto-assegnarsi ADMIN o MODERATOR
-    if (targetCode === 'ADMIN' || targetCode === 'MODERATOR') {
-      return new NextResponse(
-        'Non puoi selezionare ruoli privilegiati (ADMIN/MODERATOR) da questa pagina.',
-        { status: 403 }
-      );
+    // 3) recupero persona corrente per capire se l’utente è privilegiato
+    let currentPersonaCode: string | null = null;
+    if (currentPersonaId) {
+      const { data: currP, error: currPErr } = await supabase
+        .from('personas')
+        .select('id, code')
+        .eq('id', currentPersonaId)
+        .single();
+
+      if (!currPErr && currP) {
+        currentPersonaCode = currP.code ?? null;
+      }
+    }
+    const userIsPrivileged = isPrivilegedCode(currentPersonaCode);
+
+    // 4) calcolo la persona da salvare con regole robuste
+    //    - ADMIN/MOD: persona SEMPRE forzata a quella corrente
+    //    - NON privilegiati: se target è privilegiata -> IGNORA e usa la corrente
+    //    - se target è null/undefined -> usa la corrente (non cambiare)
+    let personaIdToSave: string | null = currentPersonaId;
+    if (!userIsPrivileged) {
+      if (targetPersonaId) {
+        // guardo il codice della persona target
+        const { data: targetP } = await supabase
+          .from('personas')
+          .select('id, code')
+          .eq('id', targetPersonaId)
+          .single();
+
+        const targetPriv = isPrivilegedCode(targetP?.code ?? null);
+        personaIdToSave = targetPriv ? currentPersonaId : targetPersonaId;
+      }
+      // se targetPersonaId è null/undefined -> lascio currentPersonaId
+    }
+    // se userIsPrivileged -> personaIdToSave resta currentPersonaId
+
+    // 5) aggiorno il profilo: la lingua è SEMPRE salvabile
+    const updatePayload: { language_code?: string | null; persona_id?: string | null } = {
+      language_code: lang,
+      persona_id: personaIdToSave,
+    };
+
+    const { error: upErr } = await supabase
+      .from('profiles')
+      .update(updatePayload)
+      .eq('id', user.id);
+
+    if (upErr) {
+      // Nota: qui NON usiamo messaggi "ruoli privilegiati…" per non confondere quando si salva solo la lingua
+      return NextResponse.json({ error: upErr.message }, { status: 400 });
     }
 
-    // B) Un MODERATOR non può diventare ADMIN
-    if (isModerator && targetCode === 'ADMIN') {
-      return new NextResponse('Un MODERATOR non può diventare ADMIN.', { status: 403 });
-    }
-
-    // C) Se sei già ADMIN o MODERATOR, non puoi cambiare persona da questo endpoint
-    if (isAdmin || isModerator) {
-      return new NextResponse(
-        'Il tuo ruolo è gestito dagli amministratori. Modifiche persona non consentite da questa pagina.',
-        { status: 403 }
-      );
-    }
-
-    // Se passate tutte le regole, si può applicare la nuova persona
-    targetPersonaIdToApply = targetPersona.id;
+    return NextResponse.json({ ok: true, language_code: lang, persona_id: personaIdToSave });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
   }
-
-  // 5) Costruzione update
-  const updates: Record<string, any> = {};
-  if (language_code !== null) updates.language_code = language_code;
-
-  if (requested_persona_id !== null) {
-    // applica solo se è stata validata una persona diversa da ADMIN/MODERATOR
-    updates.persona_id = targetPersonaIdToApply;
-  }
-
-  // Se non c'è nulla da aggiornare, ritorna OK
-  if (Object.keys(updates).length === 0) {
-    return NextResponse.json({ ok: true, message: 'Nothing to update' });
-  }
-
-  // 6) Update profilo (solo il proprio)
-  const { error: updErr } = await supabase.from('profiles').update(updates).eq('id', user.id);
-
-  if (updErr) {
-    return new NextResponse(updErr.message || 'Update failed', { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, message: 'Impostazioni salvate correttamente.' });
 }

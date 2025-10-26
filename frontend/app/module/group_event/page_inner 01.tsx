@@ -1,6 +1,5 @@
-"use client";
-
 // frontend/app/module/group_event/page_inner.tsx
+"use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
@@ -14,8 +13,10 @@ import RatingStars from "../../components/RatingStars"; // ★ stelle rating (me
    SCHEMA (campi usati)
    - group_events: id, title, pitch, cover_url
    - group_event_translations: group_event_id, lang, title, pitch, description, video_url
-   - group_event_favourites: id, group_event_id, profile_id (o user_id), created_at   <-- per CUORE
-   - v_journey: event_id, group_event_id, ... (vedi select sotto)
+   - event_group_event: event_id, group_event_id
+   - events_list: id, latitude, longitude, era, year_from, year_to, exact_date, location, image_url
+   - event_translations: event_id, lang, title, description, description_short, wikipedia_url, video_url
+   - group_event_favourites: id, group_event_id, profile_id, created_at   <-- per CUORE
    ========================================================================= */
 
 type AnyObj = Record<string, any>;
@@ -44,6 +45,20 @@ type EventVM = EventCore & {
 const MODERN_ICONS: Record<string, string> = {
   pin: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s7-6.1 7-11a7 7 0 1 0-14 0c0 4.9 7 11 7 11Z"/><circle cx="12" cy="11" r="3"/></svg>`,
 };
+const isUrlIcon = (s: string) => {
+  const t = s.toLowerCase();
+  return (
+    t.startsWith("http://") ||
+    t.startsWith("https://") ||
+    t.startsWith("/") ||
+    t.endsWith(".png") ||
+    t.endsWith(".svg") ||
+    t.endsWith(".jpg") ||
+    t.endsWith(".jpeg") ||
+    t.endsWith(".webp")
+  );
+};
+const isEmojiish = (s: string) => s.trim().length <= 4;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -153,6 +168,38 @@ function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
   }
   return ticks;
 }
+const POINTER_STYLE = `
+@keyframes timeline-pointer-glow { 0% { opacity: 0.45; transform: scale(0.9); } 50% { opacity: 0.7; transform: scale(1.05); } 100% { opacity: 0.45; transform: scale(0.9); } }
+`;
+function TimelinePointer({ className = "", animated = false }: { className?: string; animated?: boolean }): JSX.Element {
+  return (
+    <span className={className} role="presentation">
+      <style>{POINTER_STYLE}</style>
+      <span className="relative block h-full w-full">
+        <span
+          className="absolute inset-0 -translate-y-[35%] rounded-full bg-gradient-to-br from-indigo-400/40 via-sky-500/30 to-blue-600/25 blur-sm"
+          style={animated ? { animation: "timeline-pointer-glow 2.6s ease-in-out infinite" } : undefined}
+        />
+        <svg viewBox="0 0 38 34" className="relative h-full w-full">
+          <defs>
+            <linearGradient id="timeline-pointer-fill" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#f8fafc" />
+              <stop offset="40%" stopColor="#dbeafe" />
+              <stop offset="100%" stopColor="#1d4ed8" />
+            </linearGradient>
+            <linearGradient id="timeline-pointer-edge" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#1e3a8a" />
+              <stop offset="100%" stopColor="#0f172a" />
+            </linearGradient>
+          </defs>
+          <polygon points="19 2 34 28 4 28" fill="url(#timeline-pointer-fill)" />
+          <polygon points="19 2 26 28 12 28" fill="rgba(255,255,255,0.25)" />
+          <path d="M4 28h30" stroke="url(#timeline-pointer-edge)" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      </span>
+    </span>
+  );
+}
 
 // Stile OSM fallback (se manca MAPTILER)
 const OSM_STYLE: any = {
@@ -177,22 +224,16 @@ export default function GroupEventModulePage() {
   const sp = useSearchParams();
 
   // ---- lingua desiderata ----
-  const desiredLang =
-    (sp.get("lang") ||
-      (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
-      "it").toLowerCase();
+  const desiredLang = (sp.get("lang") || (typeof navigator !== "undefined" ? navigator.language?.slice(0,2) : "it") || "it").toLowerCase();
 
   // ---------- GID ----------
   const [gid, setGid] = useState<string | null>(null);
-  const group_event_id = gid;
-
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
   // ---- Utente corrente (serve per CUORE) ----
   const [userId, setUserId] = useState<string | null>(null);
 
-  // GID: da querystring o da localStorage
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
     if (raw) {
@@ -201,10 +242,7 @@ export default function GroupEventModulePage() {
       else setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>.");
     } else {
       try {
-        const ls =
-          typeof window !== "undefined"
-            ? localStorage.getItem("active_group_event_id")
-            : null;
+        const ls = typeof window !== "undefined" ? localStorage.getItem("active_group_event_id") : null;
         if (ls && UUID_RE.test(ls)) setGid(ls);
         else setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>.");
       } catch {
@@ -213,58 +251,66 @@ export default function GroupEventModulePage() {
     }
   }, [sp]);
 
-  // Landing href SOLO da referrer (nessuna logica auth qui)
+  // ---------- Landing + utente ----------
   useEffect(() => {
-    try {
-      const ref = (typeof document !== "undefined" && document.referrer) || "";
-      if (!ref) return;
-      const u = new URL(ref);
-      if (/^\/landing\/[^/]+$/i.test(u.pathname)) {
-        setLandingHref(u.pathname);
+    (async () => {
+      try {
+        const ref = (typeof document !== "undefined" && document.referrer) || "";
+        if (ref) {
+          try {
+            const u = new URL(ref);
+            if (/^\/landing\/[^/]+$/i.test(u.pathname)) {
+              setLandingHref(u.pathname);
+            }
+          } catch {}
+        }
+        const { data: userData } = await supabase.auth.getUser();
+        const myUid = userData?.user?.id ?? null;
+        setUserId(myUid);
+        if (!myUid) {
+          setLandingHref("/landing");
+          return;
+        }
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("landing_slug, persona, persona_code")
+          .eq("id", myUid)
+          .maybeSingle();
+        const slug =
+          (prof as any)?.landing_slug ?? (prof as any)?.persona ?? (prof as any)?.persona_code ?? null;
+        setLandingHref(slug ? `/landing/${slug}` : "/landing");
+      } catch {
+        setLandingHref("/landing");
       }
-    } catch {
-      /* ignore */
-    }
+    })();
   }, []);
 
-  // ---------- Stato dati contenuto ----------
+  // ---------- Stato ----------
   const [ge, setGe] = useState<AnyObj | null>(null);
-  const [geTr, setGeTr] = useState<{
-    title?: string;
-    pitch?: string;
-    description?: string;
-    video_url?: string;
-  } | null>(null);
+  const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string } | null>(null);
   const [rows, setRows] = useState<EventVM[]>([]);
-  const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [iconByEventId, setIconByEventId] = useState<Map<string, { raw: string; keyword: string | null }>>(new Map());
 
-  // ---------- MAPPA ----------
+  // ---------- MAPPA (unico blocco) ----------
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  // Liste/scroll refs
+  // Liste/scroll refs (unico blocco)
   const mobileListRef = useRef<HTMLDivElement | null>(null);
   const bottomListRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   function getVisibleMapContainer(): HTMLElement | null {
-    const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>('[data-map="gehj"]')
-    );
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-map="gehj"]'));
     for (const el of nodes) {
       const rect = el.getBoundingClientRect();
       const style = window.getComputedStyle(el);
-      if (
-        rect.width >= 120 &&
-        rect.height >= 120 &&
-        style.display !== "none" &&
-        style.visibility !== "hidden"
-      ) {
+      if (rect.width >= 120 && rect.height >= 120 && style.display !== "none" && style.visibility !== "hidden") {
         return el;
       }
     }
@@ -282,8 +328,7 @@ export default function GroupEventModulePage() {
       if (cancelled || mapRef.current) return;
       const container = getVisibleMapContainer();
       if (!container) {
-        attempts++;
-        if (attempts <= MAX_ATTEMPTS) return setTimeout(init, 50);
+        attempts++; if (attempts <= MAX_ATTEMPTS) return setTimeout(init, 50);
         return;
       }
 
@@ -306,49 +351,25 @@ export default function GroupEventModulePage() {
 
         map.on("load", () => {
           setMapLoaded(true);
-          try {
-            map.resize();
-          } catch {}
-          setTimeout(() => {
-            try {
-              map.resize();
-            } catch {}
-          }, 120);
+          try { map.resize(); } catch {}
+          setTimeout(() => { try { map.resize(); } catch {} }, 120);
         });
 
-        const ro = new ResizeObserver(() => {
-          try {
-            map.resize();
-          } catch {}
-        });
+        const ro = new ResizeObserver(() => { try { map.resize(); } catch {} });
         ro.observe(container);
-        window.addEventListener("resize", () => {
-          try {
-            map.resize();
-          } catch {}
-        });
-        window.addEventListener("orientationchange", () => {
-          try {
-            map.resize();
-          } catch {}
-        });
-        document.addEventListener("visibilitychange", () => {
-          try {
-            map.resize();
-          } catch {}
-        });
+        window.addEventListener("resize", () => { try { map.resize(); } catch {} });
+        window.addEventListener("orientationchange", () => { try { map.resize(); } catch {} });
+        document.addEventListener("visibilitychange", () => { try { map.resize(); } catch {} });
       } catch (e) {
         console.error("[GE] Map init error:", e);
       }
     };
 
     init();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // ---------- Fetch principale ----------
+  // ---------- Fetch + ordine + icone ----------
   useEffect(() => {
     if (!gid) return;
     (async () => {
@@ -383,38 +404,54 @@ export default function GroupEventModulePage() {
           geTrData = geTrAny?.[0] || null;
         }
 
-        // Eventi dalla vista v_journey (lingua gestita lato DB)
-        const { data: vjRows, error: vjErr } = await supabase
-          .from("v_journey")
-          .select(
-            `event_id, group_event_id, description, lang, title, video_url, wikipedia_url,
-             continent, country, era, exact_date, id, image_url, latitude, longitude, year_from, year_to,
-             journey_title`
-          )
+        const { data: links, error: linkErr } = await supabase
+          .from("event_group_event")
+          .select("event_id, events_list(*)")
           .eq("group_event_id", gid);
+        if (linkErr) throw linkErr;
 
-        if (vjErr) throw vjErr;
+        const cores: EventCore[] =
+          (links ?? [])
+            .map((r: any) => r.events_list)
+            .filter(Boolean)
+            .map((e: any) => ({
+              id: String(e.id),
+              latitude: typeof e.latitude === "number" ? e.latitude : null,
+              longitude: typeof e.longitude === "number" ? e.longitude : null,
+              era: e.era ?? null,
+              year_from: e.year_from ?? null,
+              year_to: e.year_to ?? null,
+              exact_date: e.exact_date ?? null,
+              location: e.location ?? null,
+              image_url: e.image_url ?? null,
+            })) || [];
 
-        const vms: EventVM[] = (vjRows ?? []).map((r: any) => {
-          const location = r.city ?? r.region ?? r.country ?? r.continent ?? null;
-          const core: EventCore = {
-            id: String(r.id),
-            latitude: typeof r.latitude === "number" ? r.latitude : null,
-            longitude: typeof r.longitude === "number" ? r.longitude : null,
-            era: r.era ?? null,
-            year_from: r.year_from ?? null,
-            year_to: r.year_to ?? null,
-            exact_date: r.exact_date ?? null,
-            location,
-            image_url: r.image_url ?? null,
-          };
+        const ids = cores.map((c) => c.id);
+
+        const trMap = new Map<string, { title?: string | null; description?: string | null; description_short?: string | null; wikipedia_url?: string | null; video_url?: string | null }>();
+        if (ids.length) {
+          const { data: trs } = await supabase
+            .from("event_translations")
+            .select("event_id, lang, title, description, description_short, wikipedia_url, video_url")
+            .in("event_id", ids);
+
+          (trs ?? []).forEach((t: any) => {
+            if (!trMap.has(t.event_id)) trMap.set(t.event_id, t);
+          });
+          (trs ?? [])
+            .filter((t: any) => t.lang?.toLowerCase() === desiredLang)
+            .forEach((t: any) => trMap.set(t.event_id, t));
+        }
+
+        const vms: EventVM[] = cores.map((c) => {
+          const tr = trMap.get(c.id) || ({} as any);
           return {
-            ...core,
-            title: (r.title ?? location ?? "Untitled").toString(),
-            description: (r.description ?? "").toString(),
-            wiki_url: r.wikipedia_url ? String(r.wikipedia_url) : null,
-            video_url: r.video_url ? String(r.video_url) : null,
-            order_key: chronoOrderKey(core),
+            ...c,
+            title: (tr?.title ?? c.location ?? "Untitled").toString(),
+            description: (tr?.description ?? tr?.description_short ?? "").toString(),
+            wiki_url: tr?.wikipedia_url ? String(tr.wikipedia_url) : null,
+            video_url: tr?.video_url ? String(tr.video_url) : null,
+            order_key: chronoOrderKey(c),
           };
         });
         vms.sort((a, b) => a.order_key - b.order_key);
@@ -422,11 +459,6 @@ export default function GroupEventModulePage() {
         setGe(geData);
         setGeTr(geTrData);
         setRows(vms);
-        setJourneyTitle(
-          vjRows && vjRows[0] && "journey_title" in vjRows[0]
-            ? vjRows[0].journey_title
-            : null
-        );
         setSelectedIndex(0);
       } catch (e: any) {
         setErr(e?.message ?? "Unknown error");
@@ -441,89 +473,70 @@ export default function GroupEventModulePage() {
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
-  // Check non bloccante della sessione + stato preferito all’avvio (se disponibile)
   useEffect(() => {
     (async () => {
       if (!gid) return;
+      if (!userId) { setIsFav(false); return; }
       try {
-        const { data } = await supabase.auth.getUser();
-        const uid = data?.user?.id ?? null;
-        setUserId(uid);
-        if (!uid) {
-          setIsFav(false);
-          return;
-        }
-        // Verifica preferito esistente
-        let { data: fav, error } = await supabase
+        // prova con profile_id (schema più probabile)
+        let { data, error } = await supabase
           .from("group_event_favourites")
           .select("id")
           .eq("group_event_id", gid)
-          .eq("profile_id", uid)
+          .eq("profile_id", userId)
           .maybeSingle();
         if (error) {
+          // fallback: alcuni schemi usano user_id
           const alt = await supabase
             .from("group_event_favourites")
             .select("id")
             .eq("group_event_id", gid)
-            .eq("user_id", uid)
+            .eq("user_id", userId)
             .maybeSingle();
-          setIsFav(!!alt.data);
-        } else {
-          setIsFav(!!fav);
+          data = alt.data as any;
         }
-      } catch {
+        setIsFav(!!data);
+      } catch (e) {
+        // in caso di errore lascio false senza rompere la UI
         setIsFav(false);
       }
     })();
-  }, [gid]);
+  }, [gid, userId]);
 
   async function toggleFavourite() {
-    if (!group_event_id) {
-      alert("ID del journey non disponibile.");
+    if (!gid) return;
+    if (!userId) {
+      alert("Per usare i preferiti devi accedere.");
+      router.push(landingHref || "/landing");
       return;
     }
-    if (!gid) return;
-
-    // Controllo login “on demand” (stile Timeline)
-    const { data } = await supabase.auth.getUser();
-    const uid = data?.user?.id ?? null;
-    if (!uid) {
-      alert("Per usare i preferiti devi accedere.");
-      return; // nessun redirect automatico
-    }
     if (savingFav) return;
-
-    setUserId(uid);
     setSavingFav(true);
     try {
       if (isFav) {
-        // DELETE (prima con profile_id, poi fallback user_id)
+        // DELETE
         const del1 = await supabase
           .from("group_event_favourites")
           .delete()
-          .eq("group_event_id", group_event_id)
-          .eq("profile_id", uid);
+          .eq("group_event_id", gid)
+          .eq("profile_id", userId);
         if (del1.error) {
           await supabase
             .from("group_event_favourites")
             .delete()
-            .eq("group_event_id", group_event_id)
-            .eq("user_id", uid);
+            .eq("group_event_id", gid)
+            .eq("user_id", userId);
         }
         setIsFav(false);
       } else {
-        // INSERT (prima con profile_id, poi fallback user_id)
-        const ins = await supabase.from("group_event_favourites").insert({
-          group_event_id,
-          profile_id: uid,
-          created_at: new Date().toISOString(),
-        } as any);
+        // INSERT
+        const ins = await supabase
+          .from("group_event_favourites")
+          .insert({ group_event_id: gid, profile_id: userId, created_at: new Date().toISOString() } as any);
         if (ins.error) {
-          await supabase.from("group_event_favourites").insert({
-            group_event_id,
-            user_id: uid,
-            created_at: new Date().toISOString(),
-          } as any);
+          await supabase
+            .from("group_event_favourites")
+            .insert({ group_event_id: gid, user_id: userId, created_at: new Date().toISOString() } as any);
         }
         setIsFav(true);
       }
@@ -536,17 +549,11 @@ export default function GroupEventModulePage() {
   function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
     const n = ids.length;
     const arr: [number, number][] = [];
-    if (n === 1) {
-      arr.push([0, 0]);
-      return arr;
-    }
+    if (n === 1) { arr.push([0, 0]); return arr; }
     const radius = radiusBase + Math.min(12, Math.round(n * 1.2));
     for (let i = 0; i < n; i++) {
       const angle = (2 * Math.PI * i) / n;
-      arr.push([
-        Math.round(radius * Math.cos(angle)),
-        Math.round(radius * Math.sin(angle)),
-      ]);
+      arr.push([Math.round(radius * Math.cos(angle)), Math.round(radius * Math.sin(angle))]);
     }
     return arr;
   }
@@ -562,8 +569,7 @@ export default function GroupEventModulePage() {
     rows.forEach((ev) => {
       if (ev.latitude == null || ev.longitude == null) return;
       const key = `${ev.longitude.toFixed(6)}_${ev.latitude.toFixed(6)}`;
-      if (!groups.has(key))
-        groups.set(key, { ids: [], lng: ev.longitude!, lat: ev.latitude! });
+      if (!groups.has(key)) groups.set(key, { ids: [], lng: ev.longitude!, lat: ev.latitude! });
       groups.get(key)!.ids.push(ev.id);
     });
 
@@ -609,16 +615,13 @@ export default function GroupEventModulePage() {
       if (ev.latitude == null || ev.longitude == null) return;
 
       const el = makeMarkerEl(ev, idx);
-      const pxOff =
-        (pixelOffsetById.get(ev.id) as [number, number]) ?? [0, 0];
+      const pxOff = pixelOffsetById.get(ev.id) ?? [0, 0];
 
       const marker = new maplibregl.Marker({ element: el, offset: pxOff as any })
         .setLngLat([ev.longitude!, ev.latitude!])
         .addTo(map);
 
-      try {
-        (marker as any).setZIndex?.(idx === selectedIndex ? 1000 : 0);
-      } catch {}
+      try { (marker as any).setZIndex?.(idx === selectedIndex ? 1000 : 0); } catch {}
 
       el.addEventListener("click", () => setSelectedIndex(idx));
 
@@ -633,10 +636,7 @@ export default function GroupEventModulePage() {
             [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
             [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
           ],
-          [
-            [pts[0][0], pts[0][1]],
-            [pts[0][0], pts[0][1]],
-          ]
+          [[pts[0][0], pts[0][1]], [pts[0][0], pts[0][1]]]
         );
         map.fitBounds(bounds as any, { padding: 84, duration: 800 });
       } else {
@@ -650,11 +650,7 @@ export default function GroupEventModulePage() {
     const ev = rows[selectedIndex];
     if (map && ev && ev.latitude !== null && ev.longitude !== null) {
       try {
-        map.flyTo({
-          center: [ev.longitude, ev.latitude],
-          zoom: Math.max(map.getZoom(), 6),
-          speed: 0.8,
-        });
+        map.flyTo({ center: [ev.longitude, ev.latitude], zoom: Math.max(map.getZoom(), 6), speed: 0.8 });
       } catch {}
     }
   }, [selectedIndex, rows]);
@@ -682,7 +678,6 @@ export default function GroupEventModulePage() {
     router.push(landingHref || "/landing");
   }
 
-  // === TIMELINE DATA ===
   const timelineData = useMemo(() => {
     if (!rows.length) return null;
 
@@ -741,16 +736,16 @@ export default function GroupEventModulePage() {
     return mids;
   }, [timelineData, timelineTicks]);
 
-  // ——— Percentuale puntatore (usa l'evento selezionato) ———
-  const currentPct = useMemo(() => {
-    if (!timelineData) return 50;
-    const ev = rows[selectedIndex];
-    if (!ev) return 50;
-    const span = buildTimelineSpan(ev);
-    if (!span) return 50;
-    const pct = ((span.start - timelineData.min) / Math.max(1, timelineData.range)) * 100;
-    return Math.max(0, Math.min(100, pct));
-  }, [rows, selectedIndex, timelineData]);
+  // ——— Progress avatar (spostato prima dei return condizionali) ———
+  const avatarProgress = useMemo(() => {
+    if (!timelineData || !timelineData.items.length) return 0;
+    const currentId = rows[selectedIndex]?.id;
+    const fallback = timelineData.items[0];
+    const target = currentId
+      ? timelineData.items.find((item) => item.ev.id === currentId) || fallback
+      : fallback;
+    return target ? target.progress : 0;
+  }, [timelineData, rows, selectedIndex]);
 
   const geTitle = (geTr?.title || ge?.title || "Journey").toString();
   const geSubtitle = (geTr?.pitch || ge?.pitch || "").toString();
@@ -787,103 +782,102 @@ export default function GroupEventModulePage() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
       {timelineData ? (
-        /* HEADER principale: 2 box (Titolo + Timeline) */
-        <section className="border-b border-slate-200 bg-white/95 shadow-sm">
-          <div className="mx-auto grid max-w-7xl grid-cols-[320px_minmax(0,1fr)] items-center gap-6 px-8 py-4">
+        <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 via-white to-white/80">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-sm sm:pr-6">
+              <div className="flex items-start gap-3">
+                <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{geTitle}</h2>
 
-            {/* 1️⃣ Titolo del Journey + Cuore + Stelle */}
-            <div className="flex flex-col justify-start rounded-xl border border-slate-200 bg-white p-5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.06)]">
-              <h1 className="text-xl font-semibold text-slate-900 text-left leading-snug break-words whitespace-pre-line">
-                {journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey"}
-              </h1>
+                {/* ---- Cuore (favourite) + rating stelle sotto ---- */}
+                {gid && (
+                  <div className="inline-flex flex-col items-center gap-1">
+                    <button
+                      onClick={toggleFavourite}
+                      disabled={savingFav}
+                      aria-pressed={isFav}
+                      title={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition ${
+                        isFav
+                          ? "border-rose-200 bg-rose-50 hover:bg-rose-100"
+                          : "border-gray-200 bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      <HeartIcon filled={isFav} />
+                    </button>
 
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  onClick={toggleFavourite}
-                  disabled={!group_event_id || savingFav}
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
-                    isFav
-                      ? "border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {isFav ? "♥ Favourite" : "♡ Favourite"}
-                </button>
-
-                {group_event_id ? (
-                  <RatingStars
-                    group_event_id={group_event_id}
-                    journeyId={group_event_id}
-                    size={18}
-                  />
-                ) : null}
+                    {/* Stelle rating (media • voti) */}
+                    <RatingStars groupEventId={gid} size={18} />
+                  </div>
+                )}
               </div>
+
+              {geSubtitle ? (
+                <p className="mt-3 text-sm leading-6 text-slate-600">{geSubtitle}</p>
+              ) : null}
             </div>
 
-            {/* 2️⃣ Timeline 3D (bianco glossy) */}
-            <div className="relative flex flex-col items-center justify-center rounded-2xl border border-slate-300 bg-gradient-to-b from-white to-slate-50 px-10 py-6 shadow-[inset_0_2px_10px_rgba(255,255,255,0.9),0_10px_18px_rgba(15,23,42,0.08)]">
-              {/* Asse blu con rombo (rilievo) */}
-              <div className="relative w-full h-[10px] rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner">
-                <div
-                  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-white bg-blue-500 shadow"
-                  style={{
-                    left: `${currentPct}%`,
-                    width: "16px",
-                    height: "16px",
-                    boxShadow: "0 0 8px rgba(30,64,175,0.55)",
-                  }}
-                />
-              </div>
-
-              {/* Ticks principali */}
-              {timelineTicks.length ? (
-                <div className="mt-2 grid w-full grid-cols-[repeat(16,minmax(0,1fr))]">
-                  {timelineTicks.map((t, i) => {
-                    const pct =
-                      ((t - timelineData.min) / timelineData.range) * 100;
-                    return (
+            {/* Timeline header a destra */}
+            <div className="flex-1 sm:flex sm:justify-end">
+              <div className="w-full max-w-[1180px] rounded-3xl border border-blue-400/40 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-950 px-4 py-4 text-white shadow-lg sm:px-6 sm:py-4">
+                <div className="relative ml-auto h-[52px] w-full max-w-[1060px] sm:h-[72px]">
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2">
+                    <div className="relative mx-auto h-3 w-full max-w-[1000px]">
                       <div
-                        key={`t-${i}`}
-                        className="relative"
-                        style={{ gridColumn: `span 16 / span 16` }}
-                      >
-                        <div
-                          className="absolute top-0 h-[6px] w-[2px] -translate-x-1/2 bg-blue-900/50"
-                          style={{ left: `${pct}%` }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
+                        className="absolute inset-0 rounded-full"
+                        style={{
+                          background: "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(242,242,242,0.9) 55%, rgba(225,225,225,0.88) 100%)",
+                          boxShadow: "inset 0 2px 4px rgba(255,255,255,0.85), inset 0 -5px 10px rgba(15,23,42,0.25), 0 10px 16px rgba(0,0,0,0.24)"
+                        }}
+                      />
+                      <div className="absolute left-1/2 top-full h-4 w-[92%] -translate-x-1/2 -translate-y-1 rounded-full bg-blue-950/35 blur-md" />
+                    </div>
+                  </div>
 
-              {/* Dettaglio timeframe 0-25-50-75-100% sotto l’asse */}
-              <div className="mt-1 relative w-full h-5">
-                <div className="absolute left-0 -top-1 h-3 w-[1px] bg-blue-900/60" />
-                <div className="absolute left-[25%] -top-1 h-3 w-[1px] -translate-x-1/2 bg-blue-900/40" />
-                <div className="absolute left-1/2 -top-1 h-3 w-[1px] -translate-x-1/2 bg-blue-900/60" />
-                <div className="absolute left-[75%] -top-1 h-3 w-[1px] -translate-x-1/2 bg-blue-900/40" />
-                <div className="absolute right-0 -top-1 h-3 w-[1px] bg-blue-900/60" />
-                <div className="absolute inset-x-0 -bottom-0 flex justify-between text-[11px] font-medium text-blue-800/90">
-                  <span>{formatTimelineYearLabel(timelineData.min)}</span>
-                  <span>
-                    {formatTimelineYearLabel(
-                      timelineData.min +
-                        (timelineData.max - timelineData.min) * 0.25
-                    )}
-                  </span>
-                  <span>
-                    {formatTimelineYearLabel(
-                      (timelineData.min + timelineData.max) / 2
-                    )}
-                  </span>
-                  <span>
-                    {formatTimelineYearLabel(
-                      timelineData.min +
-                        (timelineData.max - timelineData.min) * 0.75
-                    )}
-                  </span>
-                  <span>{formatTimelineYearLabel(timelineData.max)}</span>
+                  <div
+                    className="pointer-events-none absolute top=[calc(50%-18px)] sm:top-[calc(50%-22px)]"
+                    style={{
+                      left: `${avatarProgress * 100}%`,
+                      transform: "translate(-50%, 0)",
+                      transition: "left 360ms cubic-bezier(0.22, 1, 0.36, 1)",
+                      zIndex: 6,
+                    }}
+                  >
+                    <TimelinePointer
+                      animated={true}
+                      className="block h-8 w-8 sm:h-10 sm:w-10"
+                    />
+                  </div>
+
+                  <div className="absolute inset-x-0 top=[calc(50%+4px)] sm:top-[calc(50%+4px)]">
+                    <div className="relative h-8">
+                      {timelineTicks.map((tick) => (
+                        <div
+                          key={`timeline-tick-${tick}`}
+                          className="absolute -translate-x-1/2 text-center"
+                          style={{ left: `${((tick - timelineData.min) / timelineData.range) * 100}%` }}
+                        >
+                          <div className="mx-auto h-4 w-[2px] rounded-full bg-slate-300" />
+                          <div className="mt-1 whitespace-nowrap text-[10px] font-medium text-blue-100/80">
+                            {formatTimelineYearLabel(tick)}
+                          </div>
+                        </div>
+                      ))}
+                      {timelineMinorTicks.map((tick) => (
+                        <div
+                          key={`timeline-minor-tick-${tick}`}
+                          className="absolute -translate-x-1/2"
+                          style={{ left: `${((tick - timelineData.min) / timelineData.range) * 100}%` }}
+                        >
+                          <div className="mx-auto h-2.5 w-px rounded-full bg-slate-300/70" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="absolute inset-x-0 top-[calc(50%+20px)] flex justify-between text-[11px] font-semibold text-blue-50">
+                    <span>{formatTimelineYearLabel(timelineData.min)}</span>
+                    <span>{formatTimelineYearLabel(timelineData.max)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -895,11 +889,7 @@ export default function GroupEventModulePage() {
       <div className="mx-auto w-full max-w-7xl flex-1 lg:hidden">
         {/* MAPPA — mezzo schermo */}
         <section className="relative h-[50svh] min-h-[320px] border-b border-black/10">
-          <div
-            data-map="gehj"
-            className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
-            aria-label="Map canvas"
-          />
+          <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
           {!mapLoaded && (
             <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
               Inizializzazione mappa…
@@ -916,9 +906,7 @@ export default function GroupEventModulePage() {
                 return (
                   <button
                     key={ev.id}
-                    ref={(el) => {
-                      if (el) itemRefs.current.set(ev.id, el!);
-                    }}
+                    ref={(el) => { if (el) itemRefs.current.set(ev.id, el!); }}
                     onClick={() => setSelectedIndex(idx)}
                     className={`shrink-0 w-[78vw] max-w-[520px] rounded-xl border px-3 py-2 text-left transition ${
                       active
@@ -928,28 +916,17 @@ export default function GroupEventModulePage() {
                     title={ev.title}
                   >
                     <div className="flex items-start gap-2">
-                      <div
-                        className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
-                          active ? "bg-white text-black" : "bg-gray-900 text-white"
-                        }`}
-                      >
+                      <div className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
+                        active ? "bg-white text-black" : "bg-gray-900 text-white"
+                      }`}>
                         {idx + 1}
                       </div>
                       <div className="min-w-0">
-                        <div
-                          className={`truncate text-[13.5px] font-semibold ${
-                            active ? "text-white" : "text-gray-900"
-                          }`}
-                        >
+                        <div className={`truncate text-[13.5px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
                           {ev.title}
                         </div>
-                        <div
-                          className={`text-[12px] ${
-                            active ? "text-white/80" : "text-gray-600"
-                          }`}
-                        >
-                          {formatWhen(ev)}
-                          {ev.location ? ` • ${ev.location}` : ""}
+                        <div className={`text-[12px] ${active ? "text-white/80" : "text-gray-600"}`}>
+                          {formatWhen(ev)}{ev.location ? ` • ${ev.location}` : ""}
                         </div>
                       </div>
                     </div>
@@ -967,27 +944,17 @@ export default function GroupEventModulePage() {
               <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col">
                 {/* Header sintetico */}
                 <div className="px-4 pt-3">
-                  <div className="text-sm font-semibold text-gray-900 truncate">
-                    {rows[selectedIndex]?.title ?? "—"}
-                  </div>
+                  <div className="text-sm font-semibold text-gray-900 truncate">{rows[selectedIndex]?.title ?? "—"}</div>
                   <div className="text-[12.5px] text-gray-600">
-                    {rows[selectedIndex]
-                      ? formatWhen(rows[selectedIndex] as EventVM)
-                      : "—"}
-                    {rows[selectedIndex]?.location
-                      ? ` • ${rows[selectedIndex]!.location}`
-                      : ""}
+                    {rows[selectedIndex] ? formatWhen(rows[selectedIndex] as EventVM) : "—"}
+                    {rows[selectedIndex]?.location ? ` • ${rows[selectedIndex]!.location}` : ""}
                   </div>
                 </div>
 
                 {rows[selectedIndex]?.image_url ? (
                   <div className="px-4 pt-3">
                     <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                      <img
-                        src={rows[selectedIndex]!.image_url!}
-                        alt={rows[selectedIndex]!.title}
-                        className="h-48 w-full object-cover"
-                      />
+                      <img src={rows[selectedIndex]!.image_url!} alt={rows[selectedIndex]!.title} className="h-48 w-full object-cover" />
                     </div>
                   </div>
                 ) : null}
@@ -1016,11 +983,7 @@ export default function GroupEventModulePage() {
                 <div className="mt-3 border-t border-black/10 bg-white/95 px-3 py-2 rounded-b-2xl">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() =>
-                        setSelectedIndex((i) =>
-                          rows.length ? (i - 1 + rows.length) % rows.length : 0
-                        )
-                      }
+                      onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                       title="Previous"
                     >
@@ -1034,11 +997,7 @@ export default function GroupEventModulePage() {
                       {isPlaying ? "⏸" : "▶"}
                     </button>
                     <button
-                      onClick={() =>
-                        setSelectedIndex((i) =>
-                          rows.length ? (i + 1) % rows.length : 0
-                        )
-                      }
+                      onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                       title="Next"
                     >
@@ -1046,14 +1005,7 @@ export default function GroupEventModulePage() {
                     </button>
 
                     <div className="ml-auto text:[12px] text-gray-600">
-                      {rows.length ? (
-                        <>
-                          Event <span className="font-medium">{selectedIndex + 1}</span> /{" "}
-                          <span className="font-medium">{rows.length}</span>
-                        </>
-                      ) : (
-                        "No events"
-                      )}
+                      {rows.length ? <>Event <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span></> : "No events"}
                     </div>
 
                     {rows[selectedIndex]?.video_url ? (
@@ -1087,22 +1039,14 @@ export default function GroupEventModulePage() {
                 {rows[selectedIndex]?.title ?? "—"}
               </div>
               <div className="text-[12.5px] text-gray-600 mb-2">
-                {rows[selectedIndex]
-                  ? formatWhen(rows[selectedIndex] as EventVM)
-                  : "—"}
-                {rows[selectedIndex]?.location
-                  ? ` • ${rows[selectedIndex]!.location}`
-                  : ""}
+                {rows[selectedIndex] ? formatWhen(rows[selectedIndex] as EventVM) : "—"}
+                {rows[selectedIndex]?.location ? ` • ${rows[selectedIndex]!.location}` : ""}
               </div>
 
               {rows[selectedIndex]?.image_url ? (
                 <div className="mb-3">
                   <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                    <img
-                      src={rows[selectedIndex]!.image_url!}
-                      alt={rows[selectedIndex]!.title}
-                      className="h-44 w-full object-cover"
-                    />
+                    <img src={rows[selectedIndex]!.image_url!} alt={rows[selectedIndex]!.title} className="h-44 w-full object-cover" />
                   </div>
                 </div>
               ) : null}
@@ -1141,11 +1085,7 @@ export default function GroupEventModulePage() {
             <div className="sticky bottom-0 border-t border-black/10 bg-white/80 px-4 py-3 backdrop-blur">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() =>
-                    setSelectedIndex((i) =>
-                      rows.length ? (i - 1 + rows.length) % rows.length : 0
-                    )
-                  }
+                  onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                   title="Previous"
                 >
@@ -1159,11 +1099,7 @@ export default function GroupEventModulePage() {
                   {isPlaying ? "⏸" : "▶"}
                 </button>
                 <button
-                  onClick={() =>
-                    setSelectedIndex((i) =>
-                      rows.length ? (i + 1) % rows.length : 0
-                    )
-                  }
+                  onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
                   title="Next"
                 >
@@ -1171,14 +1107,7 @@ export default function GroupEventModulePage() {
                 </button>
 
                 <div className="ml-auto text-[12px] text-gray-600">
-                  {rows.length ? (
-                    <>
-                      Event <span className="font-medium">{selectedIndex + 1}</span> /{" "}
-                      <span className="font-medium">{rows.length}</span>
-                    </>
-                  ) : (
-                    "No events"
-                  )}
+                  {rows.length ? <>Event <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span></> : "No events"}
                 </div>
               </div>
             </div>
@@ -1186,11 +1115,7 @@ export default function GroupEventModulePage() {
 
           {/* MAPPA DESTRA */}
           <section className="relative min-h-[320px]">
-            <div
-              data-map="gehj"
-              className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
-              aria-label="Map canvas"
-            />
+            <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
             {!mapLoaded && (
               <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
                 Inizializzazione mappa…
@@ -1202,10 +1127,8 @@ export default function GroupEventModulePage() {
         {/* BANDA EVENTI */}
         <aside className="h-[32svh] bg-white/90 backdrop-blur">
           <div ref={bottomListRef} className="h-full overflow-hidden px-4 py-3">
-            <div className="mb-2 text-sm font-medium text-gray-900">
-              Eventi (ordine cronologico)
-            </div>
-            <ol className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+            <div className="mb-2 text-sm font-medium text-gray-900">Eventi (ordine cronologico)</div>
+            <ol className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'thin' }}>
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
                 const span = buildTimelineSpan(ev);
@@ -1213,9 +1136,7 @@ export default function GroupEventModulePage() {
                 return (
                   <li key={ev.id} className="min-w-[240px] flex-shrink-0">
                     <button
-                      ref={(el) => {
-                        if (el) itemRefs.current.set(ev.id, el!);
-                      }}
+                      ref={(el) => { if (el) itemRefs.current.set(ev.id, el!); }}
                       onClick={() => setSelectedIndex(idx)}
                       className={`w-full text-left rounded-xl border transition px-3 py-2 ${
                         active
@@ -1225,28 +1146,17 @@ export default function GroupEventModulePage() {
                       title={ev.title}
                     >
                       <div className="flex items-start gap-2">
-                        <div
-                          className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
-                            active ? "bg-white text-black" : "bg-gray-900 text-white"
-                          }`}
-                        >
+                        <div className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs ${
+                          active ? "bg-white text-black" : "bg-gray-900 text-white"
+                        }`}>
                           {idx + 1}
                         </div>
                         <div className="min-w-0">
-                          <div
-                            className={`truncate text-[13.5px] font-semibold ${
-                              active ? "text-white" : "text-gray-900"
-                            }`}
-                          >
+                          <div className={`truncate text-[13.5px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
                             {ev.title}
                           </div>
-                          <div
-                            className={`text-[12px] ${
-                              active ? "text-white/80" : "text-gray-600"
-                            }`}
-                          >
-                            {label}
-                            {ev.location ? ` - ${ev.location}` : ""}
+                          <div className={`text-[12px] ${active ? "text-white/80" : "text-gray-600"}`}>
+                            {label}{ev.location ? ` - ${ev.location}` : ""}
                           </div>
                         </div>
                       </div>

@@ -1,8 +1,8 @@
-/* app/module/rating/page.tsx
- * GeoHistory — Top Rated Journeys
- * Fix mirati:
- * 1) Link corretto -> ?gid=<id>
- * 2) NESSUN bordo visibile sulle card (solo ombre)
+﻿/* frontend/app/module/rating/page.tsx
+ * GeoHistory — Top Rated Journeys (solo VIEW)
+ * - Legge stats da: v_group_event_rating_stats
+ * - Legge dettagli da: v_journeys
+ * - Link corretto: /module/group_event?gid=<journey_id>
  */
 
 import { cookies } from "next/headers";
@@ -14,18 +14,18 @@ import { Star } from "lucide-react";
 export const revalidate = 0;
 
 type StatsRow = {
-  group_event_id: string;
+  group_event_id: string;          // = journey_id
   avg_rating: number | null;
   ratings_count: number | null;
 };
 
-type GroupEventRow = {
-  id: string;
-  title: string | null;
-  cover_url: string | null;
+type JourneyRow = {
+  journey_id: string;
+  translation_title: string | null;
+  journey_cover_url: string | null;
 };
 
-function sortByRating(rows: Array<{ ge: GroupEventRow; avg: number; cnt: number }>) {
+function sortByRating(rows: Array<{ j: JourneyRow; avg: number; cnt: number }>) {
   return [...rows].sort((a, b) => {
     if (b.avg !== a.avg) return b.avg - a.avg;
     return b.cnt - a.cnt;
@@ -35,16 +35,18 @@ function sortByRating(rows: Array<{ ge: GroupEventRow; avg: number; cnt: number 
 export default async function RatingPage() {
   const supabase = createServerComponentClient({ cookies });
 
-  // Legge le stats
+  // 1) Legge le statistiche dai RATING (VIEW)
   const { data: statsRaw, error: statsErr } = await supabase
-    .from("group_event_rating_stats")
+    .from("v_group_event_rating_stats")
     .select("group_event_id, avg_rating, ratings_count");
 
   if (statsErr) {
     return (
       <div className="px-4 py-6 md:px-8">
         <h1 className="text-2xl font-semibold tracking-tight">Top Rated Journeys</h1>
-        <p className="mt-2 text-sm text-red-600">Errore nel recupero dei rating: {statsErr.message}</p>
+        <p className="mt-2 text-sm text-red-600">
+          Errore nel recupero dei rating: {statsErr.message}
+        </p>
       </div>
     );
   }
@@ -63,31 +65,33 @@ export default async function RatingPage() {
     );
   }
 
-  // Prende i GE
+  // 2) Recupera solo i Journey coinvolti (VIEW)
   const geIds = Array.from(new Set(filtered.map((s) => s.group_event_id)));
-  const { data: geRowsRaw, error: geErr } = await supabase
-    .from("group_events")
-    .select("id, title, cover_url")
-    .in("id", geIds);
+  const { data: jRowsRaw, error: jErr } = await supabase
+    .from("v_journeys")
+    .select("journey_id, translation_title, journey_cover_url")
+    .in("journey_id", geIds);
 
-  if (geErr) {
+  if (jErr) {
     return (
       <div className="px-4 py-6 md:px-8">
         <h1 className="text-2xl font-semibold tracking-tight">Top Rated Journeys</h1>
-        <p className="mt-2 text-sm text-red-600">Errore nel recupero dei Group Event: {geErr.message}</p>
+        <p className="mt-2 text-sm text-red-600">
+          Errore nel recupero dei Journey: {jErr.message}
+        </p>
       </div>
     );
   }
 
-  const geMap = new Map<string, GroupEventRow>((geRowsRaw ?? []).map((r) => [r.id, r as GroupEventRow]));
+  const jMap = new Map<string, JourneyRow>((jRowsRaw ?? []).map((r) => [r.journey_id, r as JourneyRow]));
 
   const joined = filtered
     .map((s) => {
-      const ge = geMap.get(s.group_event_id);
-      if (!ge || s.avg_rating === null) return null;
-      return { ge, avg: Number(s.avg_rating), cnt: Number(s.ratings_count ?? 0) };
+      const j = jMap.get(s.group_event_id);
+      if (!j || s.avg_rating === null) return null;
+      return { j, avg: Number(s.avg_rating), cnt: Number(s.ratings_count ?? 0) };
     })
-    .filter(Boolean) as Array<{ ge: GroupEventRow; avg: number; cnt: number }>;
+    .filter(Boolean) as Array<{ j: JourneyRow; avg: number; cnt: number }>;
 
   const rows = sortByRating(joined);
 
@@ -96,13 +100,13 @@ export default async function RatingPage() {
       <h1 className="mb-6 text-2xl font-semibold tracking-tight">Top Rated Journeys</h1>
 
       <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {rows.map(({ ge, avg, cnt }) => {
-          const title = ge.title ?? "Untitled";
-          const cover = ge.cover_url;
+        {rows.map(({ j, avg, cnt }) => {
+          const title = j.translation_title ?? "Untitled";
+          const cover = j.journey_cover_url;
 
           return (
             <li
-              key={ge.id}
+              key={j.journey_id}
               className="
                 group relative
                 rounded-3xl bg-card outline-none
@@ -115,7 +119,7 @@ export default async function RatingPage() {
               "
             >
               <Link
-                href={`/module/group_event?gid=${encodeURIComponent(ge.id)}`}
+                href={`/module/group_event?gid=${encodeURIComponent(j.journey_id)}`}
                 prefetch={false}
                 className="block"
               >

@@ -15,7 +15,7 @@ type Persona = {
 
 type Profile = {
   id: string;
-  language_code: string | null;
+  language_code: string | null; // 'it' | 'en' | null
   persona_id: string | null;
 };
 
@@ -24,19 +24,9 @@ const LANGS = [
   { value: 'en', label: 'English' },
 ];
 
-// Privilegiati = qualsiasi code che inizi con ADMIN o MOD (copre varianti)
 function isPrivilegedCode(code: string | null | undefined) {
   const u = (code || '').trim().toUpperCase();
   return u.startsWith('ADMIN') || u.startsWith('MOD');
-}
-
-// Etichetta localizzata per Persona
-function getPersonaLabel(p: Persona | undefined, lang: string | null) {
-  if (!p) return 'Persona';
-  const isIt = (lang || 'en').toLowerCase().startsWith('it');
-  const primary = isIt ? p.name_it : p.name_en;
-  const fallback = isIt ? p.name_en : p.name_it;
-  return (primary || fallback || p.code || 'Persona');
 }
 
 export default function SettingsPage() {
@@ -55,11 +45,22 @@ export default function SettingsPage() {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [currentPersona, setCurrentPersona] = useState<Persona | null>(null);
 
-  // ---- home dinamica (fallback su FAN) ----
+  // ---- home dinamica (fallback FAN) ----
   const [homeHref, setHomeHref] = useState<string | null>(null);
   const [loadingHome, setLoadingHome] = useState<boolean>(true);
 
-  // ===== CARICAMENTO DATI =====
+  // label localizzata per persona
+  const personaLabel = useMemo(() => {
+    return (p: Persona | undefined, lang: string | null) => {
+      if (!p) return 'Persona';
+      const isIt = (lang || 'en').toLowerCase().startsWith('it');
+      const primary = isIt ? p.name_it : p.name_en;
+      const fallback = isIt ? p.name_en : p.name_it;
+      return (primary || fallback || p.code || 'Persona');
+    };
+  }, []);
+
+  // ===== CARICAMENTO =====
   useEffect(() => {
     let alive = true;
 
@@ -70,8 +71,9 @@ export default function SettingsPage() {
 
       // 1) utente
       const { data: { user }, error: uerr } = await supabase.auth.getUser();
-      if (uerr) { if (alive) { setError(uerr.message); setLoading(false); } return; }
-      if (alive) setUser(user ?? null);
+      if (!alive) return;
+      if (uerr) { setError(uerr.message); setLoading(false); return; }
+      setUser(user ?? null);
 
       // 2) profilo
       let prof: Profile | null = null;
@@ -82,40 +84,46 @@ export default function SettingsPage() {
           .eq('id', user.id)
           .single();
 
+        if (!alive) return;
         if (perr) {
-          if (alive) setError(perr.message);
-        } else if (alive && profRow) {
+          setError(perr.message);
+        } else if (profRow) {
           prof = profRow as Profile;
           setProfile(prof);
         }
       }
 
-      // 3) persona corrente (quella del profilo) — è quella che DEVE vedersi nel campo
-      let curr: Persona | null = null;
+      // 3) persona corrente
+      let currPersona: Persona | null = null;
       if (user && prof?.persona_id) {
-        const { data: pRow } = await supabase
+        const { data: pRow, error: perr2 } = await supabase
           .from('personas')
           .select('id, code, name_it, name_en')
           .eq('id', prof.persona_id)
           .single();
-        if (pRow) curr = pRow as Persona;
-        setCurrentPersona(curr);
+
+        if (!alive) return;
+        if (perr2) {
+          setError(prev => prev ? prev : perr2.message);
+        } else if (pRow) {
+          currPersona = pRow as Persona;
+          setCurrentPersona(currPersona);
+        }
       }
 
-      // 4) tutte le personas per le opzioni di scelta
+      // 4) elenco personas (eventuale iniezione della corrente)
       const { data: pers, error: persErr } = await supabase
         .from('personas')
         .select('id, code, name_it, name_en')
         .order('code', { ascending: true });
 
+      if (!alive) return;
       if (persErr) {
-        if (alive) setError(prev => prev ? prev : persErr.message);
-      } else if (alive) {
+        setError(prev => prev ? prev : persErr.message);
+      } else {
         let list = (pers || []) as Persona[];
-        // GARANTISCO che l'opzione corrente sia presente tra le option,
-        // così il value della select combacia SEMPRE con una option visibile.
-        if (curr && !list.some(px => px.id === curr!.id)) {
-          list = [curr, ...list];
+        if (currPersona && !list.some(px => px.id === currPersona!.id)) {
+          list = [currPersona, ...list];
         }
         setPersonas(list);
       }
@@ -124,13 +132,13 @@ export default function SettingsPage() {
       try {
         setLoadingHome(true);
         let href = '/landing/FAN';
-        if (curr?.code?.trim()) href = `/landing/${curr.code.trim()}`;
-        if (alive) setHomeHref(href);
+        if (currPersona?.code?.trim()) href = `/landing/${currPersona.code.trim()}`;
+        setHomeHref(href);
       } finally {
-        if (alive) setLoadingHome(false);
+        setLoadingHome(false);
       }
 
-      if (alive) setLoading(false);
+      setLoading(false);
     })();
 
     return () => { alive = false; };
@@ -143,23 +151,16 @@ export default function SettingsPage() {
     return m;
   }, [personas]);
 
-  // È un ruolo privilegiato?
+  // privilegiato?
   const isPrivileged = isPrivilegedCode(currentPersona?.code);
 
-  // ===== OPZIONI DEL DROPDOWN =====
-  // 1) Mostro SEMPRE la persona corrente come prima opzione (così il value trova la option)
-  // 2) Poi aggiungo SOLO le non-privilegiate (nessuna ADMIN/MOD selezionabile)
-  const options: Persona[] = useMemo(() => {
-    const base = personas.filter(p => !isPrivilegedCode(p.code));
-    const result: Persona[] = [];
-    if (currentPersona) result.push(currentPersona);
-    for (const p of base) {
-      if (!currentPersona || p.id !== currentPersona.id) result.push(p);
-    }
-    return result;
-  }, [personas, currentPersona]);
+  // opzioni select persona (i non privilegiati non vedono ruoli ADMIN/MOD)
+  const filteredPersonas: Persona[] = useMemo(() => {
+    if (isPrivileged && currentPersona) return [currentPersona];
+    return personas.filter(p => !isPrivilegedCode(p.code));
+  }, [isPrivileged, currentPersona, personas]);
 
-  // ===== SALVATAGGIO =====
+  // ===== SALVATAGGIO (senza throw: coerzione del payload) =====
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!profile) return;
@@ -169,21 +170,29 @@ export default function SettingsPage() {
     setOk(null);
 
     try {
-      const next = profile.persona_id ? personasById.get(profile.persona_id) : null;
-      const nextCode = next?.code || null;
+      const currentPersonaId = currentPersona?.id ?? null;
+      const uiPersonaId = profile.persona_id ?? null;
 
-      // Non consentire di salvare su ADMIN/MOD
-      if (isPrivilegedCode(nextCode)) {
-        throw new Error('Non puoi selezionare ruoli privilegiati (ADMIN o MOD) da questa pagina.');
+      // Se sei ADMIN/MOD → forziamo sempre la persona corrente.
+      // Se NON sei privilegiato → accettiamo solo persona NON privilegiata, altrimenti usiamo la corrente.
+      let personaIdToSave: string | null;
+      if (isPrivileged) {
+        personaIdToSave = currentPersonaId;
+      } else {
+        const target = uiPersonaId ? personasById.get(uiPersonaId) : null;
+        const targetPriv = target ? isPrivilegedCode(target.code) : false;
+        personaIdToSave = targetPriv ? (currentPersonaId || null) : (uiPersonaId || null);
       }
+
+      const payload = {
+        language_code: profile.language_code || null, // lingua sempre salvabile
+        persona_id: personaIdToSave,
+      };
 
       const resp = await fetch('/api/profile/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language_code: profile.language_code || null,
-          persona_id: profile.persona_id || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!resp.ok) {
@@ -241,11 +250,11 @@ export default function SettingsPage() {
     );
   }
 
-  // valore e stato della select
-  // - value è SEMPRE la persona del profilo (così vedi quella associata)
-  // - se ADMIN/MOD → select disabilitata (si vede ma non si cambia)
-  const selectValue = profile?.persona_id || '';
   const selectDisabled = saving || isPrivileged;
+  const selectValue =
+    isPrivileged
+      ? (currentPersona?.id || '')    // ADMIN/MOD: bloccata
+      : (profile?.persona_id || '');
 
   return (
     <div className="min-h-[calc(100vh-0px)] w-full bg-gray-50">
@@ -259,10 +268,11 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium mb-2">Language</label>
               <select
                 className="w-full rounded-xl border px-3 py-2"
-                value={profile?.language_code || ''}
-                onChange={(e) =>
-                  setProfile(prev => prev ? { ...prev, language_code: e.target.value } : prev)
-                }
+                value={profile?.language_code ?? ''}
+                onChange={(e) => {
+                  setOk(null); setError(null);
+                  setProfile(prev => prev ? { ...prev, language_code: e.target.value } : prev);
+                }}
               >
                 <option value="" disabled>Choose language…</option>
                 {LANGS.map(l => (
@@ -279,36 +289,27 @@ export default function SettingsPage() {
                 className="w-full rounded-xl border px-3 py-2"
                 value={selectValue}
                 disabled={selectDisabled}
-                onChange={(e) =>
-                  setProfile(prev => prev ? { ...prev, persona_id: e.target.value } : prev)
-                }
+                onChange={(e) => {
+                  setOk(null); setError(null);
+                  setProfile(prev => prev ? { ...prev, persona_id: e.target.value } : prev);
+                }}
               >
-                {/* Placeholder solo se manca persona_id (caso non tuo) */}
-                {!selectValue && (
-                  <option value="">Choose persona…</option>
-                )}
+                <option value="">
+                  {isPrivileged
+                    ? 'Ruolo amministrativo (non modificabile)'
+                    : 'Choose persona…'}
+                </option>
 
-                {/* 1) la persona corrente del profilo, SEMPRE visibile in cima */}
-                {currentPersona && (
-                  <option key={`current-${currentPersona.id}`} value={currentPersona.id}>
-                    {getPersonaLabel(currentPersona, profile?.language_code || 'en')}
+                {filteredPersonas.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {personaLabel(p, profile?.language_code || 'en')}
                   </option>
-                )}
-
-                {/* 2) tutte le NON privilegiate (niente ADMIN/MOD selezionabili) */}
-                {options
-                  .filter(p => !currentPersona || p.id !== currentPersona.id)
-                  .map(p => (
-                    <option key={p.id} value={p.id}>
-                      {getPersonaLabel(p, profile?.language_code || 'en')}
-                    </option>
-                  ))}
+                ))}
               </select>
-
               <p className="mt-1 text-xs text-gray-500">
                 {isPrivileged
                   ? 'Il tuo ruolo è amministrativo e non può essere modificato da questa pagina.'
-                  : 'Puoi scegliere un’altra persona. I ruoli ADMIN/MOD non sono selezionabili.'}
+                  : 'Scegli il tuo profilo (es. Student, Researcher, Fan…). I ruoli ADMIN/MOD non sono auto-assegnabili.'}
               </p>
             </div>
 
@@ -316,13 +317,12 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               <button
                 type="submit"
-                disabled={saving || isPrivileged}
+                disabled={saving || !profile}
                 className="rounded-xl bg-blue-600 px-4 py-2 text-white disabled:opacity-60"
               >
                 {saving ? 'Saving…' : 'Save settings'}
               </button>
 
-              {/* Cancel: home dinamica */}
               <button
                 type="button"
                 onClick={goHome}

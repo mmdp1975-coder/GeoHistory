@@ -1,0 +1,6 @@
+﻿"Area","RelPath","Status"
+"frontend","frontend\app\layout.tsx","Present"
+"frontend","frontend\middleware.ts","Present"
+"frontend","frontend\lib\supabase\client.ts","Present"
+"frontend","frontend\lib\supabase\server.ts","Present"
+"frontend","components\SupabaseProvider.tsx","Missing"

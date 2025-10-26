@@ -1,7 +1,7 @@
 // frontend/app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
-import SupabaseProvider from "@/lib/SupabaseProvider";
+import SupabaseProvider from "./components/SupabaseProvider";
 
 export const metadata: Metadata = {
   title: "GeoHistory Journey",

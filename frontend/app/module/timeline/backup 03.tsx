@@ -1,37 +1,42 @@
-﻿﻿// frontend/app/module/timeline/page_inner.tsx
+﻿// ... FILE INTERO IDENTICO ALL'ULTIMA VERSIONE INVIATA ...
+// unica differenza: blocco "4) Metadata GE — ***USA LA VISTA UNICA***"
+// con .eq('visibility','public').eq('workflow_state','published')
+
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import RatingSummary from "../../components/RatingSummary";
 
 type UUID = string;
 
-/** === View row (v_journeys) === */
-type VJourneyRow = {
-  journey_id: UUID;
-  journey_slug: string | null;
-  journey_cover_url: string | null;
-  translation_title: string | null;
-  translation_description?: string | null;
-  translation_lang2?: string | null;
-  events_count: number | null;
-  year_from_min: number | null;
-  year_to_max: number | null;
-  favourites_count?: number | null;
-  is_favourite?: boolean | null;
-  visibility?: string | null;       // legacy typing (non usati)
-  workflow_state?: string | null;   // legacy typing (non usati)
+type EventsListRowRaw = {
+  source_event_id: UUID | null;
+  year_from: number | null;
+  year_to: number | null;
+  era: string | null;
+};
+type EventsListRowNorm = {
+  source_event_id: UUID;
+  yFrom: number;
+  yTo: number;
 };
 
-/** === Card model (compatibile con il render precedente) === */
-type GeWithCount = {
+type EGE = { event_id: UUID; group_event_id: UUID };
+
+type GroupEventMeta = {
   id: UUID;
   slug: string | null;
   cover_url: string | null;
+};
+
+type GroupEvent = GroupEventMeta & {
   title: string | null;
+};
+
+type GeWithCount = GroupEvent & {
   matched_events: number;
   earliest_year: number | null;
 };
@@ -39,12 +44,26 @@ type GeWithCount = {
 const DEFAULT_FROM = -3000;
 const DEFAULT_TO = 2025;
 
+const EGE_CHUNK = 100;
+const GE_CHUNK = 250;
+const TR_CHUNK = 400;
+const EV_TXT_CHUNK = 600;
+
 const BRAND_BLUE = "#0b3b60";
 const BRAND_BLUE_SOFT = "#0d4a7a";
 const THUMB_ACTIVE_BG = "#6bb2ff";
 const ACCENT = "#111827";
 
-/* ===== Helpers UI ===== */
+// ===== Helpers =====
+function isBC(v?: string | null) {
+  if (!v) return false;
+  const s = v.trim().toUpperCase();
+  return s === "BC" || s === "BCE";
+}
+function normYear(year: number | null, era: string | null): number | null {
+  if (year == null || !Number.isFinite(year)) return null;
+  return isBC(era) ? -Math.abs(year) : Math.abs(year);
+}
 function formatYear(y: number) {
   if (y < 0) return `${Math.abs(y)} BCE`;
   if (y === 0) return "0";
@@ -65,9 +84,8 @@ function niceStep(span: number, targetTicks = 7) {
 
 export default function TimelinePage() {
   const search = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
 
-  /* ======= STATE PRINCIPALI ======= */
+  const [eventsNorm, setEventsNorm] = useState<EventsListRowNorm[]>([]);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,14 +107,17 @@ export default function TimelinePage() {
   const [favs, setFavs] = useState<Set<UUID>>(new Set());
   const [favMsg, setFavMsg] = useState<string | null>(null);
 
-  const [q, setQ] = useState<string>(search?.get("q") ?? "");
-  const [qDebounced, setQDebounced] = useState<string>(q);
+  const egeCache = useRef<Map<UUID, UUID[]>>(new Map());
+
+  const [q, setQ] = useState<string>("");
+  const [qDebounced, setQDebounced] = useState<string>("");
+
   useEffect(() => {
     const id = setTimeout(() => setQDebounced(q.trim()), 300);
     return () => clearTimeout(id);
   }, [q]);
 
-  /* ======= 1) INIT: dominio temporale da v_journeys ======= */
+  // ===== Init dati =====
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -104,24 +125,41 @@ export default function TimelinePage() {
         setInitializing(true);
         setError(null);
 
-        const { data, error } = await supabase
-          .from("v_journeys")
-          .select("year_from_min, year_to_max")
-          .limit(20000); // filtri visibility/workflow_state già applicati nella VIEW
-        if (error) throw error;
+        const { data, error: evErr } = await supabase
+          .from("events_list")
+          .select("source_event_id, year_from, year_to, era")
+          .limit(20000);
+        if (evErr) throw evErr;
 
-        const rows = (data as VJourneyRow[]) || [];
-        const mins: number[] = rows.map(r => r?.year_from_min).filter((x: any) => Number.isFinite(x)) as number[];
-        const maxs: number[] = rows.map(r => r?.year_to_max).filter((x: any) => Number.isFinite(x)) as number[];
-        const minY = mins.length ? Math.min(...mins) : DEFAULT_FROM;
-        const maxY = maxs.length ? Math.max(...maxs) : DEFAULT_TO;
-
-        if (!cancelled) {
-          setDataMin(minY);
-          setDataMax(maxY);
-          setFromYear(minY);
-          setToYear(maxY);
+        const raw = (data as EventsListRowRaw[]) || [];
+        const norm: EventsListRowNorm[] = [];
+        for (const r of raw) {
+          if (!r.source_event_id) continue;
+          const y1 = normYear(r.year_from, r.era);
+          const y2 = normYear(r.year_to ?? r.year_from, r.era);
+          if (y1 == null && y2 == null) continue;
+          let a = (y1 ?? y2)!;
+          let b = (y2 ?? y1)!;
+          if (a > b) [a, b] = [b, a];
+          norm.push({ source_event_id: r.source_event_id, yFrom: Math.trunc(a), yTo: Math.trunc(b) });
         }
+
+        let domainMin = DEFAULT_FROM;
+        let domainMax = DEFAULT_TO;
+        if (norm.length > 0) {
+          const ys: number[] = [];
+          for (const e of norm) ys.push(e.yFrom, e.yTo);
+          domainMin = Math.min(...ys);
+          domainMax = Math.max(...ys);
+          if (domainMin > domainMax) [domainMin, domainMax] = [domainMax, domainMin];
+        }
+
+        if (cancelled) return;
+
+        setEventsNorm(norm);
+        setDataMin(domainMin);
+        setDataMax(domainMax);
+
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Initialization error");
       } finally {
@@ -129,7 +167,7 @@ export default function TimelinePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [search, supabase]);
+  }, [search]);
 
   const minDomain = useMemo(() => (dataMin == null ? DEFAULT_FROM : Math.trunc(dataMin)), [dataMin]);
   const maxDomain = useMemo(() => (dataMax == null ? DEFAULT_TO : Math.trunc(dataMax)), [dataMax]);
@@ -141,7 +179,7 @@ export default function TimelinePage() {
     Number.isFinite(fromYear) &&
     Number.isFinite(toYear);
 
-  /* ======= Debounce del timeframe ======= */
+  // ===== Debounce timeframe per query =====
   const debouncedSel = (() => {
     const [val, setVal] = useState<{ from: number; to: number } | null>(null);
     useEffect(() => {
@@ -152,7 +190,7 @@ export default function TimelinePage() {
     return val;
   })();
 
-  /* ======= 2) QUERY UNICA SU v_journeys (overlap + testo) ======= */
+  // ===== Query (tempo + testo) =====
   useEffect(() => {
     if (!domainReady || !debouncedSel) return;
     let cancelled = false;
@@ -163,89 +201,208 @@ export default function TimelinePage() {
         const from = debouncedSel.from;
         const to = debouncedSel.to;
 
-        let query = supabase
-          .from("v_journeys")
-          .select("journey_id, journey_slug, journey_cover_url, translation_title, translation_description, translation_lang2, events_count, year_from_min, year_to_max, favourites_count, is_favourite")
-          // filtri visibility/workflow_state già nella VIEW
-          // overlap: il journey entra se il suo range interseca il selezionato
-          .lte("year_from_min", to)
-          .gte("year_to_max", from);
+        // 1) Eventi nel range
+        const eventYearMap = new Map<UUID, number>();
+        for (const e of eventsNorm) eventYearMap.set(e.source_event_id, e.yFrom);
 
-        if (qDebounced) {
-          const qv = `%${qDebounced}%`;
-          query = query.or(
-            `journey_slug.ilike.${qv},translation_title.ilike.${qv},translation_description.ilike.${qv}`
-          );
+        const matched = eventsNorm.filter((e) => e.yFrom <= to && e.yTo >= from);
+        const eventIds = Array.from(new Set(matched.map((m) => m.source_event_id)));
+
+        if (eventIds.length === 0) {
+          if (!cancelled) { setGroupEvents([]); setTotalMatches(0); }
+          setLoading(false);
+          return;
         }
 
-        const { data, error } = await query.limit(2000);
-        if (error) throw error;
+        // 2) Mapping event->group_event con cache
+        const cachedPairs: EGE[] = [];
+        const toFetchEGE: UUID[] = [];
+        for (const id of eventIds) {
+          const cached = egeCache.current.get(id);
+          if (cached) cachedPairs.push(...cached.map(geid => ({ event_id: id, group_event_id: geid })));
+          else toFetchEGE.push(id);
+        }
 
-        const rows = (data as VJourneyRow[]) || [];
+        const fetchedPairs: EGE[] = [];
+        for (let i = 0; i < toFetchEGE.length; i += EGE_CHUNK) {
+          const chunk = toFetchEGE.slice(i, i + EGE_CHUNK);
+          const { data: ege, error: geErr } = await supabase
+            .from("event_group_event")
+            .select("event_id, group_event_id")
+            .in("event_id", chunk);
+          if (geErr) throw geErr;
+          const rows = ((ege as EGE[]) || []);
+          fetchedPairs.push(...rows);
+          const byEvent = new Map<UUID, UUID[]>();
+          for (const r of rows) {
+            if (!byEvent.has(r.event_id)) byEvent.set(r.event_id, []);
+            byEvent.get(r.event_id)!.push(r.group_event_id);
+          }
+          for (const id of chunk) egeCache.current.set(id, byEvent.get(id) || []);
+        }
 
-        // Mappatura 1:1 per il render precedente
-        const mapped: GeWithCount[] = rows.map((r) => ({
-          id: r.journey_id,
-          slug: r.journey_slug ?? null,
-          cover_url: r.journey_cover_url ?? null,
-          title: r.translation_title ?? r.journey_slug ?? null,
-          matched_events: r.events_count ?? 0,
-          earliest_year: r.year_from_min ?? null,
+        const allEGE: EGE[] = [...cachedPairs, ...fetchedPairs];
+        if (allEGE.length === 0) {
+          if (!cancelled) { setGroupEvents([]); setTotalMatches(0); }
+          setLoading(false);
+          return;
+        }
+
+        // 3) Conteggi + earliest
+        const counts = new Map<UUID, number>();
+        const earliest = new Map<UUID, number>();
+        const geIdsFromTime = new Set<UUID>();
+        for (const row of allEGE) {
+          geIdsFromTime.add(row.group_event_id);
+          counts.set(row.group_event_id, (counts.get(row.group_event_id) || 0) + 1);
+          const y = eventYearMap.get(row.event_id);
+          if (typeof y === "number") {
+            const cur = earliest.get(row.group_event_id);
+            if (cur == null || y < cur) earliest.set(row.group_event_id, y);
+          }
+        }
+        const geIdsTimeArr = Array.from(geIdsFromTime);
+
+        // 4) Metadata GE — ***USA LA VISTA UNICA*** (solo PUBLIC/PUBLISHED)
+        const allMeta: GroupEventMeta[] = [];
+        for (let i = 0; i < geIdsTimeArr.length; i += GE_CHUNK) {
+          const chunk = geIdsTimeArr.slice(i, i + GE_CHUNK);
+          const { data: ges, error: geErr } = await supabase
+            .from("group_events_visible_v")
+            .select("id, slug, cover_url")
+            .in("id", chunk)
+            .eq("visibility", "public")
+            .eq("workflow_state", "published");
+          if (geErr) throw geErr;
+          allMeta.push(...((ges as GroupEventMeta[]) || []));
+        }
+
+        // 4b) Titoli dalle translations (scegli il primo titolo non vuoto)
+        const titleByGe = new Map<UUID, string>();
+        for (let i = 0; i < geIdsTimeArr.length; i += TR_CHUNK) {
+          const chunk = geIdsTimeArr.slice(i, i + TR_CHUNK);
+          const { data: tr, error: trErr } = await supabase
+            .from("group_event_translations")
+            .select("group_event_id, title")
+            .in("group_event_id", chunk);
+          if (trErr) throw trErr;
+          (tr || []).forEach((r: any) => {
+            if (!r?.group_event_id) return;
+            const t = (r.title ?? "").toString().trim();
+            if (t && !titleByGe.has(r.group_event_id)) titleByGe.set(r.group_event_id as UUID, t);
+          });
+        }
+
+        // 4c) Merge meta + titolo
+        const allGE: GroupEvent[] = allMeta.map((m) => ({
+          ...m,
+          title: titleByGe.get(m.id) ?? null
         }));
 
-        // Ordinamento come prima: earliest asc, poi matched desc
-        mapped.sort((a, b) => {
-          const ae = a.earliest_year ?? Number.POSITIVE_INFINITY;
-          const be = b.earliest_year ?? Number.POSITIVE_INFINITY;
-          if (ae !== be) return ae - be;
-          return (b.matched_events ?? 0) - (a.matched_events ?? 0);
-        });
+        // 5) Filtro testo (titolo/slug + translations + testi eventi)
+        let allowedGE = new Set<UUID>(allMeta.map(m => m.id)); // <<— parte solo da quelli PUBLIC/PUBLISHED
+        const needle = qDebounced.toLowerCase();
 
-        if (!cancelled) {
-          setGroupEvents(mapped);
-          setTotalMatches(mapped.reduce((acc, x) => acc + (x.matched_events || 0), 0));
-
-          // Preferiti: usa la colonna della VIEW se esposta; in fallback (vedi NOTE policy)
-          const favSet = new Set<UUID>();
-          let needFallback = false;
-          for (const r of rows) {
-            if (typeof r.is_favourite === "boolean") {
-              if (r.is_favourite) favSet.add(r.journey_id);
-            } else {
-              needFallback = true;
-            }
+        if (needle.length > 0) {
+          const geByTitle = new Set<UUID>();
+          for (const g of allGE) {
+            const t = (g.title || "").toLowerCase();
+            const s = (g.slug || "").toLowerCase();
+            if (t.includes(needle) || s.includes(needle)) geByTitle.add(g.id);
           }
-          setFavs(favSet);
 
-          if (needFallback) {
-            try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user && mapped.length > 0) {
-                const ids = mapped.map(g => g.id);
-                // NOTE: accesso diretto tabella — verrà migrato a VIEW/RPC dedicata
-                const { data: favRows } = await supabase
-                  .from("group_event_favourites")
-                  .select("group_event_id")
-                  .in("group_event_id", ids)
-                  .eq("profile_id", user.id);
-                if (favRows && !cancelled) {
-                  const s = new Set<UUID>((favRows as any[]).map(r => r.group_event_id as UUID));
-                  setFavs(s);
+          const geByTranslations = new Set<UUID>();
+          try {
+            for (let i = 0; i < geIdsTimeArr.length; i += TR_CHUNK) {
+              const chunk = geIdsTimeArr.slice(i, i + TR_CHUNK);
+              const { data: tr } = await supabase
+                .from("group_event_translations")
+                .select("group_event_id, title, summary, description")
+                .in("group_event_id", chunk);
+              (tr || []).forEach((r: any) => {
+                const str = [(r.title||""),(r.summary||""),(r.description||"")].join(" ").toLowerCase();
+                if (str.includes(needle)) geByTranslations.add(r.group_event_id as UUID);
+              });
+            }
+          } catch {}
+
+          const geByEventsText = new Set<UUID>();
+          try {
+            for (let i = 0; i < eventIds.length; i += EV_TXT_CHUNK) {
+              const chunk = eventIds.slice(i, i + EV_TXT_CHUNK);
+              const { data: evtx } = await supabase
+                .from("events_list")
+                .select("source_event_id, title, description")
+                .in("source_event_id", chunk);
+              const matchingEventIds = new Set<UUID>();
+              (evtx || []).forEach((r: any) => {
+                const text = [(r.title||""),(r.description||"")].join(" ").toLowerCase();
+                if (text.includes(needle)) matchingEventIds.add(r.source_event_id as UUID);
+              });
+              if (matchingEventIds.size > 0) {
+                for (const pair of allEGE) {
+                  if (matchingEventIds.has(pair.event_id)) geByEventsText.add(pair.group_event_id);
                 }
               }
-            } catch { /* no-op */ }
-          }
+            }
+          } catch {}
+
+          const textUnion = new Set<UUID>([...geByTitle, ...geByTranslations, ...geByEventsText]);
+          allowedGE = new Set<UUID>([...allowedGE].filter((id) => textUnion.has(id)));
         }
+
+        // 6) Merge finale
+        const merged: GeWithCount[] = allGE
+          .filter((g) => allowedGE.has(g.id))
+          .map((g) => ({
+            ...g,
+            title: g.title ?? g.slug ?? "Untitled",
+            matched_events: counts.get(g.id) || 0,
+            earliest_year: earliest.has(g.id) ? (earliest.get(g.id) as number) : null
+          }))
+          .sort((a, b) => {
+            if (a.earliest_year == null && b.earliest_year == null) {
+              return b.matched_events - a.matched_events;
+            }
+            if (a.earliest_year == null) return 1;
+            if (b.earliest_year == null) return -1;
+            if (a.earliest_year !== b.earliest_year) return a.earliest_year - b.earliest_year;
+            return b.matched_events - a.matched_events;
+          });
+
+        setGroupEvents(merged);
+        setTotalMatches(merged.reduce((acc, x) => acc + x.matched_events, 0));
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Unknown error");
+        setError(e?.message ?? "Unknown error");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [domainReady, debouncedSel, qDebounced, supabase]);
+  }, [domainReady, debouncedSel, eventsNorm, qDebounced]);
 
-  /* ======= 3) Preferiti: toggle (mutazione su tabella reale — da migrare a VIEW/RPC) ======= */
+  // ===== Preferiti =====
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setFavs(new Set()); return; }
+        if (groupEvents.length === 0) { setFavs(new Set()); return; }
+
+        const ids = groupEvents.map(g => g.id);
+        const { data, error: favErr } = await supabase
+          .from("group_event_favourites")
+          .select("group_event_id")
+          .in("group_event_id", ids)
+          .eq("profile_id", user.id);
+        if (favErr) return;
+        const s = new Set<UUID>((data || []).map((r: any) => r.group_event_id as UUID));
+        if (!cancelled) setFavs(s);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [groupEvents]);
+
   const toggleFavourite = async (ev: React.MouseEvent, groupEventId: UUID) => {
     ev.preventDefault();
     ev.stopPropagation();
@@ -253,13 +410,10 @@ export default function TimelinePage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setFavMsg("Please sign in to use favourites."); return; }
-
       const isFav = favs.has(groupEventId);
       const next = new Set(favs);
       if (isFav) next.delete(groupEventId); else next.add(groupEventId);
       setFavs(next);
-
-      // NOTE: accessi diretti da migrare
       if (isFav) {
         const { error } = await supabase.from("group_event_favourites")
           .delete()
@@ -276,9 +430,7 @@ export default function TimelinePage() {
     }
   };
 
-  /* ======= 4) TIMELINE — identica alla tua “bella” ======= */
-
-  // Pointer events state
+  // ====== Thumbs + Bar: Pointer Events ======
   const selectedBarRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const draggingRef = useRef<null | { mode: "pan" | "zoom"; lastX: number }>(null);
@@ -373,7 +525,6 @@ export default function TimelinePage() {
     setActiveThumb(null);
   }
 
-  // Tick calcolati sul range selezionato (come prima)
   const ticks = useMemo(() => {
     if (!domainReady) return [];
     const dMin = Math.round(fromYear);
@@ -386,20 +537,18 @@ export default function TimelinePage() {
     return out;
   }, [domainReady, fromYear, toYear]);
 
-  // Geometrie/percentuali della “barra bella”
   const LEFT_EDGE_PCT = 0.1;
   const SELECTED_PCT = 0.8;
 
   const thumbClassIdle = "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100";
   const thumbClassActive = "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100";
 
-  /* ================== RENDER ================== */
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
       {/* HEADER */}
       <header className="z-20 border-b border-neutral-200" style={{ backgroundColor: BRAND_BLUE }}>
         <div className="mx-auto max-w-7xl px-4 py-3 text-white">
-          <div className="flex flex-wrap items	end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <h1 className="text-lg font-semibold tracking-tight">Timeline Explorer</h1>
 
             {/* RIGHT: From/To */}
@@ -436,8 +585,8 @@ export default function TimelinePage() {
               </div>
               <button
                 onClick={() => {
-                  setFromYear(minDomain);
-                  setToYear(maxDomain);
+                  setFromYear(DEFAULT_FROM);
+                  setToYear(DEFAULT_TO);
                   setQ("");
                 }}
                 className="rounded-md border border-white/25 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/15"
@@ -448,32 +597,30 @@ export default function TimelinePage() {
             </div>
           </div>
 
-          {/* TIMELINE (quella “bella”, invariata) */}
+          {/* TIMELINE */}
           <div className="mt-2 rounded-xl border border-white/15 bg-white/5 shadow-sm">
             <div className="p-2">
               {!domainReady ? (
                 <div className="py-4 text-sm text-white/80">Loading timeline…</div>
               ) : (
                 <div className="relative h-24 select-none">
-                  {/* pista */}
                   <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2" ref={trackRef}>
                     <div
                       className="h-[8px] w-full rounded-full"
                       style={{
                         background: "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
                         boxShadow:
-                          "inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)"
+                          "inset 0 1px 2px rgba(0,0,0,0.18), inset 0 -1px 1px rgba(255,255,255,0.5), 0 1px 1px rgba(0,0,0,0.08)"
                       }}
                     />
                   </div>
 
-                  {/* banda selezione + maniglie */}
                   <div
                     ref={selectedBarRef}
                     className="absolute top-1/2 -translate-y-1/2"
                     style={{
-                      left: `10%`,
-                      width: `80%`,
+                      left: `${LEFT_EDGE_PCT * 100}%`,
+                      width: `${SELECTED_PCT * 100}%`,
                       height: 8,
                       borderRadius: 9999,
                       background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
@@ -487,7 +634,6 @@ export default function TimelinePage() {
                     onPointerCancel={endDrag}
                     title="Pan: trascina per spostare il timeframe"
                   >
-                    {/* maniglia sinistra */}
                     <button
                       type="button"
                       onPointerDown={(e) => startZoom(e, "left")}
@@ -500,12 +646,11 @@ export default function TimelinePage() {
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "left" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
+                        className={activeThumb === "left" ? thumbClassActive : thumbClassIdle}
                         style={activeThumb === "left" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
 
-                    {/* maniglia destra */}
                     <button
                       type="button"
                       onPointerDown={(e) => startZoom(e, "right")}
@@ -518,13 +663,12 @@ export default function TimelinePage() {
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "right" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
+                        className={activeThumb === "right" ? thumbClassActive : thumbClassIdle}
                         style={activeThumb === "right" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
                   </div>
 
-                  {/* tick dinamici */}
                   <div className="absolute inset-x-3 bottom-1">
                     <div className="relative h-5">
                       {(() => {
@@ -533,23 +677,24 @@ export default function TimelinePage() {
                         const s = Math.max(1, dMax - dMin);
                         const step = niceStep(s, 7);
                         const first = Math.ceil(dMin / step) * step;
-                        const out: number[] = [];
-                        for (let t = first; t <= dMax; t += step) out.push(Math.round(t));
-                        return out;
-                      })().map((t) => (
-                        <div
-                          key={t}
-                          className="absolute top-0 -translate-x-1/2"
-                          style={{
-                            left: `calc(10% + ${((t - Math.round(fromYear)) / Math.max(1, Math.round(toYear) - Math.round(fromYear))) * 80}%)`
-                          }}
-                        >
-                          <div className="h-[10px] w-px bg-white/85" />
-                          <div className="mt-0.5 text-[10px] leading-none text-white/95 whitespace-nowrap translate-x-1/2">
-                            {formatYear(t)}
+                        const tickVals: number[] = [];
+                        for (let t = first; t <= dMax; t += step) tickVals.push(Math.round(t));
+
+                        return tickVals.map((t) => (
+                          <div
+                            key={t}
+                            className="absolute top-0 -translate-x-1/2"
+                            style={{
+                              left: `calc(${LEFT_EDGE_PCT * 100}% + ${((t - dMin) / Math.max(1, dMax - dMin)) * SELECTED_PCT * 100}%)`
+                            }}
+                          >
+                            <div className="h-[10px] w-px bg-white/85" />
+                            <div className="mt-0.5 text-[10px] leading-none text-white/95 whitespace-nowrap translate-x-1/2">
+                              {formatYear(t)}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ));
+                      })()}
                     </div>
                   </div>
                 </div>

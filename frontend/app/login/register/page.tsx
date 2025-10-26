@@ -77,6 +77,9 @@ export default function RegisterPage() {
   const [personaId, setPersonaId] = useState<string>("");
   const [accepted, setAccepted] = useState(false);
 
+  // ✅ NEW: language selection (default = English)
+  const [language, setLanguage] = useState("en");
+
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,8 @@ export default function RegisterPage() {
     return `${window.location.origin}/login`;
   }, []);
 
-  const locale = typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
+  const locale =
+    typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
   const strength = passwordStrength(password);
 
   function validate(): string | null {
@@ -154,6 +158,8 @@ export default function RegisterPage() {
             full_name: fullName || null,
             persona_id: personaId || null,
             username,
+            // ✅ include language in user metadata
+            language: language || "en",
           },
           emailRedirectTo,
         },
@@ -166,6 +172,8 @@ export default function RegisterPage() {
         const profilePayload = {
           id: newUserId,
           persona_id: personaId || null,
+          // ✅ include language in profile table
+          language: language || "en",
         };
         const response = await fetch("/api/register/profile", {
           method: "POST",
@@ -205,7 +213,13 @@ export default function RegisterPage() {
 
       <div className={styles.card}>
         <div className={styles.brandWrap}>
-          <Image className={styles.logo} src="/logo.png" alt="GeoHistory Journey" width={220} height={220} />
+          <Image
+            className={styles.logo}
+            src="/logo.png"
+            alt="GeoHistory Journey"
+            width={220}
+            height={220}
+          />
         </div>
 
         <form className={styles.form} onSubmit={handleSubmit}>
@@ -261,6 +275,24 @@ export default function RegisterPage() {
                     {personaLabel(persona, locale)}
                   </option>
                 ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ✅ Language selector */}
+          <div className={styles.field}>
+            <div className={styles.label}>Language</div>
+            <div className={styles.inputWrap}>
+              <select
+                className={styles.input}
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+              >
+                <option value="en">English</option>
+                <option value="it">Italiano</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
               </select>
             </div>
           </div>
@@ -368,7 +400,8 @@ export default function RegisterPage() {
               onChange={(event) => setAccepted(event.target.checked)}
             />
             <span>
-              I accept the <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and the {""}
+              I accept the{" "}
+              <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and the{" "}
               <a className={styles.a} href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
             </span>
           </label>

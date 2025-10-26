@@ -1,26 +1,70 @@
-﻿// frontend/lib/supabaseBrowserClient.ts
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+﻿// frontend/supabaseBrowserClient.ts
+"use client";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. " +
-      "Add them to your .env.local"
+declare global {
+  interface Window {
+    supabase?: SupabaseClient;
+  }
+}
+
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  (globalThis as any).NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  (globalThis as any).NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+function getProjectRef(url?: string) {
+  try {
+    const h = new URL(url!).hostname; // es: jcqaesoavmxucexjeudq.supabase.co
+    return h.split(".")[0];
+  } catch {
+    return undefined;
+  }
+}
+
+function detectExistingStorageKey(url?: string): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const keys = Object.keys(localStorage).filter(
+    (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
   );
+  if (!keys.length) return undefined;
+
+  // Preferisci quella del projectRef corrente, se la trovi
+  const ref = getProjectRef(url);
+  if (ref) {
+    const match = keys.find((k) => k.startsWith(`sb-${ref}-`));
+    if (match) return match;
+  }
+  // Altrimenti usa la prima disponibile
+  return keys[0];
 }
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+function getBrowserClient(): SupabaseClient {
+  if (typeof window === "undefined") {
+    return createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+  }
+  if (window.supabase) return window.supabase;
 
+  const storageKey = detectExistingStorageKey(SUPABASE_URL);
+
+  // Se troviamo una chiave esistente, la riusiamo; altrimenti lasciamo che la SDK usi la sua chiave di default
+  const client =
+    storageKey
+      ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+          auth: { persistSession: true, storageKey },
+          global: { headers: { "x-gehj-client": "browser-singleton" } },
+        })
+      : createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+          auth: { persistSession: true },
+          global: { headers: { "x-gehj-client": "browser-singleton" } },
+        });
+
+  window.supabase = client;
+  return client;
+}
+
+export const supabase = getBrowserClient();
 export default supabase;
-
-export function getBrowserSupabase(): SupabaseClient {
-  return supabase;
-}

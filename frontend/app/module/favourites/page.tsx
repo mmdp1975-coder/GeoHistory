@@ -1,350 +1,241 @@
-// frontend/app/module/favourites/page.tsx
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseBrowserClient";
-import RatingSummary from "../../components/RatingSummary"; // ⬅️ NEW
+import { createClient } from "@/lib/supabase/client";
+import RatingSummary from "../../components/RatingSummary";
 
-/** === Config percorso Timeline ===
- * Se la tua Timeline ha un path diverso, cambia qui.
- */
-const TIMELINE_PATH = "/module/timeline";
+type UUID = string;
 
-/* -------- Types -------- */
-type AnyObj = Record<string, any>;
-type CardModel = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  imageUrl?: string | null;
-  addedAt?: string | null;
-  mine: boolean; // in questa pagina è sempre true
+type JourneyRow = {
+  journey_id: UUID;
+  journey_slug: string | null;
+  journey_cover_url: string | null;
+  translation_title: string | null;
+  translation_description: string | null;
+  favourites_count: number | null;
+  is_favourite: boolean | null;
 };
 
-/* -------- Helpers -------- */
-function pickFirst<T = any>(obj: AnyObj, keys: string[]): T | undefined {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && String(v).trim() !== "") return v as T;
-  }
-  return undefined;
-}
-function truncate(v?: string, max = 140): string | undefined {
-  if (!v) return undefined;
-  return v.length > max ? v.slice(0, max - 1) + "…" : v;
-}
-function referrerLandingPath(): string | null {
-  if (typeof document === "undefined") return null;
-  const ref = document.referrer || "";
-  try {
-    const u = new URL(ref);
-    const m = u.pathname.match(/^\/landing\/[^/]+$/i);
-    return m ? m[0] : null;
-  } catch {
-    return null;
-  }
-}
+const TIMELINE_PATH = "/module/timeline";
 
-/* -------- UI: Heart Icon -------- */
-function HeartIcon({ filled }: { filled: boolean }) {
-  if (filled) {
-    return (
-      <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
-        <path
-          className="text-red-500"
-          d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C12.09 5.01 13.76 4 15.5 4 18 4 20 6 20 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-        />
-      </svg>
-    );
-  }
-  return null;
-}
-
-/* -------- Page -------- */
 export default function FavouritesPage() {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
 
-  const [cards, setCards] = useState<CardModel[]>([]);
-  const [landingHref, setLandingHref] = useState<string>("/landing");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [journeys, setJourneys] = useState<JourneyRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [uid, setUid] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  // === 1) Carica utente ===
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error || !data.user) setUserId(null);
+      else setUserId(data.user.id);
+    })();
+  }, [supabase]);
+
+  // === 2) Carica preferiti dalla VIEW v_journeys ===
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from("v_journeys")
+        .select(
+          "journey_id, journey_slug, journey_cover_url, translation_title, translation_description, favourites_count, is_favourite"
+        )
+        .eq("is_favourite", true)
+        .order("translation_title", { ascending: true });
+
+      if (error) throw error;
+      setJourneys((data ?? []) as JourneyRow[]);
+    } catch (e: any) {
+      setError(e.message || "Unable to load favourites.");
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
 
   useEffect(() => {
-    let active = true;
+    if (userId) loadData();
+  }, [userId, loadData]);
 
-    (async () => {
+  // === 3) Toggle cuore: usa la funzione RPC toggle_favourite(uuid) ===
+  const toggleFavourite = useCallback(
+    async (journeyId: string) => {
+      setBusyId(journeyId);
+      setError(null);
       try {
-        setLoading(true);
-        setErr(null);
-
-        // Auth
-        const { data: userData, error: userErr } = await supabase.auth.getUser();
-        if (userErr) throw userErr;
-        const myUid = userData?.user?.id ?? null;
-        setUid(myUid);
-
-        // Landing
-        const fromRef = referrerLandingPath();
-        if (fromRef) setLandingHref(fromRef);
-        else if (myUid) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("landing_slug, persona, persona_code")
-            .eq("id", myUid)
-            .maybeSingle();
-          const slug =
-            (prof as any)?.landing_slug ??
-            (prof as any)?.persona ??
-            (prof as any)?.persona_code ??
-            null;
-          setLandingHref(slug ? `/landing/${slug}` : "/landing");
-        } else {
-          setLandingHref("/landing");
-        }
-
-        // Non loggato: niente preferiti
-        if (!myUid) {
-          if (active) setCards([]);
+        const { data: auth } = await supabase.auth.getUser();
+        if (!auth?.user) {
+          setError("Please sign in to manage favourites.");
+          setBusyId(null);
           return;
         }
 
-        // === SOLO I MIEI PREFERITI ===
-        const { data: favRows, error: favErr } = await supabase
-          .from("group_event_favourites")
-          .select("group_event_id, created_at")
-          .eq("profile_id", myUid);
-        if (favErr) throw favErr;
+        const idx = journeys.findIndex((j) => j.journey_id === journeyId);
+        if (idx < 0) return;
 
-        const ids = (favRows ?? []).map((r: any) => r.group_event_id);
-        if (!ids.length) {
-          if (active) setCards([]);
-          return;
-        }
+        const current = journeys[idx];
+        const isFav = !!current.is_favourite;
+        const curCount = current.favourites_count ?? 0;
 
-        // Group events
-        const { data: ges, error: geErr } = await supabase
-          .from("group_events")
-          .select("*")
-          .in("id", ids);
-        if (geErr) throw geErr;
+        // Aggiornamento ottimistico
+        const optimistic = [...journeys];
+        optimistic[idx] = {
+          ...current,
+          is_favourite: !isFav,
+          favourites_count: Math.max(0, curCount + (isFav ? -1 : 1)),
+        };
+        setJourneys(optimistic);
 
-        const createdMap = new Map<string, string | null>();
-        (favRows ?? []).forEach((r: any) => createdMap.set(String(r.group_event_id), r.created_at ?? null));
+        // 🔁 Chiamata alla funzione SQL
+        const { error } = await supabase.rpc("toggle_favourite", { journey_id: journeyId });
+        if (error) throw error;
 
-        const mapped: CardModel[] = (ges ?? []).map((raw: AnyObj) => {
-          const id = String(raw.id);
-          const title = pickFirst<string>(raw, ["title", "name"]) ?? `Journey ${id.slice(0, 8)}…`;
-          const subtitle =
-            pickFirst<string>(raw, ["subtitle", "summary"]) ??
-            truncate(pickFirst<string>(raw, ["description"]), 140) ??
-            undefined;
-          const imageUrl =
-            pickFirst<string>(raw, ["cover_image_url", "image_url", "thumbnail_url", "coverUrl"]) ??
-            null;
-          return {
-            id,
-            title,
-            subtitle,
-            imageUrl,
-            addedAt: createdMap.get(id) ?? null,
-            mine: true,
-          };
-        });
-
-        mapped.sort((a, b) => {
-          const ta = a.addedAt ? new Date(a.addedAt).getTime() : 0;
-          const tb = b.addedAt ? new Date(b.addedAt).getTime() : 0;
-          if (tb !== ta) return tb - ta;
-          return a.title.localeCompare(b.title);
-        });
-
-        if (active) setCards(mapped);
+        // (opzionale) Ricarica il dato singolo da v_journeys per coerenza
+        // ma di solito non serve perché la VIEW riflette subito lo stato.
       } catch (e: any) {
-        if (active) setErr(e?.message ?? "Load error");
+        setError(e.message || "Failed to toggle favourite.");
+        loadData(); // rollback soft
       } finally {
-        if (active) setLoading(false);
+        setBusyId(null);
       }
-    })();
+    },
+    [supabase, journeys, loadData]
+  );
 
-    return () => {
-      active = false;
-    };
-  }, []);
+  // === 4) Apertura dettaglio ===
+  const openJourney = useCallback(
+    (id: string) => router.push(`/module/group_event?gid=${id}`),
+    [router]
+  );
 
-  // Toggle: qui serve solo a rimuovere (unfavourite) e nascondere la card
-  async function onToggleHeart(groupEventId: string) {
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const myUid = userData?.user?.id ?? null;
-      if (!myUid) throw new Error("Not authenticated");
-
-      const { error } = await supabase
-        .from("group_event_favourites")
-        .delete()
-        .eq("profile_id", myUid)
-        .eq("group_event_id", groupEventId);
-      if (error) throw error;
-
-      setCards((prev) => prev.filter((c) => c.id !== groupEventId));
-    } catch (e: any) {
-      setErr(e?.message ?? "Toggle error");
-    }
-  }
-
-  function onOpen(id: string) {
-    try {
-      if (typeof window !== "undefined") {
-        localStorage.setItem("active_group_event_id", id);
-      }
-    } catch {}
-    router.push(`/module/group_event?gid=${id}`);
-  }
-
-  const hasCards = cards.length > 0;
+  // === 5) Render ===
+  if (!userId)
+    return (
+      <main className="mx-auto max-w-6xl px-4 py-6 text-center">
+        <h1 className="mb-4 text-2xl font-bold text-slate-900">My Favourites</h1>
+        <p className="mb-4 text-slate-600">You need to sign in to see your favourites.</p>
+        <Link
+          href="/login"
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-800"
+        >
+          Go to Login
+        </Link>
+      </main>
+    );
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-8">
-      {/* Stato */}
-      {err && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          {err}
+    <main className="mx-auto max-w-6xl px-4 py-6">
+      <header className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">My Favourites</h1>
+          <p className="text-sm text-slate-500">Journeys you've saved for quick access.</p>
+        </div>
+        <Link
+          href={TIMELINE_PATH}
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-slate-800"
+        >
+          Explore Timeline
+        </Link>
+      </header>
+
+      {error && (
+        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
         </div>
       )}
 
-      {!loading && !uid && <NotLogged landingHref={landingHref} />}
-
-      {!loading && uid && !hasCards && <EmptyState />}
-
-      {/* Grid */}
-      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {loading
-          ? Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)
-          : cards.map((c) => (
+      {loading ? (
+        <p className="text-slate-600">Loading favourites...</p>
+      ) : journeys.length === 0 ? (
+        <div className="text-center text-slate-600">
+          <Image
+            alt="No favourites"
+            src="/img/empty-favourites.png"
+            width={100}
+            height={100}
+            className="mx-auto mb-4 opacity-70"
+          />
+          <p className="mb-2 font-medium">No favourites yet</p>
+          <p className="text-sm">Browse the timeline and tap the heart to add Journeys.</p>
+        </div>
+      ) : (
+        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {journeys.map((j) => {
+            const isFav = !!j.is_favourite;
+            const count = j.favourites_count ?? 0;
+            return (
               <article
-                key={c.id}
-                className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
+                key={j.journey_id}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
               >
-                <div className="relative h-40 w-full bg-slate-100">
-                  {c.imageUrl ? (
+                <button
+                  onClick={() => openJourney(j.journey_id)}
+                  className="relative block h-40 w-full overflow-hidden"
+                >
+                  {j.journey_cover_url ? (
                     <Image
-                      src={c.imageUrl}
-                      alt={c.title}
+                      src={j.journey_cover_url}
+                      alt={j.translation_title || "Cover"}
                       fill
-                      className="object-cover"
-                      sizes="(max-width: 768px) 100vw, 33vw"
+                      className="object-cover transition duration-300 hover:scale-[1.02]"
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-amber-100 to-slate-100" />
+                    <div className="flex h-full items-center justify-center bg-slate-100 text-slate-400">
+                      No cover
+                    </div>
                   )}
+                </button>
 
-                  {/* Cuore: sempre pieno */}
-                  <button
-                    onClick={() => onToggleHeart(c.id)}
-                    className="absolute left-2 top-2 inline-flex items-center rounded-full bg-white/90 p-2 text-sm font-semibold text-slate-900 shadow-sm backdrop-blur transition hover:bg-white"
-                    title="Rimuovi dai miei preferiti"
-                    aria-pressed={true}
-                  >
-                    <HeartIcon filled={true} />
-                  </button>
+                <div className="p-4">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    {j.translation_title || "Untitled Journey"}
+                  </h3>
+                  <p className="line-clamp-3 text-sm text-slate-600">
+                    {j.translation_description || ""}
+                  </p>
+
+                  <div className="pt-2">
+                    <RatingSummary groupEventId={j.journey_id} compact />
+                  </div>
                 </div>
 
-                <div className="space-y-2 p-4">
-                  <h2 className="line-clamp-2 text-base font-semibold leading-tight text-slate-900">
-                    <button
-                      onClick={() => onOpen(c.id)}
-                      className="text-left underline-offset-2 hover:underline"
-                      title="Open Journey"
+                <div className="flex items-center justify-between border-t p-3">
+                  <span className="text-xs text-slate-500">{count} favourites</span>
+                  <button
+                    onClick={() => toggleFavourite(j.journey_id)}
+                    disabled={busyId === j.journey_id}
+                    className={`rounded-full p-2 ${
+                      isFav
+                        ? "text-rose-600 bg-rose-50 hover:bg-rose-100"
+                        : "text-slate-600 bg-slate-50 hover:bg-slate-100"
+                    }`}
+                    title={isFav ? "Remove from favourites" : "Add to favourites"}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill={isFav ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      className="h-5 w-5"
                     >
-                      {c.title}
-                    </button>
-                  </h2>
-                  {c.subtitle && <p className="line-clamp-3 text-sm text-slate-600">{c.subtitle}</p>}
-                  {c.addedAt && (
-                    <p className="pt-1 text-xs text-slate-500">
-                      Added {new Date(c.addedAt).toLocaleString()}
-                    </p>
-                  )}
-                </div>
-
-                {/* Footer: Open • RatingSummary • Share */}
-                <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
-                  <button
-                    onClick={() => onOpen(c.id)}
-                    className="rounded-lg border px-3 py-1 transition hover:bg-slate-50"
-                    title="Open Journey"
-                  >
-                    Open
+                      <path d="M12.62 20.68c-.35.2-.89.2-1.24 0C7.82 18.8 2 14.86 2 8.86 2 6.1 4.24 4 6.98 4c1.73 0 3.39.81 4.52 2.09C12.63 4.81 14.29 4 16.02 4 18.76 4 21 6.1 21 8.86c0 6-5.82 9.94-8.38 11.82z" />
+                    </svg>
                   </button>
-
-                  {/* ⬇️ media • conteggio */}
-                  <RatingSummary groupEventId={c.id} />
-
-                  <Link
-                    href={`/share/journey/${c.id}`}
-                    className="text-slate-600 underline decoration-slate-300 underline-offset-2 hover:decoration-slate-500"
-                  >
-                    Share
-                  </Link>
                 </div>
               </article>
-            ))}
-      </section>
+            );
+          })}
+        </section>
+      )}
     </main>
-  );
-}
-
-/* ---------- UI helpers ---------- */
-function NotLogged({ landingHref }: { landingHref: string }) {
-  return (
-    <div className="mx-auto mb-6 max-w-xl rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900 shadow-sm">
-      <h3 className="mb-1 text-lg font-semibold">Accedi per vedere i tuoi preferiti</h3>
-      <p className="mb-4 text-sm">
-        I preferiti sono legati al tuo profilo. Entra per ritrovarli su qualsiasi dispositivo.
-      </p>
-      <Link
-        href={landingHref || "/landing"}
-        className="inline-flex items-center rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm transition hover:bg-amber-50"
-      >
-        Vai alla pagina iniziale
-      </Link>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-gradient-to-br from-rose-200 to-rose-100" />
-      <h3 className="mb-1 text-lg font-semibold">No favourites yet</h3>
-      <p className="mb-4 text-sm text-slate-600">
-        Aggiungi ai preferiti (cuore) i tuoi Group Event: appariranno qui. Puoi cercarli dalla Timeline.
-      </p>
-      <Link
-        href={TIMELINE_PATH}
-        className="inline-flex items-center rounded-xl border border-slate-300 px-3 py-2 text-sm transition hover:bg-slate-50"
-      >
-        Open Timeline
-      </Link>
-    </div>
-  );
-}
-
-function CardSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="h-40 w-full animate-pulse bg-slate-100" />
-      <div className="space-y-2 p-4">
-        <div className="h-4 w-3/4 animate-pulse rounded bg-slate-100" />
-        <div className="h-4 w-1/2 animate-pulse rounded bg-slate-100" />
-        <div className="h-3 w-1/3 animate-pulse rounded bg-slate-100" />
-      </div>
-      <div className="border-t p-3">
-        <div className="h-8 w-20 animate-pulse rounded bg-slate-100" />
-      </div>
-    </div>
   );
 }

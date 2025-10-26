@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -20,7 +20,7 @@ export default function RatingSummary({ groupEventId, size = 14, className = "" 
     (async () => {
       try {
         const { data: stats } = await supabase
-          .from('group_event_rating_stats')
+          .from('v_group_event_rating_stats')
           .select('*')
           .eq('group_event_id', groupEventId)
           .maybeSingle();

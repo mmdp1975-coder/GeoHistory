@@ -1,10 +1,9 @@
-﻿﻿// frontend/app/module/timeline/page_inner.tsx
-"use client";
+﻿﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabaseBrowserClient";
 import RatingSummary from "../../components/RatingSummary";
 
 type UUID = string;
@@ -22,8 +21,8 @@ type VJourneyRow = {
   year_to_max: number | null;
   favourites_count?: number | null;
   is_favourite?: boolean | null;
-  visibility?: string | null;       // legacy typing (non usati)
-  workflow_state?: string | null;   // legacy typing (non usati)
+  visibility?: string | null;
+  workflow_state?: string | null;
 };
 
 /** === Card model (compatibile con il render precedente) === */
@@ -65,7 +64,6 @@ function niceStep(span: number, targetTicks = 7) {
 
 export default function TimelinePage() {
   const search = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
 
   /* ======= STATE PRINCIPALI ======= */
   const [initializing, setInitializing] = useState(true);
@@ -107,7 +105,9 @@ export default function TimelinePage() {
         const { data, error } = await supabase
           .from("v_journeys")
           .select("year_from_min, year_to_max")
-          .limit(20000); // filtri visibility/workflow_state già applicati nella VIEW
+          .eq("visibility", "public")
+          .eq("workflow_state", "published")
+          .limit(20000);
         if (error) throw error;
 
         const rows = (data as VJourneyRow[]) || [];
@@ -129,7 +129,7 @@ export default function TimelinePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [search, supabase]);
+  }, [search]);
 
   const minDomain = useMemo(() => (dataMin == null ? DEFAULT_FROM : Math.trunc(dataMin)), [dataMin]);
   const maxDomain = useMemo(() => (dataMax == null ? DEFAULT_TO : Math.trunc(dataMax)), [dataMax]);
@@ -166,8 +166,9 @@ export default function TimelinePage() {
         let query = supabase
           .from("v_journeys")
           .select("journey_id, journey_slug, journey_cover_url, translation_title, translation_description, translation_lang2, events_count, year_from_min, year_to_max, favourites_count, is_favourite")
-          // filtri visibility/workflow_state già nella VIEW
-          // overlap: il journey entra se il suo range interseca il selezionato
+          .eq("visibility", "public")
+          .eq("workflow_state", "published")
+          // overlap: il journey entra in lista se il suo range interseca il selezionato
           .lte("year_from_min", to)
           .gte("year_to_max", from);
 
@@ -205,7 +206,7 @@ export default function TimelinePage() {
           setGroupEvents(mapped);
           setTotalMatches(mapped.reduce((acc, x) => acc + (x.matched_events || 0), 0));
 
-          // Preferiti: usa la colonna della VIEW se esposta; in fallback (vedi NOTE policy)
+          // Preferiti: se la view espone is_favourite, usalo; fallback: query tabella
           const favSet = new Set<UUID>();
           let needFallback = false;
           for (const r of rows) {
@@ -218,11 +219,11 @@ export default function TimelinePage() {
           setFavs(favSet);
 
           if (needFallback) {
+            // fallback: carica preferiti utente per le card correnti
             try {
               const { data: { user } } = await supabase.auth.getUser();
               if (user && mapped.length > 0) {
                 const ids = mapped.map(g => g.id);
-                // NOTE: accesso diretto tabella — verrà migrato a VIEW/RPC dedicata
                 const { data: favRows } = await supabase
                   .from("group_event_favourites")
                   .select("group_event_id")
@@ -243,9 +244,9 @@ export default function TimelinePage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [domainReady, debouncedSel, qDebounced, supabase]);
+  }, [domainReady, debouncedSel, qDebounced]);
 
-  /* ======= 3) Preferiti: toggle (mutazione su tabella reale — da migrare a VIEW/RPC) ======= */
+  /* ======= 3) Preferiti: toggle (mutazione su tabella reale) ======= */
   const toggleFavourite = async (ev: React.MouseEvent, groupEventId: UUID) => {
     ev.preventDefault();
     ev.stopPropagation();
@@ -259,7 +260,6 @@ export default function TimelinePage() {
       if (isFav) next.delete(groupEventId); else next.add(groupEventId);
       setFavs(next);
 
-      // NOTE: accessi diretti da migrare
       if (isFav) {
         const { error } = await supabase.from("group_event_favourites")
           .delete()
@@ -462,7 +462,7 @@ export default function TimelinePage() {
                       style={{
                         background: "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
                         boxShadow:
-                          "inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)"
+                          "inset 0 1px 2px rgba(0,0,0,0.18), inset 0 -1px 1px rgba(255,255,255,0.5), 0 1px 1px rgba(0,0,0,0.08)"
                       }}
                     />
                   </div>
@@ -472,8 +472,8 @@ export default function TimelinePage() {
                     ref={selectedBarRef}
                     className="absolute top-1/2 -translate-y-1/2"
                     style={{
-                      left: `10%`,
-                      width: `80%`,
+                      left: `${LEFT_EDGE_PCT * 100}%`,
+                      width: `${SELECTED_PCT * 100}%`,
                       height: 8,
                       borderRadius: 9999,
                       background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
@@ -500,7 +500,7 @@ export default function TimelinePage() {
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "left" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
+                        className={activeThumb === "left" ? thumbClassActive : thumbClassIdle}
                         style={activeThumb === "left" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
@@ -518,7 +518,7 @@ export default function TimelinePage() {
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "right" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
+                        className={activeThumb === "right" ? thumbClassActive : thumbClassIdle}
                         style={activeThumb === "right" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
@@ -527,21 +527,12 @@ export default function TimelinePage() {
                   {/* tick dinamici */}
                   <div className="absolute inset-x-3 bottom-1">
                     <div className="relative h-5">
-                      {(() => {
-                        const dMin = Math.round(fromYear);
-                        const dMax = Math.round(toYear);
-                        const s = Math.max(1, dMax - dMin);
-                        const step = niceStep(s, 7);
-                        const first = Math.ceil(dMin / step) * step;
-                        const out: number[] = [];
-                        for (let t = first; t <= dMax; t += step) out.push(Math.round(t));
-                        return out;
-                      })().map((t) => (
+                      {ticks.map((t) => (
                         <div
                           key={t}
                           className="absolute top-0 -translate-x-1/2"
                           style={{
-                            left: `calc(10% + ${((t - Math.round(fromYear)) / Math.max(1, Math.round(toYear) - Math.round(fromYear))) * 80}%)`
+                            left: `calc(${LEFT_EDGE_PCT * 100}% + ${((t - Math.round(fromYear)) / Math.max(1, Math.round(toYear) - Math.round(fromYear))) * SELECTED_PCT * 100}%)`
                           }}
                         >
                           <div className="h-[10px] w-px bg-white/85" />
