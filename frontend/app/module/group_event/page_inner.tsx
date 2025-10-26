@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import supabase from "@/lib/supabaseBrowserClient"; // ✅ default export (coerente prod)
+import { supabase } from "@/lib/supabaseBrowserClient";
 import RatingStars from "../../components/RatingStars";
 
 /* ===================== Tipi ===================== */
@@ -167,23 +167,24 @@ export default function GroupEventModulePage() {
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
-  // ===== AUTH STATO COERENTE (prod) =====
   const [userId, setUserId] = useState<string | null>(null);
-
-  // helper: sessione aggiornata al momento (evita falsi “non loggato”)
-  async function getUserIdNow(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id ?? null;
+  // ✅ AUTH FIX — funzione che garantisce un UID valido anche in produzione
+  async function getValidUserId(): Promise<string | null> {
+    try { await supabase.auth.refreshSession(); } catch {}
+    const { data } = await supabase.auth.getUser();
+    const uid = data?.user?.id ?? null;
     if (uid && uid !== userId) setUserId(uid);
     return uid;
   }
 
-  // mount: prendi sessione e rimani in ascolto
+  // ✅ AUTH FIX — inizializza userId e ascolta cambi auth
   useEffect(() => {
     let sub: { subscription?: { unsubscribe?: () => void } } | null = null;
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUserId(session?.user?.id ?? null);
+      } catch {}
       const { data } = supabase.auth.onAuthStateChange((_event, session) => {
         setUserId(session?.user?.id ?? null);
       });
@@ -388,30 +389,28 @@ export default function GroupEventModulePage() {
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
-  // carica stato preferito quando ho gid e (se presente) userId
   useEffect(() => {
     (async () => {
       if (!gid) return;
-      if (!userId) { setIsFav(false); return; }
-
       try {
+        const uid = await getValidUserId();
+        if (!uid) { setIsFav(false); return; }
         let { data: fav, error } = await supabase
           .from("group_event_favourites").select("id")
-          .eq("group_event_id", gid).eq("profile_id", userId).maybeSingle();
+          .eq("group_event_id", gid).eq("profile_id", uid).maybeSingle();
         if (error) {
           const alt = await supabase
             .from("group_event_favourites").select("id")
-            .eq("group_event_id", gid).eq("user_id", userId).maybeSingle();
+            .eq("group_event_id", gid).eq("user_id", uid).maybeSingle();
           setIsFav(!!alt.data);
         } else setIsFav(!!fav);
       } catch { setIsFav(false); }
     })();
-  }, [gid, userId]);
+  }, [gid]);
 
-  // ✅ rilegge sessione al click (evita falsi popup in prod)
   async function toggleFavourite() {
     if (!gid) return;
-    const uid = await getUserIdNow();
+    const uid = await getValidUserId();
     if (!uid) { alert("Per usare i preferiti devi accedere."); return; }
     if (savingFav) return;
 
