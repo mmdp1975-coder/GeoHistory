@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import supabase from "@/lib/supabaseBrowserClient"; // ⬅️ usa l'istanza DEFAULT (client browser)
+import { supabase } from "@/lib/supabaseBrowserClient";
 import RatingStars from "../../components/RatingStars";
 
 /* ===================== Tipi ===================== */
@@ -167,23 +167,7 @@ export default function GroupEventModulePage() {
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
-  // === AUTH STATE: session + listener (affidabile in produzione) ===
   const [userId, setUserId] = useState<string | null>(null);
-  useEffect(() => {
-    let sub: { subscription?: { unsubscribe?: () => void } } | null = null;
-    (async () => {
-      // 1) prendi subito la sessione corrente
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
-
-      // 2) rimani in ascolto dei cambi
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUserId(session?.user?.id ?? null);
-      });
-      sub = data;
-    })();
-    return () => sub?.subscription?.unsubscribe?.();
-  }, []);
 
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
@@ -377,79 +361,57 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang]);
 
-  // preferiti: stato e load coerenti con userId
+  // preferiti
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
       if (!gid) return;
-      // se l'utente non è ancora noto, non forziamo alert
-      if (!userId) { setIsFav(false); return; }
-
       try {
-        const { data: fav, error } = await supabase
-          .from("group_event_favourites")
-          .select("id")
-          .eq("group_event_id", gid)
-          .eq("profile_id", userId)
-          .maybeSingle();
-
+        const { data } = await supabase.auth.getUser();
+        const uid = data?.user?.id ?? null;
+        setUserId(uid);
+        if (!uid) { setIsFav(false); return; }
+        let { data: fav, error } = await supabase
+          .from("group_event_favourites").select("id")
+          .eq("group_event_id", gid).eq("profile_id", uid).maybeSingle();
         if (error) {
-          const { data: alt } = await supabase
-            .from("group_event_favourites")
-            .select("id")
-            .eq("group_event_id", gid)
-            .eq("user_id", userId)
-            .maybeSingle();
-          setIsFav(!!alt);
-        } else {
-          setIsFav(!!fav);
-        }
-      } catch {
-        setIsFav(false);
-      }
+          const alt = await supabase
+            .from("group_event_favourites").select("id")
+            .eq("group_event_id", gid).eq("user_id", uid).maybeSingle();
+          setIsFav(!!alt.data);
+        } else setIsFav(!!fav);
+      } catch { setIsFav(false); }
     })();
-  }, [gid, userId]);
+  }, [gid]);
 
   async function toggleFavourite() {
     if (!gid) return;
-    // al click, se non loggato -> mostra messaggio (non prima)
-    if (!userId) { alert("Per usare i preferiti devi accedere."); return; }
+    const { data } = await supabase.auth.getUser();
+    const uid = data?.user?.id ?? null;
+    if (!uid) { alert("Per usare i preferiti devi accedere."); return; }
     if (savingFav) return;
 
     setSavingFav(true);
     try {
       if (isFav) {
         const del1 = await supabase
-          .from("group_event_favourites")
-          .delete()
-          .eq("group_event_id", gid)
-          .eq("profile_id", userId);
+          .from("group_event_favourites").delete()
+          .eq("group_event_id", gid).eq("profile_id", uid);
         if (del1.error) {
-          await supabase
-            .from("group_event_favourites")
-            .delete()
-            .eq("group_event_id", gid)
-            .eq("user_id", userId);
+          await supabase.from("group_event_favourites").delete()
+            .eq("group_event_id", gid).eq("user_id", uid);
         }
         setIsFav(false);
       } else {
-        const ins = await supabase
-          .from("group_event_favourites")
-          .insert({
-            group_event_id: gid,
-            profile_id: userId,
-            created_at: new Date().toISOString(),
-          } as any);
+        const ins = await supabase.from("group_event_favourites").insert({
+          group_event_id: gid, profile_id: uid, created_at: new Date().toISOString(),
+        } as any);
         if (ins.error) {
-          await supabase
-            .from("group_event_favourites")
-            .insert({
-              group_event_id: gid,
-              user_id: userId,
-              created_at: new Date().toISOString(),
-            } as any);
+          await supabase.from("group_event_favourites").insert({
+            group_event_id: gid, user_id: uid, created_at: new Date().toISOString(),
+          } as any);
         }
         setIsFav(true);
       }
@@ -615,10 +577,14 @@ export default function GroupEventModulePage() {
     const data = timelineData;
     if (!data) return null;
 
+    // più tick su desktop; meno su mobile
     const ticks = buildTimelineTicks(data.min, data.max, isDesktop ? 12 : 6);
+
+    // mobile: asse 8px, rombo 14px; desktop: default 12px / 18px
     const axisH = isDesktop ? "h-[12px]" : "h-[8px]";
     const diamondSize = isDesktop ? 18 : 14;
 
+    // calcolo puntatore
     let pct = 50;
     {
       const ev = rows[selectedIndex];
@@ -633,11 +599,14 @@ export default function GroupEventModulePage() {
 
     return (
       <div className={`relative flex flex-col items-center justify-center rounded-2xl border border-slate-300 bg-gradient-to-b from-white to-slate-50 px-6 ${isDesktop ? "py-6" : "py-3"} shadow-[inset_0_2px_10px_rgba(255,255,255,0.9),0_10px_18px_rgba(15,23,42,0.08)]`}>
+        {/* Asse */}
         <div className={`relative w-full ${axisH} rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner`}>
+          {/* Puntatore */}
           <div
             className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-white bg-blue-500 shadow"
             style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 8px rgba(30,64,175,0.55)" }}
           />
+          {/* Ticks verticali */}
           {ticks.map((t, i) => {
             const pos = ((t - data.min) / data.range) * 100;
             return (
@@ -650,6 +619,7 @@ export default function GroupEventModulePage() {
           })}
         </div>
 
+        {/* Etichette */}
         {!isDesktop ? (
           <div className="mt-1.5 relative w-full h-5">
             <div className="absolute inset-x-0 -bottom-0 flex justify-between text-[11.5px] font-medium text-blue-800/90">
@@ -767,7 +737,7 @@ export default function GroupEventModulePage() {
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
                 const span = buildTimelineSpan(ev);
-                const label = span ? formatTimelineYearLabel(span.start) : "";
+                const label = span ? formatTimelineYearLabel(span.start) : ""; // anni già in card (qui li mostriamo perché richiesti nella card)
                 return (
                   <button
                     key={ev.id}
@@ -803,12 +773,12 @@ export default function GroupEventModulePage() {
 
       {/* ===== MOBILE: layout panoramico senza scroll pagina ===== */}
       <div className="mx-auto w-full max-w-7xl lg:hidden overflow-hidden">
-        {/* DESCRIZIONE */}
+        {/* DESCRIZIONE (no titolo, no anni; h fissa con scroll interno al testo) */}
         <section className="bg-white/70 backdrop-blur">
           <div className="px-4 py-2">
             <div className="mx-auto w-full max-w-[820px]">
               <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm h-[30svh] flex flex-col">
-                {/* Barra controlli */}
+                {/* Barra controlli in alto a destra */}
                 <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
@@ -840,7 +810,7 @@ export default function GroupEventModulePage() {
                   </div>
                 ) : null}
 
-                {/* Località */}
+                {/* SOLO località (anni rimossi; titolo già nella card) */}
                 {rows[selectedIndex]?.location ? (
                   <div className="px-3 pt-2 text-[11.5px] text-gray-600">
                     {rows[selectedIndex]!.location}
@@ -898,7 +868,7 @@ export default function GroupEventModulePage() {
       {/* ===== DESKTOP: Descrizione (sx) -> Mappa (dx) ===== */}
       <div className="mx-auto hidden w-full max-w-7xl lg:block">
         <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0 h-[calc(100svh-36svh)]">
-          {/* DESCRIZIONE */}
+          {/* DESCRIZIONE (senza titolo/anni; controlli in alto a destra) */}
           <section className="overflow-y-auto bg-white/70 backdrop-blur">
             <div className="px-4 py-4">
               <div className="flex items-center justify-end gap-2 mb-3">
@@ -919,7 +889,7 @@ export default function GroupEventModulePage() {
                 >⏭</button>
               </div>
 
-              {/* Località */}
+              {/* SOLO località (anni/titolo rimossi) */}
               {rows[selectedIndex]?.location ? (
                 <div className="text-[12.5px] text-gray-600 mb-2">
                   {rows[selectedIndex]!.location}
