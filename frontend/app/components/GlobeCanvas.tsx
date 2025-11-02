@@ -1,323 +1,449 @@
-'use client';
+"use client";
+import * as React from "react";
+import * as THREE from "three";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import type { ThreeEvent } from "@react-three/fiber";
+import { OrbitControls, Html, useTexture } from "@react-three/drei";
 
-import * as React from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Html, useTexture } from '@react-three/drei';
+/* ============================== Helpers ============================== */
 
-// ====== Types ======
-export type PointInfo = {
-  lat: number;
-  lon: number;
-  continent?: string;
-  country?: string;
-  city?: string;
-  radiusKm?: number;
+function latLonToVector3(lat: number, lon: number, radius: number) {
+  const phi = THREE.MathUtils.degToRad(90 - lat);
+  const theta = THREE.MathUtils.degToRad(lon + 180);
+  const x = -(radius * Math.sin(phi) * Math.cos(theta));
+  const z = radius * Math.sin(phi) * Math.sin(theta);
+  const y = radius * Math.cos(phi);
+  return new THREE.Vector3(x, y, z);
+}
+
+function vector3ToLatLon(v: THREE.Vector3) {
+  const vn = v.clone().normalize();
+  const lat = 90 - THREE.MathUtils.radToDeg(Math.acos(vn.y));
+  const lon = THREE.MathUtils.radToDeg(Math.atan2(vn.z, -vn.x)) - 180;
+  return { lat, lon };
+}
+
+function normalizeLon(lon: number) {
+  let L = lon;
+  while (L > 180) L -= 360;
+  while (L < -180) L += 360;
+  return L;
+}
+
+type GeoFeature = {
+  type: string;
+  properties: Record<string, any>;
+  geometry: { type: "Polygon" | "MultiPolygon"; coordinates: any };
 };
 
-type Props = {
-  height?: number;          // px height of the canvas area
-  radius?: number;          // sphere radius (Scene units)
-  onPointSelect?: (info: PointInfo) => void;
-  onContinentSelect?: (code: string) => void; // not used in this version but preserved for compatibility
-  initialRadiusKm?: number; // default city radius shown in the UI badge
+type CitiesEntry = {
+  name: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+  pop_max?: number;
+  scalerank?: number;
 };
 
-// ====== Small helpers ======
-function toRad(d: number) { return (d * Math.PI) / 180; }
-function toDeg(r: number) { return (r * 180) / Math.PI; }
+/* ---------- robust PIP: esterno + fori + multipoligoni ---------- */
 
-function latLonToVector3(lat: number, lon: number, R: number) {
-  // lat,lon in degrees; three.js sphere is Y-up; we map:
-  // phi = 90 - lat; theta = lon + 180
-  const phi = toRad(90 - lat);
-  const theta = toRad(lon + 180);
-  const x = -R * Math.sin(phi) * Math.cos(theta);
-  const z =  R * Math.sin(phi) * Math.sin(theta);
-  const y =  R * Math.cos(phi);
-  return { x, y, z };
-}
-
-function vector3ToLatLon(x: number, y: number, z: number) {
-  const R = Math.sqrt(x*x + y*y + z*z) || 1;
-  const lat = 90 - toDeg(Math.acos(y / R));
-  const lon = -toDeg(Math.atan2(x, z));
-  return { lat, lon: ((lon + 540) % 360) - 180 }; // normalize lon to [-180,180]
-}
-
-function haversineKm(a: {lat:number, lon:number}, b: {lat:number, lon:number}) {
-  const R = 6371;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const s1 = Math.sin(dLat/2) ** 2 +
-             Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon/2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s1)));
-}
-
-// Point in polygon (lon,lat arrays); polygon is [ [lon,lat], ... ]
-function isPointInRing(point: [number, number], ring: [number, number][]) {
-  const x = point[0], y = point[1];
+function isPointInRing([x, y]: [number, number], ring: number[][]) {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0], yi = ring[i][1];
-    const xj = ring[j][0], yj = ring[j][1];
-    const intersect = (yi > y) !== (yj > y) &&
-                      x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersect =
+      yi > y !== yj > y &&
+      x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
 }
 
-function pointInGeoJSON(lon: number, lat: number, feature: any): boolean {
-  // Supports Polygon / MultiPolygon
-  const coords = feature.geometry?.coordinates;
-  const type = feature.geometry?.type;
-  if (!coords || !type) return false;
-
-  const pt: [number, number] = [lon, lat];
-
-  if (type === 'Polygon') {
-    // first ring is outer; holes later
-    return coords.some((ring: [number, number][]) => isPointInRing(pt, ring));
+function isPointInPolygonRings(pt: [number, number], rings: number[][][]) {
+  if (!rings || !rings.length) return false;
+  const inOuter = isPointInRing(pt, rings[0]);
+  if (!inOuter) return false;
+  for (let i = 1; i < rings.length; i++) {
+    if (isPointInRing(pt, rings[i])) return false;
   }
-  if (type === 'MultiPolygon') {
-    return coords.some((poly: [number, number][][]) =>
-      poly.some((ring: [number, number][]) => isPointInRing(pt, ring))
+  return true;
+}
+
+function pointInGeoRaw(pt: [number, number], geom: GeoFeature["geometry"]) {
+  if (!geom) return false;
+  if (geom.type === "Polygon") {
+    return isPointInPolygonRings(pt, geom.coordinates);
+  }
+  if (geom.type === "MultiPolygon") {
+    return geom.coordinates.some((poly: number[][][]) =>
+      isPointInPolygonRings(pt, poly)
     );
   }
   return false;
 }
 
-// ====== Data loader hook ======
-type GeoFeature = {
-  type: 'Feature';
-  properties: Record<string, any>;
-  geometry: { type: string; coordinates: any };
-};
-type GeoJSON = { type: 'FeatureCollection'; features: GeoFeature[] };
-
-function useGeoData() {
-  const [continents, setContinents] = React.useState<GeoFeature[] | null>(null);
-  const [countries, setCountries] = React.useState<GeoFeature[] | null>(null);
-  const [cities, setCities] = React.useState<any[] | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [c1, c2, c3] = await Promise.all([
-          fetch('/data/continents.geojson').then(r => r.ok ? r.json() : null),
-          fetch('/data/countries.geojson').then(r => r.ok ? r.json() : null),
-          fetch('/data/cities.geojson').then(r => r.ok ? r.json() : null),
-        ]);
-
-        if (cancelled) return;
-        if (c1?.features) setContinents(c1.features as GeoFeature[]);
-        if (c2?.features) setCountries(c2.features as GeoFeature[]);
-        if (c3?.features || Array.isArray(c3)) setCities((c3.features ?? c3) as any[]);
-      } catch {
-        // soft-fail; nulls remain
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  return { continents, countries, cities };
+// antimeridiano-safe
+function pointInGeoAM(pt: [number, number], geom: GeoFeature["geometry"]) {
+  const [lon, lat] = pt;
+  const tests: [number, number][] = [
+    [normalizeLon(lon), lat],
+    [normalizeLon(lon + 360), lat],
+    [normalizeLon(lon - 360), lat],
+  ];
+  return tests.some((p) => pointInGeoRaw(p, geom));
 }
 
-// ====== Scene component (inside Canvas) ======
-function GlobeScene({
-  radius,
-  initialRadiusKm,
-  onPointSelect,
-}: {
-  radius: number;
-  initialRadiusKm: number;
-  onPointSelect?: (info: PointInfo) => void;
-}) {
-  const { camera, gl, scene } = useThree();
+/* ============================== Scene bits ============================== */
 
-  // Texture (satellite) from public path
-  const texture = useTexture('/bg/world-satellite.jpg');
-
-  const { continents, countries, cities } = useGeoData();
-
-  // Start centered over Europe (approx: 48N, 12E)
+function useEuropeStart(radius: number) {
+  const { camera, gl } = useThree();
   React.useEffect(() => {
-    const target = latLonToVector3(48, 12, radius);
-    const camDist = radius * 3.2;
-    const dirLen = Math.sqrt(target.x ** 2 + target.y ** 2 + target.z ** 2) || 1;
-    camera.position.set(
-      (target.x / dirLen) * camDist,
-      (target.y / dirLen) * camDist,
-      (target.z / dirLen) * camDist
-    );
-    camera.lookAt(0, 0, 0);
+    gl.toneMappingExposure = 1.3;
+    const targetLat = 47;
+    const targetLon = 10;
+    const camDist = radius * 3.0;
+
+    const look = new THREE.Vector3(0, 0, 0);
+    const pos = latLonToVector3(targetLat, targetLon, radius)
+      .normalize()
+      .multiplyScalar(camDist);
+
+    camera.position.copy(pos);
+    camera.lookAt(look);
     camera.updateProjectionMatrix();
-    gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    gl.setSize(gl.domElement.clientWidth, gl.domElement.clientHeight, false);
   }, [camera, gl, radius]);
+}
 
-  // Click handler: project ray to sphere, compute lat/lon, then lookup continent/country/nearest city
-  const meshRef = React.useRef<any>(null);
-  const [info, setInfo] = React.useState<PointInfo | null>(null);
-  const [radiusKm, setRadiusKm] = React.useState<number>(initialRadiusKm);
+function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] }) {
+  const [hover, setHover] = React.useState<number | null>(null);
+  const [hoverPos, setHoverPos] = React.useState<THREE.Vector3 | null>(null);
 
-  const onPointerDown = (e: any) => {
-    // Intersect point on the sphere
-    if (!meshRef.current) return;
-    const ip = e.intersections?.[0]?.point ?? e.point;
-    if (!ip) return;
-
-    const { lat, lon } = vector3ToLatLon(ip.x, ip.y, ip.z);
-
-    // Lookups (sync)
-    let continentName: string | undefined;
-    let countryName: string | undefined;
-    let nearestCity: string | undefined;
-
-    try {
-      if (continents) {
-        for (const f of continents) {
-          const props = f.properties || {};
-          if (pointInGeoJSON(lon, lat, f)) {
-            continentName = props.continent || props.CONTINENT || props.name || props.NAME || undefined;
-            break;
-          }
-        }
-      }
-      if (countries) {
-        for (const f of countries) {
-          const props = f.properties || {};
-          if (pointInGeoJSON(lon, lat, f)) {
-            countryName = props.name || props.NAME || props.admin || props.ADMIN || props.sovereignt || props.SOVEREIGNT || undefined;
-            break;
-          }
-        }
-      }
-      if (cities && Array.isArray(cities)) {
-        let best: { name: string; d: number } | null = null;
-        for (const c of cities) {
-          const p = c.properties ?? c; // allow both FC and plain array
-          const clat = p.latitude ?? p.LATITUDE ?? p.lat ?? p.LATitude ?? p.lat;
-          const clon = p.longitude ?? p.LONGITUDE ?? p.lon ?? p.LONgitude ?? p.lon;
-          if (typeof clat !== 'number' || typeof clon !== 'number') continue;
-          const d = haversineKm({ lat, lon }, { lat: clat, lon: clon });
-          if (!best || d < best.d) best = { name: p.name || p.NAME || p.nameascii || p.NAMEASCII || 'Unknown', d };
-        }
-        nearestCity = best?.name;
-      }
-    } catch {
-      // ignore
-    }
-
-    const next: PointInfo = {
-      lat,
-      lon,
-      radiusKm,
-      continent: continentName,
-      country: countryName,
-      city: nearestCity,
-    };
-    setInfo(next);
-    onPointSelect?.(next);
-  };
-
-  // UI Badge (below globe) – smaller text as requested
-  const Badge = () => (
-    <Html position={[0, -radius * 1.3, 0]} transform={false} center={false}>
-      <div className="mt-2 w-full">
-        <div className="mx-auto w-fit rounded-md border border-neutral-200 bg-white/90 px-2 py-1 text-[11px] text-neutral-700 shadow-sm">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {info ? (
-              <>
-                <span><b>Lat</b> {info.lat.toFixed(3)}</span>
-                <span><b>Lon</b> {info.lon.toFixed(3)}</span>
-                {typeof info.radiusKm === 'number' && <span><b>City radius</b> {info.radiusKm} km</span>}
-                {info.continent && <span><b>Continent</b> {info.continent}</span>}
-                {info.country && <span><b>Country</b> {info.country}</span>}
-                {info.city && <span><b>Nearest city</b> {info.city}</span>}
-              </>
-            ) : (
-              <span>Pick a point on the globe…</span>
-            )}
-          </div>
-        </div>
-
-        {/* Radius slider (compact) */}
-        <div className="mx-auto mt-1 w-fit rounded-md border border-neutral-200 bg-white/90 px-2 py-1 text-[11px] text-neutral-700 shadow-sm">
-          <label className="mr-2">City radius (km)</label>
-          <input
-            type="range"
-            min={10}
-            max={1000}
-            step={10}
-            value={radiusKm}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setRadiusKm(v);
-              if (info) {
-                const next = { ...info, radiusKm: v };
-                setInfo(next);
-                onPointSelect?.(next);
-              }
-            }}
-          />
-          <span className="ml-2 tabular-nums">{radiusKm}</span>
-        </div>
-      </div>
-    </Html>
+  const positions = React.useMemo(
+    () => cities.map((c) => latLonToVector3(c.latitude, c.longitude, radius + 0.003)),
+    [cities, radius]
   );
 
-  // Subtle auto-rotation (very slow)
-  useFrame((_, delta) => {
-    if (meshRef.current) meshRef.current.rotation.y += delta * 0.02;
-  });
+  const geom = React.useMemo(() => new THREE.SphereGeometry(0.006, 12, 12), []);
+  const mat = React.useMemo(
+    () => new THREE.MeshBasicMaterial({ color: "#ffd166", toneMapped: false }),
+    []
+  );
+
+  const { camera, gl } = useThree();
+  const raycaster = React.useMemo(() => new THREE.Raycaster(), []);
+  const pointer = React.useRef(new THREE.Vector2());
+
+  const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
+    const rect = (gl.domElement as HTMLCanvasElement).getBoundingClientRect();
+    pointer.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(pointer.current, camera);
+
+    let minIdx = -1;
+    let minDist = Infinity;
+    for (let i = 0; i < positions.length; i++) {
+      const d = raycaster.ray.distanceToPoint(positions[i]);
+      if (d < minDist) {
+        minDist = d;
+        minIdx = i;
+      }
+    }
+    if (minIdx >= 0 && minDist < 0.15) {
+      setHover(minIdx);
+      setHoverPos(positions[minIdx]);
+    } else {
+      setHover(null);
+      setHoverPos(null);
+    }
+  };
+
+  return (
+    <group onPointerMove={onPointerMove}>
+      {positions.map((p, i) => (
+        <mesh key={i} position={p} geometry={geom} material={mat} />
+      ))}
+      {hover != null && hoverPos && (
+        <Html
+          position={hoverPos.clone().normalize().multiplyScalar(radius + 0.05)}
+          center
+          style={{
+            background: "rgba(20,20,20,0.85)",
+            color: "white",
+            padding: "6px 8px",
+            borderRadius: 8,
+            fontSize: 12,
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+          }}
+        >
+          {cities[hover].name} — {cities[hover].country}
+        </Html>
+      )}
+    </group>
+  );
+}
+
+function GlobeMesh({
+  radius,
+  onPick,
+}: {
+  radius: number;
+  onPick: (lat: number, lon: number) => void;
+}) {
+  const colorMap = useTexture("/bg/world-satellite.jpg") as THREE.Texture;
+
+  React.useEffect(() => {
+    colorMap.colorSpace = THREE.SRGBColorSpace;
+    colorMap.generateMipmaps = true;
+    colorMap.minFilter = THREE.LinearMipmapLinearFilter;
+    colorMap.magFilter = THREE.LinearFilter;
+    colorMap.anisotropy = 16;
+    colorMap.needsUpdate = true;
+  }, [colorMap]);
+
+  const ref = React.useRef<THREE.Mesh>(null);
+
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    if (!ref.current) return;
+    const p = e.point as THREE.Vector3;
+    const { lat, lon } = vector3ToLatLon(p);
+    onPick(lat, lon);
+  };
+
+  return (
+    <mesh ref={ref} onPointerDown={handlePointerDown}>
+      <sphereGeometry args={[radius, 128, 128]} />
+      <meshStandardMaterial map={colorMap} roughness={0.85} metalness={0.0} envMapIntensity={0.0} />
+    </mesh>
+  );
+}
+
+/* ============================== Main Component ============================== */
+
+export default function GlobeCanvas() {
+  const radius = 1.0;
+
+  const [picked, setPicked] = React.useState<{ lat: number; lon: number } | null>(null);
+  const [continent, setContinent] = React.useState<string>("");
+  const [country, setCountry] = React.useState<string>("");
+  const [nearestCity, setNearestCity] = React.useState<string>("");
+
+  const [continentsData, setContinentsData] = React.useState<GeoFeature[]>([]);
+  const [countriesData, setCountriesData] = React.useState<GeoFeature[]>([]);
+  const [citiesData, setCitiesData] = React.useState<CitiesEntry[]>([]);
+  const dataReady = continentsData.length > 0 && countriesData.length > 0;
+
+  React.useEffect(() => {
+    async function loadAll() {
+      const [cont, coun, city] = await Promise.all([
+        fetch("/data/continents.geojson").then((r) => r.json()).catch(() => null),
+        fetch("/data/countries.geojson").then((r) => r.json()).catch(() => null),
+        fetch("/data/cities.geojson").then((r) => r.json()).catch(() => null),
+      ]);
+
+      if (cont?.features) setContinentsData(cont.features);
+      if (coun?.features) setCountriesData(coun.features);
+
+      const cityFeatures: any[] = city?.features || [];
+      const rows: CitiesEntry[] = cityFeatures.map((f: any) => {
+        const [lon, lat] = Array.isArray(f.geometry?.coordinates)
+          ? f.geometry.coordinates
+          : [0, 0];
+        return {
+          name:
+            f.properties?.name ??
+            f.properties?.NAME ??
+            f.properties?.NAMEASCII ??
+            "",
+          country:
+            f.properties?.country ??
+            f.properties?.adm0name ??
+            f.properties?.ADMIN ??
+            "",
+          latitude: f.properties?.latitude ?? lat,
+          longitude: f.properties?.longitude ?? lon,
+          pop_max: f.properties?.pop_max ?? f.properties?.POP_MAX,
+          scalerank: f.properties?.scalerank ?? f.properties?.SCALERANK,
+        };
+      });
+      setCitiesData(rows);
+    }
+    loadAll();
+  }, []);
+
+  const updateAttributesFor = React.useCallback(
+    (lat: number, lon: number) => {
+      setPicked({ lat, lon });
+
+      if (!dataReady) {
+        setContinent("-");
+        setCountry("-");
+        setNearestCity("-");
+        return;
+      }
+
+      const pt: [number, number] = [normalizeLon(lon), lat];
+
+      // continent
+      let contName = "";
+      for (const f of continentsData) {
+        if (pointInGeoAM(pt, f.geometry)) {
+          contName =
+            f.properties?.CONTINENT ||
+            f.properties?.continent ||
+            f.properties?.name ||
+            "";
+          break;
+        }
+      }
+      setContinent(contName || "Unknown");
+
+      // country
+      let countryName = "";
+      for (const f of countriesData) {
+        if (pointInGeoAM(pt, f.geometry)) {
+          countryName =
+            f.properties?.ADMIN ||
+            f.properties?.NAME_EN ||
+            f.properties?.NAME ||
+            f.properties?.name ||
+            "";
+          break;
+        }
+      }
+      setCountry(countryName || "Unknown");
+
+      // nearest city
+      if (citiesData.length) {
+        let bestIdx = -1;
+        let minD = Infinity;
+        const toRad = Math.PI / 180;
+        const R = 6371;
+        const lat1 = lat * toRad;
+        const lon1 = normalizeLon(lon) * toRad;
+        for (let i = 0; i < citiesData.length; i++) {
+          const c = citiesData[i];
+          const lat2 = c.latitude * toRad;
+          let dlon = normalizeLon(c.longitude) * toRad - lon1;
+          if (dlon > Math.PI) dlon -= 2 * Math.PI;
+          if (dlon < -Math.PI) dlon += 2 * Math.PI;
+
+          const dlat = lat2 - lat1;
+          const a =
+            Math.sin(dlat / 2) ** 2 +
+            Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlon / 2) ** 2;
+          const d = 2 * R * Math.asin(Math.sqrt(a));
+          if (d < minD) {
+            minD = d;
+            bestIdx = i;
+          }
+        }
+        setNearestCity(bestIdx >= 0 ? citiesData[bestIdx].name : "Unknown");
+      } else {
+        setNearestCity("Unknown");
+      }
+    },
+    [dataReady, continentsData, countriesData, citiesData]
+  );
+
+  const [radiusKm, setRadiusKm] = React.useState(250);
+
+  return (
+    <div className="w-full">
+      {/* canvas (globo più piccolo) */}
+      <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/60 backdrop-blur">
+        <Canvas
+          style={{ width: "100%", height: 420 }} // ridotto da 520 -> 420
+          dpr={[1, 2]}
+          camera={{ fov: 35, near: 0.1, far: 1000 }}
+          gl={{ antialias: true }}
+        >
+          <ambientLight intensity={0.95} />
+          <directionalLight position={[5, 3, 5]} intensity={1.2} />
+          <directionalLight position={[-5, -2, -5]} intensity={0.6} />
+
+          <Scene
+            radius={1.0}
+            onPick={(lat, lon) => updateAttributesFor(lat, lon)}
+            cities={citiesData}
+          />
+        </Canvas>
+      </div>
+
+      {/* pannello info SOTTO il globo, font ridotto */}
+      <div
+        className="rounded-xl shadow-md border border-neutral-200 bg-white/85 backdrop-blur mt-2 text-sm"
+        style={{ padding: 10 }}
+      >
+        <div className="grid gap-x-8 gap-y-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div>
+            <div>Lat: {picked ? picked.lat.toFixed(4) : "-"}</div>
+            <div>Lon: {picked ? picked.lon.toFixed(4) : "-"}</div>
+            <div className="flex items-center gap-3 mt-2">
+              <span>City radius (km):</span>
+              <input
+                type="range"
+                min={5}
+                max={500}
+                step={5}
+                value={radiusKm}
+                onChange={(e) => setRadiusKm(Number(e.target.value))}
+              />
+              <span style={{ width: 40, textAlign: "right" }}>{radiusKm}</span>
+            </div>
+          </div>
+          <div>
+            <div>Continent: {continent || "-"}</div>
+            <div>Country: {country || "-"}</div>
+            <div>Nearest city: {nearestCity || "-"}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Scene({
+  radius,
+  onPick,
+  cities,
+}: {
+  radius: number;
+  onPick: (lat: number, lon: number) => void;
+  cities: CitiesEntry[];
+}) {
+  useEuropeStart(radius);
+  const [marker, setMarker] = React.useState<THREE.Vector3 | null>(null);
+
+  const handlePick = (lat: number, lon: number) => {
+    const p = latLonToVector3(lat, lon, radius + 0.01);
+    setMarker(p);
+    onPick(lat, lon);
+  };
+
+  useFrame(() => {});
 
   return (
     <>
-      <mesh ref={meshRef} onPointerDown={onPointerDown}>
-        <sphereGeometry args={[radius, 96, 96]} />
-        <meshStandardMaterial map={texture} roughness={1} metalness={0} />
-      </mesh>
-
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[3, 2, 2]} intensity={0.9} />
-
+      <GlobeMesh radius={radius} onPick={handlePick} />
+      {cities.length > 0 && <CityDots radius={radius} cities={cities} />}
+      {marker && (
+        <mesh position={marker}>
+          <sphereGeometry args={[0.012, 16, 16]} />
+          <meshBasicMaterial color="#ff6b6b" toneMapped={false} />
+        </mesh>
+      )}
       <OrbitControls
         enablePan={false}
-        rotateSpeed={0.6}
-        zoomSpeed={0.6}
-        minDistance={radius * 2.2}
-        maxDistance={radius * 5.0}
+        enableDamping
+        dampingFactor={0.08}
+        rotateSpeed={0.8}
+        minDistance={1.7}
+        maxDistance={4.0}
+        zoomSpeed={0.8}
       />
-
-      <Badge />
     </>
-  );
-}
-
-// ====== Wrapper exporting a ready Canvas ======
-export default function GlobeCanvas({
-  height = 300,
-  radius = 1.8,
-  onPointSelect,
-  onContinentSelect, // reserved
-  initialRadiusKm = 50,
-}: Props) {
-  return (
-    <div style={{ width: '100%', height }}>
-      <Canvas
-        camera={{ fov: 32, near: 0.1, far: 1000 }}
-        onCreated={({ gl }) => {
-          gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        }}
-      >
-        <GlobeScene
-          radius={radius}
-          initialRadiusKm={initialRadiusKm}
-          onPointSelect={onPointSelect}
-        />
-      </Canvas>
-    </div>
   );
 }
