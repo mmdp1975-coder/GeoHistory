@@ -16,14 +16,21 @@ function latLonToVector3(lat: number, lon: number, radius: number) {
   return new THREE.Vector3(x, y, z);
 }
 
+function canonicalLon(lon: number) {
+  // riporta qualsiasi valore in [-180, +180]
+  return ((lon + 180) % 360 + 360) % 360 - 180;
+}
+
 function vector3ToLatLon(v: THREE.Vector3) {
   const vn = v.clone().normalize();
   const lat = 90 - THREE.MathUtils.radToDeg(Math.acos(vn.y));
-  const lon = THREE.MathUtils.radToDeg(Math.atan2(vn.z, -vn.x)) - 180;
+  const rawLon = THREE.MathUtils.radToDeg(Math.atan2(vn.z, -vn.x)) - 180;
+  const lon = canonicalLon(rawLon);
   return { lat, lon };
 }
 
 function normalizeLon(lon: number) {
+
   let L = lon;
   while (L > 180) L -= 360;
   while (L < -180) L += 360;
@@ -222,8 +229,26 @@ function GlobeMesh({
 
 /* ============================== Main Component ============================== */
 
-export default function GlobeCanvas() {
-  const radius = 1.0;
+    export default function GlobeCanvas({
+      onPointSelect,
+      initialRadiusKm,
+      height,
+      radius: globeRadius,
+    }: {
+      onPointSelect?: (info: {
+        lat: number;
+        lon: number;
+        continent?: string;
+        country?: string;
+        city?: string;
+        radiusKm: number;
+      }) => void;
+      initialRadiusKm?: number;
+      height?: number;
+      radius?: number;
+    }) {
+
+  const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
 
   const [picked, setPicked] = React.useState<{ lat: number; lon: number } | null>(null);
   const [continent, setContinent] = React.useState<string>("");
@@ -275,7 +300,7 @@ export default function GlobeCanvas() {
 
   const updateAttributesFor = React.useCallback(
     (lat: number, lon: number) => {
-      setPicked({ lat, lon });
+      setPicked({ lat, lon: canonicalLon(lon) });
 
       if (!dataReady) {
         setContinent("-");
@@ -348,7 +373,20 @@ export default function GlobeCanvas() {
     [dataReady, continentsData, countriesData, citiesData]
   );
 
-  const [radiusKm, setRadiusKm] = React.useState(250);
+  const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 250);
+
+  // Notifica la landing quando cambia la selezione o il raggio
+  React.useEffect(() => {
+    if (!onPointSelect || !picked) return;
+    onPointSelect({
+      lat: picked.lat,
+      lon: picked.lon,
+      continent,
+      country,
+      city: nearestCity,
+      radiusKm,
+    });
+  }, [onPointSelect, picked, continent, country, nearestCity, radiusKm]);
 
   return (
     <div className="w-full">

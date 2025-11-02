@@ -4,7 +4,7 @@ import React, { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-// Import dinamico del globo 3D
+// Lasciare il Globe invariato
 const GlobeCanvas: any = dynamic(() => import('@/app/components/GlobeCanvas'), { ssr: false });
 
 type PointInfo = {
@@ -24,17 +24,17 @@ export default function LandingPage() {
     const params = new URLSearchParams({
       lat: pointInfo.lat.toFixed(6),
       lon: pointInfo.lon.toFixed(6),
-      radiusKm: pointInfo.radiusKm ? String(pointInfo.radiusKm) : '50',
+      radiusKm: pointInfo?.radiusKm ? String(pointInfo.radiusKm) : '50',
     });
-    if (pointInfo.continent) params.set('continent', pointInfo.continent);
-    if (pointInfo.country) params.set('country', pointInfo.country);
-    if (pointInfo.city) params.set('city', pointInfo.city);
+    if (pointInfo?.continent) params.set('continent', pointInfo.continent);
+    if (pointInfo?.country) params.set('country', pointInfo.country);
+    if (pointInfo?.city) params.set('city', pointInfo.city);
     return `/module/timeline?${params.toString()}`;
   }, [pointInfo]);
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden">
-      {/* ==== SFONDO STORICO (NON TOCCARE) ==== */}
+      {/* BACKGROUND */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0"
@@ -48,30 +48,22 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ==== CONTENUTO ==== */}
+      {/* LAYOUT */}
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:flex-row md:gap-8 md:py-10">
-        {/* ====================== COLONNA SINISTRA: Globe Explorer ====================== */}
+        {/* COLONNA SINISTRA: Globe */}
         <section aria-label="Globe Explorer" className="w-full md:w-1/2">
           <div className="rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
-            {/* HEADER */}
-            <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
+            <div className="relative z-20 flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
               <h1 className="text-lg font-semibold text-neutral-900">Globe Explorer</h1>
-
-              <Link
-                href={explorePlacesHref}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 ${
-                  pointInfo ? 'bg-neutral-900' : 'bg-neutral-700'
-                }`}
-                title={pointInfo ? 'Explore places near the selected location' : 'Explore all places'}
+              <button
+                onClick={(e) => { e.stopPropagation(); window.location.assign(explorePlacesHref); }}
+                className="pointer-events-auto rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
               >
                 Explore Places
-              </Link>
+              </button>
             </div>
-
-            {/* BODY */}
             <div className="px-5 pb-5 pt-3">
-              {/* GLOBO 3D */}
-              <div className="relative mt-2 overflow-hidden rounded-xl border border-neutral-200">
+              <div className="p-3 relative z-0">
                 <GlobeCanvas
                   height={300}
                   radius={1.8}
@@ -79,29 +71,27 @@ export default function LandingPage() {
                   initialRadiusKm={pointInfo?.radiusKm ?? 50}
                 />
               </div>
-
-              {/* INFO PUNTO (badge già gestito nel componente) */}
             </div>
           </div>
         </section>
 
-        {/* ====================== COLONNA DESTRA ====================== */}
-        <section aria-label="Right column" className="w-full space-y-6 md:w-1/2">
-          {/* ---- Timeline Explorer ---- */}
-          <div className="rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
+        {/* COLONNA DESTRA: Timeline + Discover */}
+        <section aria-label="Right column" className="w-full md:w-1/2 flex flex-col justify-between gap-6">
+          {/* TIMELINE */}
+          <div className="flex-1 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
             <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
               <h2 className="text-lg font-semibold text-neutral-900">Timeline Explorer</h2>
-              <Link
-                href="/module/timeline"
+              <button
+                onClick={() => window.location.assign(explorePlacesHref)}
                 className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
               >
-                Explore History
-              </Link>
+                Explore Places
+              </button>
             </div>
 
             <div className="px-5 pb-5 pt-3">
-              {/* ANTEPRIMA TIMELINE MODERNA (come richiesto) */}
               <div className="relative mb-1 h-36 w-full overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-inner">
+                {/* Griglia di sfondo */}
                 <div
                   aria-hidden
                   className="absolute inset-0 opacity-[0.12]"
@@ -112,6 +102,7 @@ export default function LandingPage() {
                   }}
                 />
 
+                {/* Etichette superiori */}
                 <div className="absolute top-2 left-4 right-4 flex justify-between text-[11px] font-medium text-neutral-700">
                   <span>Ancient</span>
                   <span>Middle Ages</span>
@@ -121,7 +112,10 @@ export default function LandingPage() {
                   <span>Contemporary</span>
                 </div>
 
+                {/* Asse */}
                 <div className="absolute left-6 right-6 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-neutral-200" />
+
+                {/* Ticks */}
                 {[0, 20, 40, 60, 80, 100].map((p) => (
                   <div
                     key={p}
@@ -130,13 +124,15 @@ export default function LandingPage() {
                   />
                 ))}
 
+                {/* Cursore blu animato */}
                 <div className="absolute inset-x-6 top-1/2 -translate-y-1/2">
                   <div className="relative h-0">
-                    <div className="timeline-dot" />
-                    <div className="timeline-trail" />
+                    <span className="gh-dot" />
+                    <span className="gh-trail" />
                   </div>
                 </div>
 
+                {/* Etichette inferiori */}
                 <div className="absolute bottom-2 left-4 right-4 flex items-center justify-between text-[11px] text-neutral-500">
                   <span>-3000</span>
                   <span>-500</span>
@@ -147,43 +143,45 @@ export default function LandingPage() {
                 </div>
 
                 <style jsx>{`
-                  @keyframes glide {
-                    0% { transform: translateX(0); }
-                    100% { transform: translateX(calc(100% - 8px)); }
+                  @keyframes gh_move {
+                    0% { left: 0; }
+                    100% { left: calc(100% - 14px); }
                   }
-                  .timeline-dot {
+                  @keyframes gh_trail {
+                    0% { width: 0; }
+                    100% { width: 100%; }
+                  }
+                  .gh-dot {
                     position: absolute;
                     top: -6px;
                     left: 0;
-                    height: 14px;
                     width: 14px;
+                    height: 14px;
                     border-radius: 9999px;
-                    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 0 16px 6px rgba(59, 130, 246, 0.25),
-                                0 0 32px 12px rgba(14, 165, 233, 0.2);
                     background: radial-gradient(circle at 30% 30%, #93c5fd 0%, #2563eb 35%, #0ea5e9 100%);
-                    animation: glide 6.5s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
+                    box-shadow:
+                      0 0 0 2px rgba(255,255,255,0.9),
+                      0 6px 18px rgba(59,130,246,0.35),
+                      0 0 28px rgba(14,165,233,0.25);
+                    animation: gh_move 6.5s cubic-bezier(0.22,1,0.36,1) infinite alternate;
                   }
-                  .timeline-trail {
+                  .gh-trail {
                     position: absolute;
                     top: -1.5px;
                     left: 0;
                     height: 6px;
-                    width: 100%;
-                    pointer-events: none;
-                    background: linear-gradient(90deg, rgba(59, 130, 246, 0.0), rgba(59, 130, 246, 0.22));
+                    width: 0;
+                    background: linear-gradient(90deg, rgba(59,130,246,0.00), rgba(59,130,246,0.22));
                     mask-image: linear-gradient(90deg, black 0%, transparent 60%);
                     -webkit-mask-image: linear-gradient(90deg, black 0%, transparent 60%);
-                    animation: glide 6.5s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
-                  }
-                  .timeline-dot:hover, .timeline-trail:hover {
-                    animation-play-state: paused;
+                    animation: gh_trail 6.5s cubic-bezier(0.22,1,0.36,1) infinite alternate;
                   }
                 `}</style>
               </div>
             </div>
           </div>
 
-          {/* ---- PANNELLO SEPARATO: Widgets (Most Rated + Favourites) ---- */}
+          {/* DISCOVER */}
           <div className="rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold text-neutral-900">Discover</h3>
@@ -191,10 +189,7 @@ export default function LandingPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Most Rated */}
-              <Link
-                href="/module/rating"
-                className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow transition-shadow hover:shadow-md"
-              >
+              <Link href="/module/rating" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="h-5 w-5 text-yellow-500" fill="currentColor" aria-hidden>
@@ -210,10 +205,7 @@ export default function LandingPage() {
               </Link>
 
               {/* Favourites */}
-              <Link
-                href="/module/favourites"
-                className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow transition-shadow hover:shadow-md"
-              >
+              <Link href="/module/favourites" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="currentColor" aria-hidden>
@@ -221,12 +213,30 @@ export default function LandingPage() {
                     </svg>
                     <span className="text-sm font-semibold text-neutral-900">Favourites</span>
                   </div>
-                  <p className="mt-1 text-xs text-neutral-600">Quick access to your saved items.</p>
+                  <p className="mt-1 text-xs text-neutral-600">Your saved journeys.</p>
                 </div>
                 <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white hover:bg-neutral-800">
                   Open
                 </span>
               </Link>
+
+              {/* New Journeys */}
+              <Link href="/module/NewJourney" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-600" fill="currentColor" aria-hidden>
+                      <path d="M11 11V6a1 1 0 1 1 2 0v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5z" />
+                    </svg>
+                    <span className="text-sm font-semibold text-neutral-900">New Journeys</span>
+                  </div>
+                  <p className="mt-1 text-xs text-neutral-600">Latest journeys published by users.</p>
+                </div>
+                <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white hover:bg-neutral-800">
+                  Open
+                </span>
+              </Link>
+
+              <div className="hidden sm:block" />
             </div>
           </div>
         </section>
