@@ -1,3 +1,4 @@
+// frontend/app/module/group_event/page_inner.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -6,6 +7,7 @@ import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplib
 import "maplibre-gl/dist/maplibre-gl.css";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import RatingStars from "../../components/RatingStars";
+import { useCurrentUser } from "@/lib/useCurrentUser";
 
 /* ===================== Tipi ===================== */
 type AnyObj = Record<string, any>;
@@ -154,8 +156,11 @@ export default function GroupEventModulePage() {
   const sp = useSearchParams();
   const isDesktop = useIsDesktop();
 
-  // ✅ Usa SEMPRE lo stesso client (auth-helpers) nei componenti client
+  // ✅ Supabase client (auth-helpers) per componenti client
   const supabase = useMemo(() => createClientComponentClient(), []);
+
+  // ✅ Current user centralizzato (niente getUser/onAuthStateChange sparsi)
+  const { userId } = useCurrentUser();
 
   // lingua
   const desiredLang =
@@ -169,32 +174,6 @@ export default function GroupEventModulePage() {
 
   const [err, setErr] = useState<string | null>(null);
   const [landingHref, setLandingHref] = useState<string | null>(null);
-
-  const [userId, setUserId] = useState<string | null>(null);
-  // ✅ AUTH — funzione che garantisce un UID valido
-  async function getValidUserId(): Promise<string | null> {
-    try { await supabase.auth.refreshSession(); } catch {}
-    const { data } = await supabase.auth.getUser();
-    const uid = data?.user?.id ?? null;
-    if (uid && uid !== userId) setUserId(uid);
-    return uid;
-  }
-
-  // ✅ AUTH — inizializza userId e ascolta cambi auth
-  useEffect(() => {
-    let sub: { subscription?: { unsubscribe?: () => void } } | null = null;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setUserId(session?.user?.id ?? null);
-      } catch {}
-      const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUserId(session?.user?.id ?? null);
-      });
-      sub = data;
-    })();
-    return () => sub?.subscription?.unsubscribe?.();
-  }, [supabase]);
 
   useEffect(() => {
     const raw = sp.get("gid")?.trim() ?? null;
@@ -226,7 +205,7 @@ export default function GroupEventModulePage() {
     } catch {}
   }, []);
 
-  // dati
+  // dati GE
   const [ge, setGe] = useState<AnyObj | null>(null);
   const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string } | null>(null);
   const [rows, setRows] = useState<EventVM[]>([]);
@@ -388,7 +367,7 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang, supabase]);
 
-  // preferiti
+  // preferiti (usa userId dall’hook)
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
@@ -396,25 +375,23 @@ export default function GroupEventModulePage() {
     (async () => {
       if (!gid) return;
       try {
-        const uid = await getValidUserId();
-        if (!uid) { setIsFav(false); return; }
+        if (!userId) { setIsFav(false); return; }
         let { data: fav, error } = await supabase
           .from("group_event_favourites").select("id")
-          .eq("group_event_id", gid).eq("profile_id", uid).maybeSingle();
+          .eq("group_event_id", gid).eq("profile_id", userId).maybeSingle();
         if (error) {
           const alt = await supabase
             .from("group_event_favourites").select("id")
-            .eq("group_event_id", gid).eq("user_id", uid).maybeSingle();
+            .eq("group_event_id", gid).eq("user_id", userId).maybeSingle();
           setIsFav(!!alt.data);
         } else setIsFav(!!fav);
       } catch { setIsFav(false); }
     })();
-  }, [gid, supabase]);
+  }, [gid, supabase, userId]);
 
   async function toggleFavourite() {
     if (!gid) return;
-    const uid = await getValidUserId();
-    if (!uid) { alert("Per usare i preferiti devi accedere."); return; }
+    if (!userId) { alert("Per usare i preferiti devi accedere."); return; }
     if (savingFav) return;
 
     setSavingFav(true);
@@ -422,27 +399,25 @@ export default function GroupEventModulePage() {
       if (isFav) {
         const del1 = await supabase
           .from("group_event_favourites").delete()
-          .eq("group_event_id", gid).eq("profile_id", uid);
+          .eq("group_event_id", gid).eq("profile_id", userId);
         if (del1.error) {
           await supabase.from("group_event_favourites").delete()
-            .eq("group_event_id", gid).eq("user_id", uid);
+            .eq("group_event_id", gid).eq("user_id", userId);
         }
         setIsFav(false);
       } else {
         const ins = await supabase.from("group_event_favourites").insert({
-          group_event_id: gid, profile_id: uid, created_at: new Date().toISOString(),
+          group_event_id: gid, profile_id: userId, created_at: new Date().toISOString(),
         } as any);
         if (ins.error) {
           await supabase.from("group_event_favourites").insert({
-            group_event_id: gid, user_id: uid, created_at: new Date().toISOString(),
+            group_event_id: gid, user_id: userId, created_at: new Date().toISOString(),
           } as any);
         }
         setIsFav(true);
       }
     } finally { setSavingFav(false); }
   }
-
-  // --- (resto del file invariato: mappa, UI, timeline, ecc.) ---
 
   // markers
   function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
@@ -456,11 +431,6 @@ export default function GroupEventModulePage() {
     }
     return arr;
   }
-
-  // ……………………… [DA QUI IN POI lascia esattamente come nel tuo file] ……………………
-  // (Per brevità non ripeto la parte identica: markers, timeline, render, ecc.
-  //  Non ho cambiato nulla di quella sezione nel tuo file originale.)
-  // ……………………………………………………………………………………………………………………………
 
   useEffect(() => {
     const map = mapRef.current;

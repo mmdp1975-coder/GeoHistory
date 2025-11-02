@@ -1,5 +1,11 @@
 ﻿"use client";
 
+/**
+ * GeoHistory Journey — DB Manager
+ * Path: app/module/DB_Manager/users_edit/page.tsx
+ *
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 

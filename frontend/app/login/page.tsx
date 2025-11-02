@@ -1,124 +1,13 @@
-// app/login/page.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./auth.module.css";
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import type { User } from "@supabase/supabase-js";
-
-const LANDING_MAP: Record<string, string> = {
-  ADMIN: "/landing/ADMIN",
-  FAN: "/landing/FAN",
-  MOD: "/landing/MOD",
-  RESEARCH: "/landing/RESEARCH",
-  STUD_HIGH: "/landing/STUD_HIGH",
-  STUD_MIDDLE: "/landing/STUD_MIDDLE",
-  STUD_PRIMARY: "/landing/STUD_PRIMARY",
-};
-
-const FALLBACK_PATHS = [
-  "/landing/STUD_PRIMARY",
-  "/landing/FAN",
-  "/landing/ADMIN",
-  "/module/build-journey",
-  "/",
-];
-
-async function ensureProfile(user: User, supabase: ReturnType<typeof createClientComponentClient>) {
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("persona_id")
-    .eq("id", user.id)
-    .maybeSingle<{ persona_id: string | null }>();
-
-  if (error) {
-    console.warn("[login] profile fetch error", error.message);
-    return null;
-  }
-
-  if (data) return data.persona_id ? data.persona_id : null;
-
-  const metadata = user.user_metadata || {};
-  const payload = {
-    id: user.id,
-    persona_id: metadata.persona_id ?? null,
-  };
-
-  try {
-    await fetch("/api/register/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch (err) {
-    console.warn("[login] profile hydrate failed", err);
-  }
-
-  const { data: refetched } = await supabase
-    .from("profiles")
-    .select("persona_id")
-    .eq("id", user.id)
-    .maybeSingle<{ persona_id: string | null }>();
-
-  return refetched?.persona_id ?? null;
-}
-
-async function fetchPersona(personaId: string | null, supabase: ReturnType<typeof createClientComponentClient>) {
-  if (!personaId) return null;
-  const { data, error } = await supabase
-    .from("personas")
-    .select("default_landing_path, code")
-    .eq("id", personaId)
-    .maybeSingle<{ default_landing_path: string | null; code: string | null }>();
-  if (error) {
-    console.warn("[login] persona fetch error", error.message);
-    return null;
-  }
-  return data ?? null;
-}
-
-function buildCandidates(defaultLanding?: string | null, personaCode?: string | null): string[] {
-  const candidates: string[] = [];
-  const norm = (path: string | null | undefined) => {
-    if (!path) return null;
-    return path.startsWith("/") ? path : `/${path}`;
-  };
-
-  const first = norm(defaultLanding);
-  if (first) candidates.push(first);
-
-  const code = (personaCode || "").trim();
-  if (code) {
-    const upper = code.toUpperCase();
-    if (LANDING_MAP[upper]) candidates.push(LANDING_MAP[upper]);
-  }
-
-  candidates.push(...FALLBACK_PATHS);
-  return Array.from(new Set(candidates));
-}
-
-async function resolveLanding(user: User, supabase: ReturnType<typeof createClientComponentClient>) {
-  const personaId = await ensureProfile(user, supabase);
-  const persona = await fetchPersona(personaId, supabase);
-  const candidates = buildCandidates(persona?.default_landing_path, persona?.code ?? undefined);
-  return pickFirstExisting(candidates);
-}
-
-async function pickFirstExisting(paths: string[]): Promise<string> {
-  for (const path of paths) {
-    try {
-      const res = await fetch(path, { method: "HEAD", cache: "no-store" });
-      if (res.ok) return path;
-    } catch {
-      // ignore network errors, try next candidate
-    }
-  }
-  return paths[paths.length - 1] ?? "/";
-}
+import type { Session } from "@supabase/supabase-js";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -129,23 +18,60 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const pwdType = useMemo(() => (showPwd ? "text" : "password"), [showPwd]);
+
+  // Se già loggato → vai subito alla landing
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session as Session | null;
+        if (!alive) return;
+        if (session?.access_token) router.replace("/module/landing");
+      } catch {/* ignore */}
+    })();
+    return () => { alive = false; };
+  }, [router, supabase]);
+
+  // Listener: quando la sessione cambia → landing
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) {
+        // doppio meccanismo: Router + hard redirect fallback
+        router.replace("/module/landing");
+        setTimeout(() => { window.location.assign("/module/landing"); }, 60);
+      }
+    });
+    return () => { sub.subscription.unsubscribe(); };
+  }, [router, supabase]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    setInfo(null);
     setLoading(true);
 
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) {
+        setError(error.message || "Login failed.");
+        return;
+      }
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Invalid session");
+      // Redirect immediato + fallback hard
+      router.replace("/module/landing");
+      setTimeout(() => { window.location.assign("/module/landing"); }, 60);
 
-      const target = await resolveLanding(user, supabase);
-      router.push(target);
+      // Verifica extra dopo un attimo
+      setTimeout(async () => {
+        const { data } = await supabase.auth.getSession();
+        if (!data?.session) {
+          setInfo("Signing you in… almost there. If the page doesn't redirect, please wait a moment.");
+        }
+      }, 400);
     } catch (err: any) {
       setError(err?.message ?? "Login failed.");
     } finally {
@@ -155,11 +81,13 @@ export default function LoginPage() {
 
   async function handleSocial(provider: "google" | "apple" | "azure") {
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
+          // torniamo su /login; il listener farà redirect alla landing
           redirectTo: typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
         },
       });
@@ -176,6 +104,7 @@ export default function LoginPage() {
       <div className={styles.veil} />
 
       <div className={styles.card}>
+        {/* Logo e tagline */}
         <div className={styles.brandWrap}>
           <Image className={styles.logo} src="/logo.png" alt="GeoHistory Journey" width={220} height={220} priority />
         </div>
@@ -183,11 +112,12 @@ export default function LoginPage() {
         <div className={styles.tagline}>Where time and space turn into stories</div>
         <div className={styles.valueprop}>
           Explore journeys where history, imagination, and discovery blend.<br />
-          Unlock maps, events, timelines, and let time guide you to the past
+          Unlock maps, events, timelines, and let time guide you to the past.
         </div>
 
         <h1 className={`${styles.title} ${styles.titleAligned}`}>Login</h1>
 
+        {/* Form login */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.field}>
             <div className={styles.label}>Email</div>
@@ -221,6 +151,7 @@ export default function LoginPage() {
                 aria-label={showPwd ? "Hide password" : "Show password"}
                 className={styles.eyeBtn}
                 onClick={() => setShowPwd((prev) => !prev)}
+                disabled={loading}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   {showPwd ? (
@@ -241,6 +172,7 @@ export default function LoginPage() {
           </div>
 
           {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
+          {info && !error && <div className={`${styles.alert} ${styles.alertInfo}`}>{info}</div>}
 
           <div className={styles.field}>
             <div className={styles.actions}>
@@ -256,16 +188,17 @@ export default function LoginPage() {
           </div>
         </form>
 
+        {/* Divider e social login */}
         <div className={styles.divider}>or continue with</div>
 
         <div className={styles.social}>
-          <button aria-label="Google" className={styles.iconBtn} onClick={() => handleSocial("google")}>
+          <button aria-label="Google" className={styles.iconBtn} onClick={() => handleSocial("google")} disabled={loading}>
             <Image src="/icons/google.svg" alt="" width={20} height={20} />
           </button>
-          <button aria-label="Apple" className={styles.iconBtn} onClick={() => handleSocial("apple")}>
+          <button aria-label="Apple" className={styles.iconBtn} onClick={() => handleSocial("apple")} disabled={loading}>
             <Image src="/icons/apple.svg" alt="" width={20} height={20} />
           </button>
-          <button aria-label="Microsoft" className={styles.iconBtn} onClick={() => handleSocial("azure")}>
+          <button aria-label="Microsoft" className={styles.iconBtn} onClick={() => handleSocial("azure")} disabled={loading}>
             <Image src="/icons/microsoft.svg" alt="" width={20} height={20} />
           </button>
         </div>

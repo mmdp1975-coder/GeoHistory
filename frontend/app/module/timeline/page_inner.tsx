@@ -1,11 +1,12 @@
-﻿﻿﻿﻿// frontend/app/module/timeline/page_inner.tsx
-"use client";
+﻿﻿﻿// frontend/app/module/timeline/page_inner.tsx
+'use client';
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-import RatingSummary from "../../components/RatingSummary";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import RatingSummary from '../../components/RatingSummary';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 
 type UUID = string;
 
@@ -22,11 +23,10 @@ type VJourneyRow = {
   year_to_max: number | null;
   favourites_count?: number | null;
   is_favourite?: boolean | null;
-  visibility?: string | null;       // legacy typing (non usati)
-  workflow_state?: string | null;   // legacy typing (non usati)
+  visibility?: string | null;
+  workflow_state?: string | null;
 };
 
-/** === Card model (compatibile con il render precedente) === */
 type GeWithCount = {
   id: UUID;
   slug: string | null;
@@ -39,15 +39,15 @@ type GeWithCount = {
 const DEFAULT_FROM = -3000;
 const DEFAULT_TO = 2025;
 
-const BRAND_BLUE = "#0b3b60";
-const BRAND_BLUE_SOFT = "#0d4a7a";
-const THUMB_ACTIVE_BG = "#6bb2ff";
-const ACCENT = "#111827";
+const BRAND_BLUE = '#0b3b60';
+const BRAND_BLUE_SOFT = '#0d4a7a';
+const THUMB_ACTIVE_BG = '#6bb2ff';
+const ACCENT = '#111827';
 
 /* ===== Helpers UI ===== */
 function formatYear(y: number) {
   if (y < 0) return `${Math.abs(y)} BCE`;
-  if (y === 0) return "0";
+  if (y === 0) return '0';
   return `${y} CE`;
 }
 function niceStep(span: number, targetTicks = 7) {
@@ -63,11 +63,31 @@ function niceStep(span: number, targetTicks = 7) {
   return nice * pow10;
 }
 
+/* ===== Parse & validate geo filter from query ===== */
+function parseGeoParams(sp: URLSearchParams) {
+  const lat = Number(sp.get('lat'));
+  const lon = Number(sp.get('lon'));
+  const radiusKm = Number(sp.get('radiusKm'));
+
+  const valid =
+    Number.isFinite(lat) &&
+    Number.isFinite(lon) &&
+    Number.isFinite(radiusKm) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lon) <= 180 &&
+    radiusKm > 0;
+
+  if (!valid) return null as null | { lat: number; lon: number; radiusKm: number };
+  return { lat, lon, radiusKm };
+}
+
 export default function TimelinePage() {
   const search = useSearchParams();
+  const router = useRouter();
   const supabase = useMemo(() => createClientComponentClient(), []);
 
-  /* ======= STATE PRINCIPALI ======= */
+  const { checking, error: authError, userId, personaCode } = useCurrentUser();
+
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -89,12 +109,15 @@ export default function TimelinePage() {
   const [favs, setFavs] = useState<Set<UUID>>(new Set());
   const [favMsg, setFavMsg] = useState<string | null>(null);
 
-  const [q, setQ] = useState<string>(search?.get("q") ?? "");
+  const [q, setQ] = useState<string>(search?.get('q') ?? '');
   const [qDebounced, setQDebounced] = useState<string>(q);
   useEffect(() => {
     const id = setTimeout(() => setQDebounced(q.trim()), 300);
     return () => clearTimeout(id);
   }, [q]);
+
+  const geoFilter = useMemo(() => parseGeoParams(search!), [search]);
+  const [geoWarning, setGeoWarning] = useState<string | null>(null);
 
   /* ======= 1) INIT: dominio temporale da v_journeys ======= */
   useEffect(() => {
@@ -105,9 +128,9 @@ export default function TimelinePage() {
         setError(null);
 
         const { data, error } = await supabase
-          .from("v_journeys")
-          .select("year_from_min, year_to_max")
-          .limit(20000); // filtri visibility/workflow_state già applicati nella VIEW
+          .from('v_journeys')
+          .select('year_from_min, year_to_max')
+          .limit(20000);
         if (error) throw error;
 
         const rows = (data as VJourneyRow[]) || [];
@@ -123,7 +146,7 @@ export default function TimelinePage() {
           setToYear(maxY);
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Initialization error");
+        if (!cancelled) setError(e?.message ?? 'Initialization error');
       } finally {
         if (!cancelled) setInitializing(false);
       }
@@ -133,11 +156,10 @@ export default function TimelinePage() {
 
   const minDomain = useMemo(() => (dataMin == null ? DEFAULT_FROM : Math.trunc(dataMin)), [dataMin]);
   const maxDomain = useMemo(() => (dataMax == null ? DEFAULT_TO : Math.trunc(dataMax)), [dataMax]);
-
   const domainReady =
     !initializing &&
-    typeof minDomain === "number" &&
-    typeof maxDomain === "number" &&
+    typeof minDomain === 'number' &&
+    typeof maxDomain === 'number' &&
     Number.isFinite(fromYear) &&
     Number.isFinite(toYear);
 
@@ -152,39 +174,69 @@ export default function TimelinePage() {
     return val;
   })();
 
-  /* ======= 2) QUERY UNICA SU v_journeys (overlap + testo) ======= */
+  /* ======= 2) QUERY UNICA SU v_journeys (time overlap + testo + geo opzionale) ======= */
   useEffect(() => {
     if (!domainReady || !debouncedSel) return;
     let cancelled = false;
+
     (async () => {
       setLoading(true);
       setError(null);
+      setGeoWarning(null);
       try {
         const from = debouncedSel.from;
         const to = debouncedSel.to;
 
-        let query = supabase
-          .from("v_journeys")
-          .select("journey_id, journey_slug, journey_cover_url, translation_title, translation_description, translation_lang2, events_count, year_from_min, year_to_max, favourites_count, is_favourite")
-          // filtri visibility/workflow_state già nella VIEW
-          // overlap: il journey entra se il suo range interseca il selezionato
-          .lte("year_from_min", to)
-          .gte("year_to_max", from);
+        // Base query
+        let baseQuery = supabase
+          .from('v_journeys')
+          .select('journey_id, journey_slug, journey_cover_url, translation_title, translation_description, translation_lang2, events_count, year_from_min, year_to_max, favourites_count, is_favourite')
+          .lte('year_from_min', to)
+          .gte('year_to_max', from);
 
         if (qDebounced) {
           const qv = `%${qDebounced}%`;
-          query = query.or(
+          baseQuery = baseQuery.or(
             `journey_slug.ilike.${qv},translation_title.ilike.${qv},translation_description.ilike.${qv}`
           );
         }
 
-        const { data, error } = await query.limit(2000);
-        if (error) throw error;
+        let idsFilter: UUID[] | null = null;
 
-        const rows = (data as VJourneyRow[]) || [];
+        if (geoFilter) {
+          try {
+            const { data: ids, error: rpcErr } = await supabase.rpc('journeys_near_point', {
+              lat: geoFilter.lat,
+              lon: geoFilter.lon,
+              radius_km: geoFilter.radiusKm
+            });
 
-        // Mappatura 1:1 per il render precedente
-        const mapped: GeWithCount[] = rows.map((r) => ({
+            if (rpcErr) {
+              setGeoWarning('Geo filter inactive: missing RPC journeys_near_point. Showing unfiltered results.');
+            } else if (Array.isArray(ids) && ids.length > 0) {
+              idsFilter = ids as UUID[];
+            } else {
+              idsFilter = [];
+            }
+          } catch {
+            setGeoWarning('Geo filter inactive: RPC call failed. Showing unfiltered results.');
+          }
+        }
+
+        let finalRows: VJourneyRow[] = [];
+        if (idsFilter === null) {
+          const { data, error } = await baseQuery.limit(2000);
+          if (error) throw error;
+          finalRows = (data as VJourneyRow[]) || [];
+        } else if (idsFilter.length === 0) {
+          finalRows = [];
+        } else {
+          const { data, error } = await baseQuery.in('journey_id', idsFilter).limit(2000);
+          if (error) throw error;
+          finalRows = (data as VJourneyRow[]) || [];
+        }
+
+        const mapped: GeWithCount[] = finalRows.map((r) => ({
           id: r.journey_id,
           slug: r.journey_slug ?? null,
           cover_url: r.journey_cover_url ?? null,
@@ -193,7 +245,6 @@ export default function TimelinePage() {
           earliest_year: r.year_from_min ?? null,
         }));
 
-        // Ordinamento come prima: earliest asc, poi matched desc
         mapped.sort((a, b) => {
           const ae = a.earliest_year ?? Number.POSITIVE_INFINITY;
           const be = b.earliest_year ?? Number.POSITIVE_INFINITY;
@@ -205,11 +256,10 @@ export default function TimelinePage() {
           setGroupEvents(mapped);
           setTotalMatches(mapped.reduce((acc, x) => acc + (x.matched_events || 0), 0));
 
-          // Preferiti: usa la colonna della VIEW se esposta; in fallback (vedi NOTE policy)
           const favSet = new Set<UUID>();
           let needFallback = false;
-          for (const r of rows) {
-            if (typeof r.is_favourite === "boolean") {
+          for (const r of finalRows) {
+            if (typeof r.is_favourite === 'boolean') {
               if (r.is_favourite) favSet.add(r.journey_id);
             } else {
               needFallback = true;
@@ -217,73 +267,65 @@ export default function TimelinePage() {
           }
           setFavs(favSet);
 
-          if (needFallback) {
+          if (needFallback && userId && mapped.length > 0) {
             try {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user && mapped.length > 0) {
-                const ids = mapped.map(g => g.id);
-                // NOTE: accesso diretto tabella — verrà migrato a VIEW/RPC dedicata
-                const { data: favRows } = await supabase
-                  .from("group_event_favourites")
-                  .select("group_event_id")
-                  .in("group_event_id", ids)
-                  .eq("profile_id", user.id);
-                if (favRows && !cancelled) {
-                  const s = new Set<UUID>((favRows as any[]).map(r => r.group_event_id as UUID));
-                  setFavs(s);
-                }
+              const ids = mapped.map(g => g.id);
+              const { data: favRows } = await supabase
+                .from('group_event_favourites')
+                .select('group_event_id')
+                .in('group_event_id', ids)
+                .eq('profile_id', userId);
+              if (favRows && !cancelled) {
+                const s = new Set<UUID>((favRows as any[]).map(r => r.group_event_id as UUID));
+                setFavs(s);
               }
             } catch { /* no-op */ }
           }
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Unknown error");
+        if (!cancelled) setError(e?.message ?? 'Unknown error');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [domainReady, debouncedSel, qDebounced, supabase]);
 
-  /* ======= 3) Preferiti: toggle (mutazione su tabella reale — da migrare a VIEW/RPC) ======= */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [domainReady, debouncedSel, qDebounced, supabase, userId, geoFilter?.lat, geoFilter?.lon, geoFilter?.radiusKm]);
+
+  /* ======= 3) Preferiti: toggle ======= */
   const toggleFavourite = async (ev: React.MouseEvent, groupEventId: UUID) => {
     ev.preventDefault();
     ev.stopPropagation();
     setFavMsg(null);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setFavMsg("Please sign in to use favourites."); return; }
+      if (!userId) { setFavMsg('Please sign in to use favourites.'); return; }
 
       const isFav = favs.has(groupEventId);
       const next = new Set(favs);
       if (isFav) next.delete(groupEventId); else next.add(groupEventId);
       setFavs(next);
 
-      // NOTE: accessi diretti da migrare
       if (isFav) {
-        const { error } = await supabase.from("group_event_favourites")
+        const { error } = await supabase.from('group_event_favourites')
           .delete()
-          .eq("profile_id", user.id)
-          .eq("group_event_id", groupEventId);
+          .eq('profile_id', userId)
+          .eq('group_event_id', groupEventId);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("group_event_favourites")
-          .insert({ profile_id: user.id, group_event_id: groupEventId });
+        const { error } = await supabase.from('group_event_favourites')
+          .insert({ profile_id: userId, group_event_id: groupEventId });
         if (error) throw error;
       }
     } catch (e: any) {
-      setFavMsg(e?.message || "Unable to toggle favourite.");
+      setFavMsg(e?.message || 'Unable to toggle favourite.');
     }
   };
 
-  /* ======= 4) TIMELINE — identica alla tua “bella” ======= */
-
-  // Pointer events state
+  // ===== Timeline interactions =====
   const selectedBarRef = useRef<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const draggingRef = useRef<null | { mode: "pan" | "zoom"; lastX: number }>(null);
-
-  const [activeThumb, setActiveThumb] = useState<null | "left" | "right">(null);
+  const draggingRef = useRef<null | { mode: 'pan' | 'zoom'; lastX: number }>(null);
+  const [activeThumb, setActiveThumb] = useState<null | 'left' | 'right'>(null);
 
   const MIN_SPAN = 1;
   const ZOOM_GAIN = 2;
@@ -291,18 +333,18 @@ export default function TimelinePage() {
   function pxToYears(dxPx: number, barWidthPx: number, baseSpan: number, gain = 1) {
     if (barWidthPx <= 0) return 0;
     return (dxPx / barWidthPx) * baseSpan * gain;
-  }
+    }
 
   function startPan(e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    draggingRef.current = { mode: "pan", lastX: e.clientX };
+    draggingRef.current = { mode: 'pan', lastX: e.clientX };
   }
 
-  function startZoom(e: React.PointerEvent, which: "left" | "right") {
+  function startZoom(e: React.PointerEvent, which: 'left' | 'right') {
     e.preventDefault();
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    draggingRef.current = { mode: "zoom", lastX: e.clientX };
+    draggingRef.current = { mode: 'zoom', lastX: e.clientX };
     setActiveThumb(which);
   }
 
@@ -322,7 +364,7 @@ export default function TimelinePage() {
     const curFrom = fromRef.current;
     const curTo = toRef.current;
 
-    if (mode === "pan") {
+    if (mode === 'pan') {
       const currentSpan = Math.max(1, curTo - curFrom);
       const dYears = pxToYears(dx, barWidth, currentSpan, 1);
       let nextFrom = curFrom + dYears;
@@ -344,7 +386,7 @@ export default function TimelinePage() {
     const currentSpan = Math.max(1, curTo - curFrom);
     const dYears = pxToYears(dx, barWidth, currentSpan, ZOOM_GAIN);
 
-    if (activeThumb === "left") {
+    if (activeThumb === 'left') {
       let nextFrom = curFrom + dYears;
       const maxFrom = curTo - MIN_SPAN;
       if (nextFrom > maxFrom) nextFrom = maxFrom;
@@ -355,7 +397,7 @@ export default function TimelinePage() {
       return;
     }
 
-    if (activeThumb === "right") {
+    if (activeThumb === 'right') {
       let nextTo = curTo + dYears;
       const minTo = curFrom + MIN_SPAN;
       if (nextTo < minTo) nextTo = minTo;
@@ -373,7 +415,6 @@ export default function TimelinePage() {
     setActiveThumb(null);
   }
 
-  // Tick calcolati sul range selezionato (come prima)
   const ticks = useMemo(() => {
     if (!domainReady) return [];
     const dMin = Math.round(fromYear);
@@ -386,69 +427,97 @@ export default function TimelinePage() {
     return out;
   }, [domainReady, fromYear, toYear]);
 
-  // Geometrie/percentuali della “barra bella”
-  const LEFT_EDGE_PCT = 0.1;
-  const SELECTED_PCT = 0.8;
-
-  const thumbClassIdle = "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100";
-  const thumbClassActive = "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100";
-
   /* ================== RENDER ================== */
   return (
     <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
       {/* HEADER */}
       <header className="z-20 border-b border-neutral-200" style={{ backgroundColor: BRAND_BLUE }}>
         <div className="mx-auto max-w-7xl px-4 py-3 text-white">
-          <div className="flex flex-wrap items	end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
             <h1 className="text-lg font-semibold tracking-tight">Timeline Explorer</h1>
 
-            {/* RIGHT: From/To */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <label className="text-xs text-white/90">From</label>
-                <input
-                  type="number"
-                  className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                  value={fromYear}
-                  onChange={(e) => {
-                    let f = Number(e.target.value);
-                    if (!Number.isFinite(f)) return;
-                    if (f < minDomain) f = minDomain;
-                    if (f > toYear - 1) f = toYear - 1;
-                    setFromYear(Math.round(f));
+            <div className="flex items-center gap-3">
+              {checking ? (
+                <span className="text-xs text-white/70">Checking…</span>
+              ) : authError ? (
+                <span className="text-xs text-white/70">Guest</span>
+              ) : (
+                <span className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs">
+                  {personaCode || 'USER'}
+                </span>
+              )}
+
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <label className="text-xs text-white/90">From</label>
+                  <input
+                    type="number"
+                    className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
+                    value={fromYear}
+                    onChange={(e) => {
+                      let f = Number(e.target.value);
+                      if (!Number.isFinite(f)) return;
+                      if (f < minDomain) f = minDomain;
+                      if (f > toYear - 1) f = toYear - 1;
+                      setFromYear(Math.round(f));
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <label className="text-xs text-white/90">To</label>
+                  <input
+                    type="number"
+                    className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
+                    value={toYear}
+                    onChange={(e) => {
+                      let t = Number(e.target.value);
+                      if (!Number.isFinite(t)) return;
+                      if (t > maxDomain) t = maxDomain;
+                      if (t < fromYear + 1) t = fromYear + 1;
+                      setToYear(Math.round(t));
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams(search?.toString() || '');
+                    params.delete('lat'); params.delete('lon'); params.delete('radiusKm');
+                    router.replace(`?${params.toString()}`);
+                    setFromYear(minDomain);
+                    setToYear(maxDomain);
+                    setQ('');
                   }}
-                />
+                  className="rounded-md border border-white/25 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/15"
+                  title="Reset range, text and geo filter"
+                >
+                  Show All
+                </button>
               </div>
-              <div className="flex items-center gap-1">
-                <label className="text-xs text-white/90">To</label>
-                <input
-                  type="number"
-                  className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                  value={toYear}
-                  onChange={(e) => {
-                    let t = Number(e.target.value);
-                    if (!Number.isFinite(t)) return;
-                    if (t > maxDomain) t = maxDomain;
-                    if (t < fromYear + 1) t = fromYear + 1;
-                    setToYear(Math.round(t));
-                  }}
-                />
-              </div>
-              <button
-                onClick={() => {
-                  setFromYear(minDomain);
-                  setToYear(maxDomain);
-                  setQ("");
-                }}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/15"
-                title="Reset range e ricerca"
-              >
-                Show All
-              </button>
             </div>
           </div>
 
-          {/* TIMELINE (quella “bella”, invariata) */}
+          {/* Geo filter badge */}
+          {geoFilter && (
+            <div className="mt-2 flex items-center justify-between rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs">
+              <div>
+                Geo filter: lat <b>{geoFilter.lat.toFixed(4)}</b>, lon <b>{geoFilter.lon.toFixed(4)}</b>, radius <b>{geoFilter.radiusKm}</b> km
+                {geoWarning && <span className="ml-2 text-amber-200">— {geoWarning}</span>}
+              </div>
+              <button
+                onClick={() => {
+                  const params = new URLSearchParams(search?.toString() || '');
+                  params.delete('lat'); params.delete('lon'); params.delete('radiusKm');
+                  router.replace(`?${params.toString()}`);
+                }}
+                className="rounded border border-white/25 bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20"
+                title="Remove geo filter"
+              >
+                Clear geo filter
+              </button>
+            </div>
+          )}
+
+          {/* TIMELINE */}
           <div className="mt-2 rounded-xl border border-white/15 bg-white/5 shadow-sm">
             <div className="p-2">
               {!domainReady ? (
@@ -460,9 +529,9 @@ export default function TimelinePage() {
                     <div
                       className="h-[8px] w-full rounded-full"
                       style={{
-                        background: "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
+                        background: 'linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)',
                         boxShadow:
-                          "inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)"
+                          'inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)'
                       }}
                     />
                   </div>
@@ -470,16 +539,14 @@ export default function TimelinePage() {
                   {/* banda selezione + maniglie */}
                   <div
                     ref={selectedBarRef}
-                    className="absolute top-1/2 -translate-y-1/2"
+                    className="absolute top-1/2 -translate-y-1/2 left-[10%] w-[80%]"
                     style={{
-                      left: `10%`,
-                      width: `80%`,
                       height: 8,
                       borderRadius: 9999,
                       background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
                       boxShadow:
-                        "inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)",
-                      cursor: draggingRef.current?.mode === "pan" ? "grabbing" : "grab"
+                        'inset 0 1px 1px rgba(255,255,255,0.25), inset 0 -1px 1px rgba(0,0,0,0.30), 0 1px 3px rgba(0,0,0,0.18)',
+                      cursor: draggingRef.current?.mode === 'pan' ? 'grabbing' : 'grab'
                     }}
                     onPointerDown={startPan}
                     onPointerMove={onMove}
@@ -490,36 +557,36 @@ export default function TimelinePage() {
                     {/* maniglia sinistra */}
                     <button
                       type="button"
-                      onPointerDown={(e) => startZoom(e, "left")}
+                      onPointerDown={(e) => startZoom(e, 'left')}
                       onPointerMove={onMove}
                       onPointerUp={endDrag}
                       onPointerCancel={endDrag}
-                      className="absolute left-0 top-1/2 -translate-y-1/2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
-                      style={{ transform: "translate(-50%, -50%)", touchAction: "none" as any, cursor: "ew-resize" }}
+                      className="absolute left-0 top-1/2 -translate-y-1/2 focus:outline-none"
+                      style={{ transform: 'translate(-50%, -50%)', touchAction: 'none' as any, cursor: 'ew-resize' }}
                       aria-label="Zoom (left thumb)"
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "left" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
-                        style={activeThumb === "left" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
+                        className={activeThumb === 'left' ? 'block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100' : 'block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100'}
+                        style={activeThumb === 'left' ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
 
                     {/* maniglia destra */}
                     <button
                       type="button"
-                      onPointerDown={(e) => startZoom(e, "right")}
+                      onPointerDown={(e) => startZoom(e, 'right')}
                       onPointerMove={onMove}
                       onPointerUp={endDrag}
                       onPointerCancel={endDrag}
-                      className="absolute right-0 top-1/2 -translate-y-1/2 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2"
-                      style={{ transform: "translate(50%, -50%)", touchAction: "none" as any, cursor: "ew-resize" }}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 focus:outline-none"
+                      style={{ transform: 'translate(50%, -50%)', touchAction: 'none' as any, cursor: 'ew-resize' }}
                       aria-label="Zoom (right thumb)"
                       title="Zoom: trascina a sinistra/destra"
                     >
                       <span
-                        className={activeThumb === "right" ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100" : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"}
-                        style={activeThumb === "right" ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
+                        className={activeThumb === 'right' ? 'block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100' : 'block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100'}
+                        style={activeThumb === 'right' ? { backgroundColor: THUMB_ACTIVE_BG } : undefined}
                       />
                     </button>
                   </div>
@@ -527,16 +594,7 @@ export default function TimelinePage() {
                   {/* tick dinamici */}
                   <div className="absolute inset-x-3 bottom-1">
                     <div className="relative h-5">
-                      {(() => {
-                        const dMin = Math.round(fromYear);
-                        const dMax = Math.round(toYear);
-                        const s = Math.max(1, dMax - dMin);
-                        const step = niceStep(s, 7);
-                        const first = Math.ceil(dMin / step) * step;
-                        const out: number[] = [];
-                        for (let t = first; t <= dMax; t += step) out.push(Math.round(t));
-                        return out;
-                      })().map((t) => (
+                      {ticks.map((t) => (
                         <div
                           key={t}
                           className="absolute top-0 -translate-x-1/2"
@@ -545,7 +603,7 @@ export default function TimelinePage() {
                           }}
                         >
                           <div className="h-[10px] w-px bg-white/85" />
-                          <div className="mt-0.5 text-[10px] leading-none text-white/95 whitespace-nowrap translate-x-1/2">
+                          <div className="mt-0.5 whitespace-nowrap text-[10px] leading-none text-white/95 translate-x-1/2">
                             {formatYear(t)}
                           </div>
                         </div>
@@ -570,7 +628,7 @@ export default function TimelinePage() {
             ) : (
               <span>
                 In range: <span className="font-medium">{groupEvents.length}</span> group
-                event{groupEvents.length === 1 ? "" : "s"} • total matched events:{" "}
+                event{groupEvents.length === 1 ? '' : 's'} • total matched events:{' '}
                 <span className="font-medium">{totalMatches}</span>
               </span>
             )}
@@ -588,7 +646,7 @@ export default function TimelinePage() {
                 className="w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
               />
               <button
-                onClick={() => setQ("")}
+                onClick={() => setQ('')}
                 className="rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
                 title="Clear text and keep only time range"
               >
@@ -632,7 +690,7 @@ export default function TimelinePage() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={g.cover_url}
-                        alt={g.title || g.slug || "Cover"}
+                        alt={g.title || g.slug || 'Cover'}
                         className="h-full w-full object-cover opacity-95 transition-transform group-hover:scale-[1.02]"
                       />
                     ) : (
@@ -651,9 +709,9 @@ export default function TimelinePage() {
                         e.stopPropagation();
                         toggleFavourite(e, g.id);
                       }}
-                      className="absolute left-3 top-3 z-20 pointer-events-auto inline-flex items-center gap-1 rounded-full bg-white/90 p-2 text-xs font-medium ring-1 ring-white hover:bg-white"
+                      className="pointer-events-auto absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 p-2 text-xs font-medium ring-1 ring-white hover:bg-white"
                       style={{ color: accent }}
-                      title={isFav ? "Remove from favourites" : "Add to favourites"}
+                      title={isFav ? 'Remove from favourites' : 'Add to favourites'}
                     >
                       {isFav ? (
                         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
@@ -680,18 +738,17 @@ export default function TimelinePage() {
                         </svg>
                       )}
                     </button>
-
                   </div>
 
                   <div className="p-4">
                     <div className="mb-1 line-clamp-1 text-[15px] font-semibold tracking-tight">
-                      {g.title || g.slug || "Untitled"}
+                      {g.title || g.slug || 'Untitled'}
                     </div>
 
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-sm text-neutral-600">
-                        {g.matched_events} event{g.matched_events === 1 ? "" : "s"} in range
-                        {typeof g.earliest_year === "number" && (
+                        {g.matched_events} event{g.matched_events === 1 ? '' : 's'} in range
+                        {typeof g.earliest_year === 'number' && (
                           <span className="text-neutral-400"> • from {formatYear(g.earliest_year)}</span>
                         )}
                       </div>
