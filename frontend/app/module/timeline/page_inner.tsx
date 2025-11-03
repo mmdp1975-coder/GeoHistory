@@ -1,11 +1,10 @@
-﻿﻿﻿// frontend/app/module/timeline/page_inner.tsx
+﻿﻿// frontend/app/module/timeline/page_inner.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import RatingSummary from '../../components/RatingSummary';
 import { useCurrentUser } from '@/lib/useCurrentUser';
 
 type UUID = string;
@@ -16,24 +15,42 @@ type VJourneyRow = {
   journey_slug: string | null;
   journey_cover_url: string | null;
   translation_title: string | null;
-  translation_description?: string | null;
-  translation_lang2?: string | null;
+  translation_description?: string | null; // ignorata in UI
+  translation_lang2?: string | null;      // ignorata in UI
   events_count: number | null;
   year_from_min: number | null;
   year_to_max: number | null;
-  favourites_count?: number | null;
+  favourites_count?: number | null;       // non mostrato
   is_favourite?: boolean | null;
-  visibility?: string | null;
-  workflow_state?: string | null;
+  visibility?: string | null;             // ignorata
+  workflow_state?: string | null;         // ignorata
+  approved_at: string | null;             // data pubblicazione
 };
 
-type GeWithCount = {
+type DomainRow = {
+  year_from_min: number | null;
+  year_to_max: number | null;
+};
+
+type StatsRow = {
+  group_event_id: UUID;   // = journey_id
+  avg_rating: number | null;
+  ratings_count: number | null;
+};
+
+type GeWithCard = {
   id: UUID;
   slug: string | null;
   cover_url: string | null;
   title: string | null;
-  matched_events: number;
-  earliest_year: number | null;
+  // scorecard fields
+  approved_at: string | null;
+  events_count: number;
+  year_from_min: number | null;
+  year_to_max: number | null;
+  is_favourite: boolean;
+  avg_rating: number | null;
+  ratings_count: number | null;
 };
 
 const DEFAULT_FROM = -3000;
@@ -44,11 +61,43 @@ const BRAND_BLUE_SOFT = '#0d4a7a';
 const THUMB_ACTIVE_BG = '#6bb2ff';
 const ACCENT = '#111827';
 
+/* ===== Type guards ===== */
+function isDomainRow(v: unknown): v is DomainRow {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return 'year_from_min' in o && 'year_to_max' in o;
+}
+
+function isVJourneyRow(v: unknown): v is VJourneyRow {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  // journey_id è l'unico davvero indispensabile; gli altri campi li gestiamo con default
+  return typeof o.journey_id === 'string';
+}
+
+function isStatsRow(v: unknown): v is StatsRow {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.group_event_id === 'string' && 'avg_rating' in o && 'ratings_count' in o;
+}
+
 /* ===== Helpers UI ===== */
-function formatYear(y: number) {
-  if (y < 0) return `${Math.abs(y)} BCE`;
-  if (y === 0) return '0';
-  return `${y} CE`;
+function formatYearBC(y: number | null | undefined) {
+  if (y == null || !Number.isFinite(y)) return '—';
+  if (y < 0) return `${Math.abs(y)} BC`;
+  return String(y);
+}
+function formatDateShort(iso: string | null) {
+  if (!iso) return null;
+  try {
+    const d = new Date(iso);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = d.toLocaleString('it-IT', { month: 'short' });
+    const year = String(d.getFullYear()).slice(-2);
+    return `${day} ${month} ${year}`; // es: 03 nov 25
+  } catch {
+    return null;
+  }
 }
 function niceStep(span: number, targetTicks = 7) {
   const raw = Math.max(1, span) / targetTicks;
@@ -103,7 +152,7 @@ export default function TimelinePage() {
   useEffect(() => { toRef.current = toYear; }, [toYear]);
 
   const [loading, setLoading] = useState(false);
-  const [groupEvents, setGroupEvents] = useState<GeWithCount[]>([]);
+  const [cards, setCards] = useState<GeWithCard[]>([]);
   const [totalMatches, setTotalMatches] = useState(0);
 
   const [favs, setFavs] = useState<Set<UUID>>(new Set());
@@ -133,9 +182,14 @@ export default function TimelinePage() {
           .limit(20000);
         if (error) throw error;
 
-        const rows = (data as VJourneyRow[]) || [];
-        const mins: number[] = rows.map(r => r?.year_from_min).filter((x: any) => Number.isFinite(x)) as number[];
-        const maxs: number[] = rows.map(r => r?.year_to_max).filter((x: any) => Number.isFinite(x)) as number[];
+        const rows = ((data ?? []) as unknown[]).filter(isDomainRow) as DomainRow[];
+        const mins: number[] = rows
+          .map(r => r?.year_from_min)
+          .filter((x: unknown) => Number.isFinite(x)) as number[];
+        const maxs: number[] = rows
+          .map(r => r?.year_to_max)
+          .filter((x: unknown) => Number.isFinite(x)) as number[];
+
         const minY = mins.length ? Math.min(...mins) : DEFAULT_FROM;
         const maxY = maxs.length ? Math.max(...maxs) : DEFAULT_TO;
 
@@ -174,7 +228,7 @@ export default function TimelinePage() {
     return val;
   })();
 
-  /* ======= 2) QUERY UNICA SU v_journeys (time overlap + testo + geo opzionale) ======= */
+  /* ======= 2) QUERY su v_journeys (overlap + testo + geo) + RATING ======= */
   useEffect(() => {
     if (!domainReady || !debouncedSel) return;
     let cancelled = false;
@@ -187,10 +241,25 @@ export default function TimelinePage() {
         const from = debouncedSel.from;
         const to = debouncedSel.to;
 
-        // Base query
+        // Base query su v_journeys con tutte le colonne necessarie alla scorecard
         let baseQuery = supabase
           .from('v_journeys')
-          .select('journey_id, journey_slug, journey_cover_url, translation_title, translation_description, translation_lang2, events_count, year_from_min, year_to_max, favourites_count, is_favourite')
+          .select(
+            [
+              'journey_id',
+              'journey_slug',
+              'journey_cover_url',
+              'translation_title',
+              'translation_description',
+              'translation_lang2',
+              'events_count',
+              'year_from_min',
+              'year_to_max',
+              'favourites_count',
+              'is_favourite',
+              'approved_at'
+            ].join(',')
+          )
           .lte('year_from_min', to)
           .gte('year_to_max', from);
 
@@ -214,7 +283,10 @@ export default function TimelinePage() {
             if (rpcErr) {
               setGeoWarning('Geo filter inactive: missing RPC journeys_near_point. Showing unfiltered results.');
             } else if (Array.isArray(ids) && ids.length > 0) {
-              idsFilter = ids as UUID[];
+              // normalizza a stringhe
+              const raw = (ids as unknown[]);
+              const onlyStrings = raw.filter((x): x is string => typeof x === 'string');
+              idsFilter = onlyStrings as UUID[];
             } else {
               idsFilter = [];
             }
@@ -227,35 +299,60 @@ export default function TimelinePage() {
         if (idsFilter === null) {
           const { data, error } = await baseQuery.limit(2000);
           if (error) throw error;
-          finalRows = (data as VJourneyRow[]) || [];
+          finalRows = ((data ?? []) as unknown[]).filter(isVJourneyRow) as VJourneyRow[];
         } else if (idsFilter.length === 0) {
           finalRows = [];
         } else {
           const { data, error } = await baseQuery.in('journey_id', idsFilter).limit(2000);
           if (error) throw error;
-          finalRows = (data as VJourneyRow[]) || [];
+          finalRows = ((data ?? []) as unknown[]).filter(isVJourneyRow) as VJourneyRow[];
         }
 
-        const mapped: GeWithCount[] = finalRows.map((r) => ({
-          id: r.journey_id,
-          slug: r.journey_slug ?? null,
-          cover_url: r.journey_cover_url ?? null,
-          title: r.translation_title ?? r.journey_slug ?? null,
-          matched_events: r.events_count ?? 0,
-          earliest_year: r.year_from_min ?? null,
-        }));
+        // Rating stats per gli ID mostrati
+        const ids = finalRows.map(r => r.journey_id);
+        let statsMap = new Map<UUID, StatsRow>();
+        if (ids.length) {
+          const { data: stats, error: sErr } = await supabase
+            .from('v_group_event_rating_stats')
+            .select('group_event_id, avg_rating, ratings_count')
+            .in('group_event_id', ids);
+          if (sErr) throw sErr;
 
+          const statsSafe = ((stats ?? []) as unknown[]).filter(isStatsRow) as StatsRow[];
+          statsSafe.forEach(s => statsMap.set(s.group_event_id, s));
+        }
+
+        // Map → GeWithCard
+        const mapped: GeWithCard[] = finalRows.map((r) => {
+          const st = statsMap.get(r.journey_id);
+          return {
+            id: r.journey_id,
+            slug: r.journey_slug ?? null,
+            cover_url: r.journey_cover_url ?? null,
+            title: r.translation_title ?? r.journey_slug ?? null,
+            approved_at: r.approved_at ?? null,
+            events_count: r.events_count ?? 0,
+            year_from_min: r.year_from_min ?? null,
+            year_to_max: r.year_to_max ?? null,
+            is_favourite: !!r.is_favourite,
+            avg_rating: st?.avg_rating ?? null,
+            ratings_count: st?.ratings_count ?? null,
+          };
+        });
+
+        // Ordinamento: earliest year asc, poi più eventi
         mapped.sort((a, b) => {
-          const ae = a.earliest_year ?? Number.POSITIVE_INFINITY;
-          const be = b.earliest_year ?? Number.POSITIVE_INFINITY;
+          const ae = a.year_from_min ?? Number.POSITIVE_INFINITY;
+          const be = b.year_from_min ?? Number.POSITIVE_INFINITY;
           if (ae !== be) return ae - be;
-          return (b.matched_events ?? 0) - (a.matched_events ?? 0);
+          return (b.events_count ?? 0) - (a.events_count ?? 0);
         });
 
         if (!cancelled) {
-          setGroupEvents(mapped);
-          setTotalMatches(mapped.reduce((acc, x) => acc + (x.matched_events || 0), 0));
+          setCards(mapped);
+          setTotalMatches(mapped.reduce((acc, x) => acc + (x.events_count || 0), 0));
 
+          // preferiti per il set (fallback se serve)
           const favSet = new Set<UUID>();
           let needFallback = false;
           for (const r of finalRows) {
@@ -275,8 +372,13 @@ export default function TimelinePage() {
                 .select('group_event_id')
                 .in('group_event_id', ids)
                 .eq('profile_id', userId);
-              if (favRows && !cancelled) {
-                const s = new Set<UUID>((favRows as any[]).map(r => r.group_event_id as UUID));
+
+              const safeFavs = ((favRows ?? []) as unknown[])
+                .map(r => (r as Record<string, unknown>)?.group_event_id)
+                .filter((x): x is string => typeof x === 'string');
+
+              if (!cancelled) {
+                const s = new Set<UUID>(safeFavs as UUID[]);
                 setFavs(s);
               }
             } catch { /* no-op */ }
@@ -333,7 +435,7 @@ export default function TimelinePage() {
   function pxToYears(dxPx: number, barWidthPx: number, baseSpan: number, gain = 1) {
     if (barWidthPx <= 0) return 0;
     return (dxPx / barWidthPx) * baseSpan * gain;
-    }
+  }
 
   function startPan(e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -604,7 +706,7 @@ export default function TimelinePage() {
                         >
                           <div className="h-[10px] w-px bg-white/85" />
                           <div className="mt-0.5 whitespace-nowrap text-[10px] leading-none text-white/95 translate-x-1/2">
-                            {formatYear(t)}
+                            {t < 0 ? `${Math.abs(t)} BC` : `${t}`}
                           </div>
                         </div>
                       ))}
@@ -627,8 +729,8 @@ export default function TimelinePage() {
               <span className="animate-pulse">Loading results…</span>
             ) : (
               <span>
-                In range: <span className="font-medium">{groupEvents.length}</span> group
-                event{groupEvents.length === 1 ? '' : 's'} • total matched events:{' '}
+                In range: <span className="font-medium">{cards.length}</span> group
+                event{cards.length === 1 ? '' : 's'} • total matched events{' '}
                 <span className="font-medium">{totalMatches}</span>
               </span>
             )}
@@ -668,93 +770,142 @@ export default function TimelinePage() {
           </div>
         )}
 
-        {!loading && groupEvents.length === 0 && !initializing && !error && (
+        {!loading && cards.length === 0 && !initializing && !error && (
           <div className="rounded-xl border border-neutral-200 bg-white p-8 text-center text-neutral-600">
             Nessun group event trovato. Prova a modificare il timeframe o svuota la ricerca.
           </div>
         )}
 
+        {/* GRID: scorecard unificata */}
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {groupEvents.map((g) => {
-            const accent = ACCENT;
-            const gradient = `linear-gradient(180deg, ${accent}1A 0%, ${accent}0D 60%, #FFFFFF 100%)`;
+          {cards.map((g) => {
             const isFav = favs.has(g.id);
+            const published = formatDateShort(g.approved_at);
+            const hasRating = (g.ratings_count ?? 0) > 0 && g.avg_rating !== null;
+
             return (
               <li key={g.id}>
                 <Link
                   href={`/module/group_event?gid=${g.id}`}
-                  className="group block h-full overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                  className="group block h-full overflow-hidden rounded-2xl border border-neutral-200 bg-white/90 shadow transition-shadow hover:shadow-lg"
                 >
-                  <div className="relative h-36 w-full overflow-hidden" style={{ background: gradient }}>
+                  {/* HEADER IMMAGINE */}
+                  <div className="relative h-36 w-full overflow-hidden bg-neutral-100">
                     {g.cover_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={g.cover_url}
                         alt={g.title || g.slug || 'Cover'}
-                        className="h-full w-full object-cover opacity-95 transition-transform group-hover:scale-[1.02]"
+                        className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-neutral-400">
-                        <span className="text-sm">No cover</span>
-                      </div>
+                      <div className="flex h-full w-full items-center justify-center text-3xl">🧭</div>
                     )}
 
-                    {/* Favourite heart */}
+                    {/* cuore in alto a destra */}
                     <button
                       type="button"
                       role="button"
                       aria-pressed={isFav}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleFavourite(e, g.id);
-                      }}
-                      className="pointer-events-auto absolute left-3 top-3 z-20 inline-flex items-center gap-1 rounded-full bg-white/90 p-2 text-xs font-medium ring-1 ring-white hover:bg-white"
-                      style={{ color: accent }}
+                      onClick={(e) => toggleFavourite(e, g.id)}
+                      className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/85 shadow backdrop-blur hover:bg-white"
                       title={isFav ? 'Remove from favourites' : 'Add to favourites'}
                     >
                       {isFav ? (
-                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
-                          <path
-                            className="text-red-500"
-                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C12.09 5.01 13.76 4 15.5 4 18 4 20 6 20 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-                          />
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="currentColor" aria-hidden>
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                         </svg>
                       ) : (
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-5 w-5"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
-                        >
-                          <path
-                            className="text-slate-500"
-                            d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z"
-                          />
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                          <path d="M12.1 20.3C7.14 16.24 4 13.39 4 9.86 4 7.3 6.05 5.25 8.6 5.25c1.54 0 3.04.81 3.85 2.09.81-1.28 2.31-2.09 3.85-2.09 2.55 0 4.6 2.05 4.6 4.61 0 3.53-3.14 6.38-8.1 10.44l-.7.6-.7-.6z" />
                         </svg>
                       )}
                     </button>
+
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/15 to-transparent" />
                   </div>
 
+                  {/* BODY */}
                   <div className="p-4">
-                    <div className="mb-1 line-clamp-1 text-[15px] font-semibold tracking-tight">
-                      {g.title || g.slug || 'Untitled'}
-                    </div>
+                    {/* GRID: titolo (2 righe) + data (row1, no-wrap) + stella (row2) */}
+                    <div
+                      className="
+                        mb-1 grid gap-x-2
+                        [grid-template-columns:1fr_auto]
+                        [grid-template-rows:auto_auto]
+                        items-start
+                      "
+                    >
+                      {/* Titolo su 2 righe fisse */}
+                      <h3
+                        className="
+                          col-[1] row-[1_/_span_2]
+                          line-clamp-2 min-h-[2.6rem]
+                          text-base font-semibold leading-snug text-neutral-900
+                        "
+                        title={g.title || g.slug || 'Untitled'}
+                      >
+                        {g.title || g.slug || 'Untitled'}
+                      </h3>
 
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm text-neutral-600">
-                        {g.matched_events} event{g.matched_events === 1 ? '' : 's'} in range
-                        {typeof g.earliest_year === 'number' && (
-                          <span className="text-neutral-400"> • from {formatYear(g.earliest_year)}</span>
+                      {/* Data: SEMPRE su 1 riga */}
+                      {published && (
+                        <span
+                          className="
+                            col-[2] row-[1]
+                            rounded bg-neutral-100 px-2 py-[2px]
+                            text-xs font-medium text-neutral-700
+                            whitespace-nowrap
+                          "
+                          title="Publication date"
+                        >
+                          {published}
+                        </span>
+                      )}
+
+                      {/* Stella sotto la data */}
+                      <div className="col-[2] row-[2] mt-[2px] flex justify-end">
+                        {hasRating ? (
+                          <span className="inline-flex items-center gap-1 text-sm text-neutral-800" title="Average rating and votes">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-500" fill="currentColor" aria-hidden>
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                            </svg>
+                            {Number(g.avg_rating).toFixed(1)} ({g.ratings_count})
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-sm text-neutral-500" title="No ratings yet">
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                            </svg>
+                            (0)
+                          </span>
                         )}
                       </div>
-                      <div className="shrink-0">
-                        <RatingSummary groupEventId={g.id} />
+                    </div>
+
+                    {/* META bottom: events + years */}
+                    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-neutral-600">
+                      <div className="flex flex-wrap items-center gap-3">
+                        {/* numero eventi */}
+                        <span className="inline-flex items-center gap-1" title="Events count">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                            <path d="M3 6h18v2H3V6zm2 4h14v8H5v-8zm2 2v4h10v-4H7z" />
+                          </svg>
+                          {g.events_count ?? 0} events
+                        </span>
+
+                        {/* range anni con BC */}
+                        <span className="inline-flex items-center gap-1" title="Time span">
+                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                            <path d="M12 5v14m-7-7h14" />
+                          </svg>
+                          {formatYearBC(g.year_from_min)} → {formatYearBC(g.year_to_max)}
+                        </span>
                       </div>
+
+                      <span className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white">
+                        Open
+                      </span>
                     </div>
                   </div>
                 </Link>
