@@ -30,7 +30,6 @@ function vector3ToLatLon(v: THREE.Vector3) {
 }
 
 function normalizeLon(lon: number) {
-
   let L = lon;
   while (L > 180) L -= 360;
   while (L < -180) L += 360;
@@ -101,6 +100,45 @@ function pointInGeoAM(pt: [number, number], geom: GeoFeature["geometry"]) {
   return tests.some((p) => pointInGeoRaw(p, geom));
 }
 
+/* ================ Thinning semplice dei marker città ================ */
+/**
+ * Obiettivo: mostrare MENO puntini ma mantenere il dataset completo
+ * per il riconoscimento della città più vicina.
+ *
+ * Regole:
+ * 1) Keep sempre capitali e grandi città:
+ *    - scalerank <= 3  (capitali / maggiori)
+ *    - pop_max >= 1.000.000
+ * 2) Per le altre, teniamo 1 città per cella di griglia 5°x5°
+ *    (distribuzione uniforme e meno “rumore”).
+ */
+function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
+  const keep: CitiesEntry[] = [];
+  const taken = new Set<string>();
+
+  for (const c of cities) {
+    const sr = c.scalerank ?? 10;
+    const pop = c.pop_max ?? 0;
+
+    const isMajor = sr <= 3 || pop >= 1_000_000;
+    if (isMajor) {
+      keep.push(c);
+      continue;
+    }
+
+    // Griglia 5°
+    const latCell = Math.floor((c.latitude + 90) / 5);
+    const lonCell = Math.floor((normalizeLon(c.longitude) + 180) / 5);
+    const key = `${latCell}:${lonCell}`;
+
+    if (!taken.has(key)) {
+      taken.add(key);
+      keep.push(c);
+    }
+  }
+  return keep;
+}
+
 /* ============================== Scene bits ============================== */
 
 function useEuropeStart(radius: number) {
@@ -131,7 +169,8 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
     [cities, radius]
   );
 
-  const geom = React.useMemo(() => new THREE.SphereGeometry(0.006, 12, 12), []);
+  // DOT più piccoli (da 0.006 -> 0.004)
+  const geom = React.useMemo(() => new THREE.SphereGeometry(0.002, 12, 12), []);
   const mat = React.useMemo(
     () => new THREE.MeshBasicMaterial({ color: "#ffd166", toneMapped: false }),
     []
@@ -229,25 +268,24 @@ function GlobeMesh({
 
 /* ============================== Main Component ============================== */
 
-    export default function GlobeCanvas({
-      onPointSelect,
-      initialRadiusKm,
-      height,
-      radius: globeRadius,
-    }: {
-      onPointSelect?: (info: {
-        lat: number;
-        lon: number;
-        continent?: string;
-        country?: string;
-        city?: string;
-        radiusKm: number;
-      }) => void;
-      initialRadiusKm?: number;
-      height?: number;
-      radius?: number;
-    }) {
-
+export default function GlobeCanvas({
+  onPointSelect,
+  initialRadiusKm,
+  height,
+  radius: globeRadius,
+}: {
+  onPointSelect?: (info: {
+    lat: number;
+    lon: number;
+    continent?: string;
+    country?: string;
+    city?: string;
+    radiusKm: number;
+  }) => void;
+  initialRadiusKm?: number;
+  height?: number;
+  radius?: number;
+}) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
 
   const [picked, setPicked] = React.useState<{ lat: number; lon: number } | null>(null);
@@ -340,7 +378,7 @@ function GlobeMesh({
       }
       setCountry(countryName || "Unknown");
 
-      // nearest city
+      // nearest city — usa TUTTE le città (non quelle "diradate")
       if (citiesData.length) {
         let bestIdx = -1;
         let minD = Infinity;
@@ -388,6 +426,9 @@ function GlobeMesh({
     });
   }, [onPointSelect, picked, continent, country, nearestCity, radiusKm]);
 
+  // Calcola le città da visualizzare (diradate), ma NON tocca il dataset completo
+  const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
+
   return (
     <div className="w-full">
       {/* canvas (globo più piccolo) */}
@@ -405,7 +446,7 @@ function GlobeMesh({
           <Scene
             radius={1.0}
             onPick={(lat, lon) => updateAttributesFor(lat, lon)}
-            cities={citiesData}
+            cities={renderCities}
           />
         </Canvas>
       </div>
@@ -469,8 +510,8 @@ function Scene({
       {cities.length > 0 && <CityDots radius={radius} cities={cities} />}
       {marker && (
         <mesh position={marker}>
-          <sphereGeometry args={[0.012, 16, 16]} />
-          <meshBasicMaterial color="#ff6b6b" toneMapped={false} />
+          <sphereGeometry args={[0.006, 16, 16]} />
+          <meshBasicMaterial color="#ff0000ff" toneMapped={false} />
         </mesh>
       )}
       <OrbitControls

@@ -1,3 +1,4 @@
+// frontend/app/login/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -5,7 +6,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./auth.module.css";
-
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import type { Session } from "@supabase/supabase-js";
 
@@ -22,34 +22,34 @@ export default function LoginPage() {
 
   const pwdType = useMemo(() => (showPwd ? "text" : "password"), [showPwd]);
 
-  // Se già loggato → vai subito alla landing
+  // 🔹 Logout automatico solo se già loggato (una volta sola)
   useEffect(() => {
-    let alive = true;
     (async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        const session = data?.session as Session | null;
-        if (!alive) return;
-        if (session?.access_token) router.replace("/module/landing");
-      } catch {/* ignore */}
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session as Session | null;
+      if (session?.access_token) {
+        await supabase.auth.signOut(); // previene loop token/password
+      }
     })();
-    return () => { alive = false; };
-  }, [router, supabase]);
+    // nessuna dependency → solo al primo mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Listener: quando la sessione cambia → landing
+  // 🔹 Listener: al cambio sessione → vai alla landing (una sola volta)
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.access_token) {
-        // doppio meccanismo: Router + hard redirect fallback
         router.replace("/module/landing");
-        setTimeout(() => { window.location.assign("/module/landing"); }, 60);
       }
     });
-    return () => { sub.subscription.unsubscribe(); };
+    return () => sub.subscription.unsubscribe();
   }, [router, supabase]);
 
+  // 🔹 Gestione submit
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (loading) return; // blocca doppi click
+
     setError(null);
     setInfo(null);
     setLoading(true);
@@ -57,21 +57,15 @@ export default function LoginPage() {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        setError(error.message || "Login failed.");
+        if (error.message.includes("rate limit")) {
+          setError("Too many login attempts. Please wait 2 minutes and try again.");
+        } else {
+          setError(error.message || "Login failed.");
+        }
         return;
       }
-
-      // Redirect immediato + fallback hard
-      router.replace("/module/landing");
-      setTimeout(() => { window.location.assign("/module/landing"); }, 60);
-
-      // Verifica extra dopo un attimo
-      setTimeout(async () => {
-        const { data } = await supabase.auth.getSession();
-        if (!data?.session) {
-          setInfo("Signing you in… almost there. If the page doesn't redirect, please wait a moment.");
-        }
-      }, 400);
+      // Redirect gestito dal listener, non qui → nessun doppio trigger
+      setInfo("Login successful. Redirecting...");
     } catch (err: any) {
       setError(err?.message ?? "Login failed.");
     } finally {
@@ -80,6 +74,7 @@ export default function LoginPage() {
   }
 
   async function handleSocial(provider: "google" | "apple" | "azure") {
+    if (loading) return;
     setError(null);
     setInfo(null);
     setLoading(true);
@@ -87,8 +82,8 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          // torniamo su /login; il listener farà redirect alla landing
-          redirectTo: typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
+          redirectTo:
+            typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
         },
       });
       if (error) throw error;
@@ -104,9 +99,15 @@ export default function LoginPage() {
       <div className={styles.veil} />
 
       <div className={styles.card}>
-        {/* Logo e tagline */}
         <div className={styles.brandWrap}>
-          <Image className={styles.logo} src="/logo.png" alt="GeoHistory Journey" width={220} height={220} priority />
+          <Image
+            className={styles.logo}
+            src="/logo.png"
+            alt="GeoHistory Journey"
+            width={220}
+            height={220}
+            priority
+          />
         </div>
 
         <div className={styles.tagline}>Where time and space turn into stories</div>
@@ -117,7 +118,6 @@ export default function LoginPage() {
 
         <h1 className={`${styles.title} ${styles.titleAligned}`}>Login</h1>
 
-        {/* Form login */}
         <form className={styles.form} onSubmit={handleSubmit}>
           <div className={styles.field}>
             <div className={styles.label}>Email</div>
@@ -188,9 +188,7 @@ export default function LoginPage() {
           </div>
         </form>
 
-        {/* Divider e social login */}
         <div className={styles.divider}>or continue with</div>
-
         <div className={styles.social}>
           <button aria-label="Google" className={styles.iconBtn} onClick={() => handleSocial("google")} disabled={loading}>
             <Image src="/icons/google.svg" alt="" width={20} height={20} />
