@@ -1,3 +1,4 @@
+// PATH: frontend/app/components/GlobeCanvas.tsx
 "use client";
 import * as React from "react";
 import * as THREE from "three";
@@ -17,7 +18,6 @@ function latLonToVector3(lat: number, lon: number, radius: number) {
 }
 
 function canonicalLon(lon: number) {
-  // riporta qualsiasi valore in [-180, +180]
   return ((lon + 180) % 360 + 360) % 360 - 180;
 }
 
@@ -102,15 +102,8 @@ function pointInGeoAM(pt: [number, number], geom: GeoFeature["geometry"]) {
 
 /* ================ Thinning semplice dei marker città ================ */
 /**
- * Obiettivo: mostrare MENO puntini ma mantenere il dataset completo
- * per il riconoscimento della città più vicina.
- *
- * Regole:
- * 1) Keep sempre capitali e grandi città:
- *    - scalerank <= 3  (capitali / maggiori)
- *    - pop_max >= 1.000.000
- * 2) Per le altre, teniamo 1 città per cella di griglia 5°x5°
- *    (distribuzione uniforme e meno “rumore”).
+ * 1) Mantiene capitali/grandi città (scalerank<=3 o pop_max>=1M)
+ * 2) Per le altre, 1 città per cella 5°x5°
  */
 function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
   const keep: CitiesEntry[] = [];
@@ -126,7 +119,6 @@ function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
       continue;
     }
 
-    // Griglia 5°
     const latCell = Math.floor((c.latitude + 90) / 5);
     const lonCell = Math.floor((normalizeLon(c.longitude) + 180) / 5);
     const key = `${latCell}:${lonCell}`;
@@ -169,7 +161,6 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
     [cities, radius]
   );
 
-  // DOT più piccoli (da 0.006 -> 0.004)
   const geom = React.useMemo(() => new THREE.SphereGeometry(0.002, 12, 12), []);
   const mat = React.useMemo(
     () => new THREE.MeshBasicMaterial({ color: "#ffd166", toneMapped: false }),
@@ -378,7 +369,7 @@ export default function GlobeCanvas({
       }
       setCountry(countryName || "Unknown");
 
-      // nearest city — usa TUTTE le città (non quelle "diradate")
+      // nearest city — usa TUTTE le città (non diradate)
       if (citiesData.length) {
         let bestIdx = -1;
         let minD = Infinity;
@@ -426,15 +417,15 @@ export default function GlobeCanvas({
     });
   }, [onPointSelect, picked, continent, country, nearestCity, radiusKm]);
 
-  // Calcola le città da visualizzare (diradate), ma NON tocca il dataset completo
+  // Città da visualizzare (diradate)
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
   return (
     <div className="w-full">
-      {/* canvas (globo più piccolo) */}
+      {/* canvas (globo) */}
       <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/60 backdrop-blur">
         <Canvas
-          style={{ width: "100%", height: 420 }} // ridotto da 520 -> 420
+          style={{ width: "100%", height: 420 }}
           dpr={[1, 2]}
           camera={{ fov: 35, near: 0.1, far: 1000 }}
           gl={{ antialias: true }}
@@ -451,18 +442,19 @@ export default function GlobeCanvas({
         </Canvas>
       </div>
 
-      {/* pannello info SOTTO il globo, font ridotto */}
+      {/* pannello info SOTTO il globo */}
       <div
-        className="rounded-xl shadow-md border border-neutral-200 bg-white/85 backdrop-blur mt-2 text-sm"
+        className="rounded-xl shadow-md border border-neutral-200 bg-white/85 backdrop-blur mt-2 text-xs sm:text-sm overflow-hidden"
         style={{ padding: 10 }}
       >
-        <div className="grid gap-x-8 gap-y-2" style={{ gridTemplateColumns: "1fr 1fr" }}>
-          <div>
-            <div>Lat: {picked ? picked.lat.toFixed(4) : "-"}</div>
-            <div>Lon: {picked ? picked.lon.toFixed(4) : "-"}</div>
+        <div className="grid gap-x-6 gap-y-2 grid-cols-1 sm:grid-cols-2">
+          <div className="min-w-0">
+            <div className="whitespace-nowrap">Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span></div>
+            <div className="whitespace-nowrap">Lon: <span className="break-words">{picked ? picked.lon.toFixed(4) : "-"}</span></div>
             <div className="flex items-center gap-3 mt-2">
-              <span>City radius (km):</span>
+              <span className="whitespace-nowrap">City radius (km):</span>
               <input
+                className="min-w-0 flex-1"
                 type="range"
                 min={5}
                 max={500}
@@ -473,10 +465,10 @@ export default function GlobeCanvas({
               <span style={{ width: 40, textAlign: "right" }}>{radiusKm}</span>
             </div>
           </div>
-          <div>
-            <div>Continent: {continent || "-"}</div>
-            <div>Country: {country || "-"}</div>
-            <div>Nearest city: {nearestCity || "-"}</div>
+          <div className="min-w-0 break-words">
+            <div>Continent: <span className="break-words">{continent || "-"}</span></div>
+            <div>Country: <span className="break-words">{country || "-"}</span></div>
+            <div>Nearest city: <span className="break-words">{nearestCity || "-"}</span></div>
           </div>
         </div>
       </div>

@@ -1,3 +1,4 @@
+// PATH: frontend/app/module/landing/page.tsx
 'use client';
 
 import React, { useMemo, useState } from 'react';
@@ -49,7 +50,7 @@ export default function LandingPage() {
       />
 
       {/* LAYOUT */}
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:flex-row md:gap-8 md:py-10">
+      <div className="relative z-10 mx-auto flex w/full max-w-7xl flex-col gap-6 px-4 py-6 md:flex-row md:gap-8 md:py-10">
         {/* COLONNA SINISTRA: Globe */}
         <section aria-label="Globe Explorer" className="w-full md:w-1/2">
           <div className="rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
@@ -81,10 +82,10 @@ export default function LandingPage() {
         {/* COLONNA DESTRA: Timeline + Discover */}
         <section
           aria-label="Right column"
-          className="w-full md:w-1/2 flex flex-col justify-between gap-6"
+          className="w-full md:w-1/2 flex flex-col justify-between gap-6 relative z-30"
         >
           {/* TIMELINE */}
-          <div className="flex-1 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
+          <div className="flex-1 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md relative z-30">
             <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
               <h2 className="text-lg font-semibold text-neutral-900">Timeline Explorer</h2>
               <button
@@ -109,7 +110,7 @@ export default function LandingPage() {
           </div>
 
           {/* DISCOVER */}
-          <div className="rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md">
+          <div className="rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md relative z-40">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold text-neutral-900">Discover</h3>
             </div>
@@ -118,7 +119,7 @@ export default function LandingPage() {
               {/* Most Rated */}
               <Link
                 href="/module/rating"
-                className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
+                className="group relative z-40 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
               >
                 <div>
                   <div className="flex items-center gap-2">
@@ -146,7 +147,7 @@ export default function LandingPage() {
               {/* Favourites */}
               <Link
                 href="/module/favourites"
-                className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
+                className="group relative z-40 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
               >
                 <div>
                   <div className="flex items-center gap-2">
@@ -174,7 +175,7 @@ export default function LandingPage() {
               {/* New Journeys */}
               <Link
                 href="/module/NewJourney"
-                className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
+                className="group relative z-40 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md"
               >
                 <div>
                   <div className="flex items-center gap-2">
