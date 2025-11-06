@@ -51,7 +51,7 @@ type CitiesEntry = {
   scalerank?: number;
 };
 
-/* ---------- robust PIP: esterno + fori + multipoligoni ---------- */
+/* ---------- PIP helpers ---------- */
 
 function isPointInRing([x, y]: [number, number], ring: number[][]) {
   let inside = false;
@@ -78,18 +78,12 @@ function isPointInPolygonRings(pt: [number, number], rings: number[][][]) {
 
 function pointInGeoRaw(pt: [number, number], geom: GeoFeature["geometry"]) {
   if (!geom) return false;
-  if (geom.type === "Polygon") {
-    return isPointInPolygonRings(pt, geom.coordinates);
-  }
-  if (geom.type === "MultiPolygon") {
-    return geom.coordinates.some((poly: number[][][]) =>
-      isPointInPolygonRings(pt, poly)
-    );
-  }
+  if (geom.type === "Polygon") return isPointInPolygonRings(pt, geom.coordinates);
+  if (geom.type === "MultiPolygon")
+    return geom.coordinates.some((poly: number[][][]) => isPointInPolygonRings(pt, poly));
   return false;
 }
 
-// antimeridiano-safe
 function pointInGeoAM(pt: [number, number], geom: GeoFeature["geometry"]) {
   const [lon, lat] = pt;
   const tests: [number, number][] = [
@@ -101,10 +95,6 @@ function pointInGeoAM(pt: [number, number], geom: GeoFeature["geometry"]) {
 }
 
 /* ================ Thinning semplice dei marker città ================ */
-/**
- * 1) Mantiene capitali/grandi città (scalerank<=3 o pop_max>=1M)
- * 2) Per le altre, 1 città per cella 5°x5°
- */
 function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
   const keep: CitiesEntry[] = [];
   const taken = new Set<string>();
@@ -134,13 +124,11 @@ function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
 /* ============================== Scene bits ============================== */
 
 function useEuropeStart(radius: number) {
-  const { camera, gl } = useThree();
+  const { camera } = useThree();
   React.useEffect(() => {
-    gl.toneMappingExposure = 1.3;
     const targetLat = 47;
     const targetLon = 10;
-    const camDist = radius * 3.0;
-
+    const camDist = radius * 1.7; // vicino per globo grande e “curvo”
     const look = new THREE.Vector3(0, 0, 0);
     const pos = latLonToVector3(targetLat, targetLon, radius)
       .normalize()
@@ -149,7 +137,7 @@ function useEuropeStart(radius: number) {
     camera.position.copy(pos);
     camera.lookAt(look);
     camera.updateProjectionMatrix();
-  }, [camera, gl, radius]);
+  }, [camera, radius]);
 }
 
 function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] }) {
@@ -225,9 +213,11 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
 function GlobeMesh({
   radius,
   onPick,
+  yieldClicks,
 }: {
   radius: number;
   onPick: (lat: number, lon: number) => void;
+  yieldClicks: () => void;
 }) {
   const colorMap = useTexture("/bg/world-satellite.jpg") as THREE.Texture;
 
@@ -240,17 +230,30 @@ function GlobeMesh({
     colorMap.needsUpdate = true;
   }, [colorMap]);
 
-  const ref = React.useRef<THREE.Mesh>(null);
-
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
-    if (!ref.current) return;
+    e.stopPropagation();
     const p = e.point as THREE.Vector3;
     const { lat, lon } = vector3ToLatLon(p);
     onPick(lat, lon);
+    yieldClicks(); // disabilita temporaneamente il wrapper per far passare i click
+  };
+
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    yieldClicks(); // ulteriore sblocco al rilascio (touch/mouse)
+  };
+
+  const handlePointerCancel = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    yieldClicks();
   };
 
   return (
-    <mesh ref={ref} onPointerDown={handlePointerDown}>
+    <mesh
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
+    >
       <sphereGeometry args={[radius, 128, 128]} />
       <meshStandardMaterial map={colorMap} roughness={0.85} metalness={0.0} envMapIntensity={0.0} />
     </mesh>
@@ -262,7 +265,7 @@ function GlobeMesh({
 export default function GlobeCanvas({
   onPointSelect,
   initialRadiusKm,
-  height,
+  height,               // altezza desiderata del GLOBO in px
   radius: globeRadius,
 }: {
   onPointSelect?: (info: {
@@ -274,7 +277,7 @@ export default function GlobeCanvas({
     radiusKm: number;
   }) => void;
   initialRadiusKm?: number;
-  height?: number;
+  height?: number;       // se non passato, default 700
   radius?: number;
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
@@ -288,6 +291,24 @@ export default function GlobeCanvas({
   const [countriesData, setCountriesData] = React.useState<GeoFeature[]>([]);
   const [citiesData, setCitiesData] = React.useState<CitiesEntry[]>([]);
   const dataReady = continentsData.length > 0 && countriesData.length > 0;
+
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  // 🔒 Stato che governa i pointer-events del WRAPPER (non solo del canvas)
+  const [interactive, setInteractive] = React.useState(true);
+  const unlockDelay = 320;
+
+  // ✅ cede i click agli altri pannelli agendo sul WRAPPER
+  const yieldClicks = React.useCallback(() => {
+    // disattiva i pointer-events del wrapper, così i bottoni dietro sono cliccabili subito
+    setInteractive(false);
+    // log opzionale
+    // console.log("✅ [GeoHistory] yieldClicks: wrapper pointer-events -> none");
+    window.setTimeout(() => {
+      setInteractive(true);
+      // console.log("✅ [GeoHistory] yieldClicks: wrapper pointer-events -> auto");
+    }, unlockDelay);
+  }, []);
 
   React.useEffect(() => {
     async function loadAll() {
@@ -404,7 +425,6 @@ export default function GlobeCanvas({
 
   const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 250);
 
-  // Notifica la landing quando cambia la selezione o il raggio
   React.useEffect(() => {
     if (!onPointSelect || !picked) return;
     onPointSelect({
@@ -417,36 +437,39 @@ export default function GlobeCanvas({
     });
   }, [onPointSelect, picked, continent, country, nearestCity, radiusKm]);
 
-  // Città da visualizzare (diradate)
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
+  // Dimensione wrapper del Canvas (se non passato, 700)
+  const globeHeight = typeof height === "number" ? height : 700;
+
   return (
-    <div className="w-full">
-      {/* canvas (globo) */}
-      <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/60 backdrop-blur">
+    <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur">
+      {/* WRAPPER controllato: qui applico pointer-events in base a 'interactive' */}
+      <div style={{ width: "100%", height: globeHeight, pointerEvents: interactive ? "auto" : "none" }}>
         <Canvas
-          style={{ width: "100%", height: 420 }}
+          style={{ width: "100%", height: "100%" }}
           dpr={[1, 2]}
-          camera={{ fov: 35, near: 0.1, far: 1000 }}
+          camera={{ fov: 40, near: 0.1, far: 1000 }}
           gl={{ antialias: true }}
+          onCreated={({ gl }) => {
+            canvasRef.current = gl.domElement as HTMLCanvasElement;
+          }}
         >
-          <ambientLight intensity={0.95} />
+          <ambientLight intensity={1.0} />
           <directionalLight position={[5, 3, 5]} intensity={1.2} />
-          <directionalLight position={[-5, -2, -5]} intensity={0.6} />
+          <directionalLight position={[-5, -2, -5]} intensity={0.7} />
 
           <Scene
             radius={1.0}
             onPick={(lat, lon) => updateAttributesFor(lat, lon)}
             cities={renderCities}
+            yieldClicks={yieldClicks}
           />
         </Canvas>
       </div>
 
-      {/* pannello info SOTTO il globo */}
-      <div
-        className="rounded-xl shadow-md border border-neutral-200 bg-white/85 backdrop-blur mt-2 text-xs sm:text-sm overflow-hidden"
-        style={{ padding: 10 }}
-      >
+      {/* FOOTER COORDINATE */}
+      <div className="border-t border-neutral-200 bg-white/90 text-xs sm:text-sm" style={{ padding: 10 }}>
         <div className="grid gap-x-6 gap-y-2 grid-cols-1 sm:grid-cols-2">
           <div className="min-w-0">
             <div className="whitespace-nowrap">Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span></div>
@@ -480,10 +503,12 @@ function Scene({
   radius,
   onPick,
   cities,
+  yieldClicks,
 }: {
   radius: number;
   onPick: (lat: number, lon: number) => void;
   cities: CitiesEntry[];
+  yieldClicks: () => void;
 }) {
   useEuropeStart(radius);
   const [marker, setMarker] = React.useState<THREE.Vector3 | null>(null);
@@ -492,13 +517,14 @@ function Scene({
     const p = latLonToVector3(lat, lon, radius + 0.01);
     setMarker(p);
     onPick(lat, lon);
+    yieldClicks(); // sblocco extra al click
   };
 
   useFrame(() => {});
 
   return (
     <>
-      <GlobeMesh radius={radius} onPick={handlePick} />
+      <GlobeMesh radius={radius} onPick={handlePick} yieldClicks={yieldClicks} />
       {cities.length > 0 && <CityDots radius={radius} cities={cities} />}
       {marker && (
         <mesh position={marker}>
@@ -511,8 +537,8 @@ function Scene({
         enableDamping
         dampingFactor={0.08}
         rotateSpeed={0.8}
-        minDistance={1.7}
-        maxDistance={4.0}
+        minDistance={1.25}
+        maxDistance={2.4}
         zoomSpeed={0.8}
       />
     </>

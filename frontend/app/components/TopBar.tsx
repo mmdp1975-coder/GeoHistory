@@ -26,8 +26,8 @@ export default function TopBar() {
   return (
     <nav className="sticky top-0 z-20 bg-white border-b border-slate-200">
       <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
-        {/* Logo a sinistra */}
-        <Link href="/" aria-label="GeoHistory Journey" className="flex items-center">
+        {/* Logo + Motto a sinistra (motto più in basso) */}
+        <Link href="/" aria-label="GeoHistory Journey" className="flex items-end space-x-3">
           <Image
             src="/logo.png"
             alt="GeoHistory Journey"
@@ -36,6 +36,9 @@ export default function TopBar() {
             priority
             className="h-10 md:h-12 w-auto"
           />
+          <span className="text-slate-600 text-sm md:text-base italic mt-2">
+            Where time and space turn into stories
+          </span>
         </Link>
 
         {/* Menu a destra */}
