@@ -1,14 +1,12 @@
 // PATH: frontend/app/module/landing/page.tsx
 'use client';
 
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 
-// Altezza fissa e compatta del globo (puoi variare 480/520/560)
 const GLOBE_H = 520;
 
-// Dynamic import robusto del GlobeCanvas
 const GlobeCanvas: any = dynamic(
   async () => {
     const m = await import('@/app/components/GlobeCanvas');
@@ -26,7 +24,6 @@ type PointInfo = {
   radiusKm?: number;
 } | null;
 
-/** Risolve il nome utente “in local” (pagina → localStorage/variabili globali) */
 function resolveUserNameFromPage(): string {
   try {
     const w = typeof window !== 'undefined' ? (window as any) : undefined;
@@ -41,19 +38,13 @@ function resolveUserNameFromPage(): string {
           null;
         if (n && String(n).trim()) return String(n).trim();
       }
-      const gh2 = w.__ghUser || w.__user;
-      if (gh2?.full_name && String(gh2.full_name).trim()) return String(gh2.full_name).trim();
-      const gh3 = w.__GH_PROFILE__;
-      if (gh3?.full_name && String(gh3.full_name).trim()) return String(gh3.full_name).trim();
     }
     const tryKeys = ['gh_full_name', 'full_name', 'profile_full_name', 'name'];
     for (const k of tryKeys) {
       const v = localStorage.getItem(k);
       if (v && v.trim()) return v.trim();
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
   return 'Explorer';
 }
 
@@ -61,18 +52,8 @@ export default function LandingPage(): JSX.Element {
   const [pointInfo, setPointInfo] = useState<PointInfo>(null);
   const [userName, setUserName] = useState<string>('Explorer');
 
-  // 🔒 Stato che governa i pointer-events del WRAPPER del globo (fix bottoni)
-  const [globeInteractive, setGlobeInteractive] = useState<boolean>(true);
-  const unlockTimerRef = useRef<number | null>(null);
-  const UNLOCK_DELAY = 280; // ms
-
   useEffect(() => {
     setUserName(resolveUserNameFromPage());
-    return () => {
-      if (unlockTimerRef.current) {
-        window.clearTimeout(unlockTimerRef.current);
-      }
-    };
   }, []);
 
   const explorePlacesHref = useMemo(() => {
@@ -87,23 +68,6 @@ export default function LandingPage(): JSX.Element {
     if (pointInfo?.city) params.set('city', pointInfo.city);
     return `/module/timeline?${params.toString()}`;
   }, [pointInfo]);
-
-  // Confina gli eventi all'interno del pannello Globe (solo per sicurezza locale)
-  const swallow = (e: React.PointerEvent | React.MouseEvent) => {
-    e.stopPropagation();
-  };
-
-  // ✅ FIX CENTRALE — sblocco bottoni a livello di landing
-  // Applico al WRAPPER del globo pointer-events:none per ~280ms
-  const handleGlobePointerUpCapture = () => {
-    // disattivo i pointer-events del wrapper globo
-    setGlobeInteractive(false);
-    if (unlockTimerRef.current) window.clearTimeout(unlockTimerRef.current);
-    unlockTimerRef.current = window.setTimeout(() => {
-      setGlobeInteractive(true);
-      unlockTimerRef.current = null;
-    }, UNLOCK_DELAY);
-  };
 
   return (
     <main className="relative min-h-screen w-full overflow-hidden">
@@ -123,16 +87,16 @@ export default function LandingPage(): JSX.Element {
 
       {/* GRID 2 COLONNE */}
       <div className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 md:grid-cols-2 md:gap-8 md:py-10">
-        {/* ====================== COLONNA SINISTRA ====================== */}
-        <div className="flex flex-col gap-4">
-          {/* 1) WELCOME (fisso) */}
-          <div className="relative z-20 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md pointer-events-auto">
-            <div className="relative z-20 flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
+        {/* SINISTRA: pannelli — z-30 e isolate, sempre cliccabili */}
+        <div className="flex flex-col gap-4 z-30 isolate pointer-events-auto">
+          {/* WELCOME */}
+          <div className="relative rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
+            <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
               <h2 className="text-lg font-semibold text-neutral-900">
                 Welcome to GeoHistory{userName ? `, ${userName}!` : '!'}
               </h2>
             </div>
-            <div className="relative z-20 px-5 py-4">
+            <div className="px-5 py-4">
               <p className="text-sm text-neutral-700">
                 Travel through centuries and continents to uncover how human events shaped our world.
                 Choose your path: explore by <strong>Age</strong>, <strong>Place</strong>, or <strong>Theme</strong>.
@@ -140,19 +104,19 @@ export default function LandingPage(): JSX.Element {
             </div>
           </div>
 
-          {/* 2) TIMELINE */}
-          <div className="relative z-20 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md overflow-hidden pointer-events-auto">
-            <div className="relative z-20 flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
+          {/* TIMELINE */}
+          <div className="relative rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
               <h2 className="text-lg font-semibold text-neutral-900">Timeline Explorer</h2>
               <button
                 onClick={() => window.location.assign(explorePlacesHref)}
-                className="relative z-20 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
+                className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
               >
                 Explore Ages
               </button>
             </div>
 
-            <div className="relative z-10 px-5 pt-3 pb-4">
+            <div className="px-5 pt-3 pb-4">
               <div className="relative w-full overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-inner">
                 <img
                   src="/img/timeline-illustration.jpg"
@@ -162,7 +126,6 @@ export default function LandingPage(): JSX.Element {
                 />
               </div>
 
-              {/* Barra anni */}
               <div className="mt-2">
                 <div className="h-1 w-full rounded bg-gradient-to-r from-neutral-200 via-neutral-300 to-neutral-200" />
                 <div className="mt-1 flex justify-between text-[10px] text-neutral-600">
@@ -180,18 +143,14 @@ export default function LandingPage(): JSX.Element {
             </div>
           </div>
 
-          {/* 3) DISCOVER */}
-          <div className="relative z-20 rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md pointer-events-auto">
-            <div className="relative z-20 mb-2 flex items-center justify-between">
+          {/* DISCOVER (Most Rated, Favourites, New Journeys) */}
+          <div className="relative rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md">
+            <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold text-neutral-900">Discover</h3>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {/* Most Rated */}
-              <Link
-                href="/module/rating"
-                className="group relative z-20 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md pointer-events-auto"
-              >
+              <Link href="/module/rating" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="h-5 w-5 text-yellow-500" fill="currentColor">
@@ -204,11 +163,7 @@ export default function LandingPage(): JSX.Element {
                 <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">Open</span>
               </Link>
 
-              {/* Favourites */}
-              <Link
-                href="/module/favourites"
-                className="group relative z-20 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md pointer-events-auto"
-              >
+              <Link href="/module/favourites" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="currentColor">
@@ -221,11 +176,7 @@ export default function LandingPage(): JSX.Element {
                 <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">Open</span>
               </Link>
 
-              {/* New Journeys */}
-              <Link
-                href="/module/NewJourney"
-                className="group relative z-20 flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md pointer-events-auto"
-              >
+              <Link href="/module/NewJourney" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-600" fill="currentColor">
@@ -241,12 +192,9 @@ export default function LandingPage(): JSX.Element {
           </div>
         </div>
 
-        {/* ====================== COLONNA DESTRA: GLOBE ====================== */}
-        <div
-          className="relative rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md overflow-hidden isolate z-10"
-        >
-          {/* Header */}
-          <div className="relative z-30 flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3 pointer-events-auto">
+        {/* DESTRA: globo — z-10, confinato nel suo contenitore */}
+        <div className="relative z-10 rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md overflow-hidden isolate">
+          <div className="relative z-20 flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
             <h1 className="text-lg font-semibold text-neutral-900">Globe Explorer</h1>
             <button
               onClick={(e) => {
@@ -259,25 +207,8 @@ export default function LandingPage(): JSX.Element {
             </button>
           </div>
 
-          {/* Corpo a altezza ridotta e FIX bottoni: wrapper con pointer-events controllati */}
           <div className="px-5 pb-5 pt-3 relative">
-            {/* layer neutro */}
-            <div className="absolute inset-0 -z-10 pointer-events-none" aria-hidden />
-
-            <div
-              className="p-3 relative z-10"
-              // catturo il pointer-up per sbloccare i bottoni (landing-level)
-              onPointerUpCapture={handleGlobePointerUpCapture}
-              // evito bubbling e interferenze locali
-              onPointerDown={swallow}
-              onPointerUp={swallow}
-              onClick={swallow}
-              onMouseDown={swallow}
-              onMouseUp={swallow}
-              // Applico qui i pointer-events in base allo stato
-              style={{ pointerEvents: globeInteractive ? 'auto' : 'none' }}
-            >
-              {/* Wrapper con altezza fissa del globo */}
+            <div className="p-3 relative z-10">
               <div style={{ width: '100%', height: GLOBE_H }}>
                 <GlobeCanvas
                   height={GLOBE_H}

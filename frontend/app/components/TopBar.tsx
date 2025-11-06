@@ -36,7 +36,7 @@ export default function TopBar() {
             priority
             className="h-10 md:h-12 w-auto"
           />
-          <span className="text-slate-600 text-sm md:text-base italic mt-2">
+          <span className="text-slate-600 text-xs md:text-sm italic mt-2">
             Where time and space turn into stories
           </span>
         </Link>

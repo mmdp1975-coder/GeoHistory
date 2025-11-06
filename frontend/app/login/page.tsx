@@ -3,7 +3,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./auth.module.css";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -20,78 +20,145 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  // Cooldown locale se scatta il rate-limit
+  const [cooldown, setCooldown] = useState<number>(0);
+  const cooldownRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Guardia contro invii ravvicinati
+  const inFlight = useRef<boolean>(false);
+
   const pwdType = useMemo(() => (showPwd ? "text" : "password"), [showPwd]);
 
-  // 🔹 Logout automatico solo se già loggato (una volta sola)
+  // ✅ Se esiste già una sessione → redirect immediato e certo
   useEffect(() => {
+    let mounted = true;
     (async () => {
       const { data } = await supabase.auth.getSession();
       const session = data?.session as Session | null;
+      if (!mounted) return;
       if (session?.access_token) {
-        await supabase.auth.signOut(); // previene loop token/password
+        try {
+          router.replace("/module/landing");
+          // Fallback hard se il router non naviga
+          setTimeout(() => {
+            if (typeof window !== "undefined") {
+              window.location.href = "/module/landing";
+            }
+          }, 100);
+        } catch {
+          if (typeof window !== "undefined") {
+            window.location.href = "/module/landing";
+          }
+        }
       }
     })();
-    // nessuna dependency → solo al primo mount
+    return () => {
+      mounted = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 🔹 Listener: al cambio sessione → vai alla landing (una sola volta)
+  // Gestione cooldown timer (per messaggio Too many attempts)
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.access_token) {
-        router.replace("/module/landing");
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [router, supabase]);
+    if (cooldown <= 0) return;
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+      cooldownRef.current = null;
+    };
+  }, [cooldown]);
 
-  // 🔹 Gestione submit
+  // 🔹 Submit con redirect immediato e fallback
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (loading) return; // blocca doppi click
+    if (loading || inFlight.current || cooldown > 0) return;
 
     setError(null);
     setInfo(null);
     setLoading(true);
+    inFlight.current = true;
 
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        if (error.message.includes("rate limit")) {
+        const msg = (error.message || "").toLowerCase();
+        if (msg.includes("too many") || msg.includes("rate limit") || msg.includes("try again")) {
+          setCooldown(120);
           setError("Too many login attempts. Please wait 2 minutes and try again.");
         } else {
           setError(error.message || "Login failed.");
         }
         return;
       }
-      // Redirect gestito dal listener, non qui → nessun doppio trigger
+
+      // ✅ redirect immediato e certo (niente listener)
       setInfo("Login successful. Redirecting...");
+      try {
+        router.replace("/module/landing");
+        // Fallback hard nel caso l'app router non cambi vista
+        setTimeout(() => {
+          if (typeof window !== "undefined") {
+            window.location.href = "/module/landing";
+          }
+        }, 100);
+      } catch {
+        if (typeof window !== "undefined") {
+          window.location.href = "/module/landing";
+        }
+      }
     } catch (err: any) {
       setError(err?.message ?? "Login failed.");
     } finally {
+      // ✅ lo spinner non resta mai appeso
       setLoading(false);
+      setTimeout(() => {
+        inFlight.current = false;
+      }, 300);
     }
   }
 
   async function handleSocial(provider: "google" | "apple" | "azure") {
-    if (loading) return;
+    if (loading || inFlight.current || cooldown > 0) return;
     setError(null);
     setInfo(null);
     setLoading(true);
+    inFlight.current = true;
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error, data } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo:
-            typeof window !== "undefined" ? `${window.location.origin}/login` : undefined,
+            typeof window !== "undefined"
+              ? `${window.location.origin}/module/landing`
+              : undefined,
         },
       });
       if (error) throw error;
+
+      // Alcuni provider aprono nuova tab; comunque forziamo la UI a “uscire”
+      if (data?.url && typeof window !== "undefined") {
+        window.location.href = data.url;
+      }
     } catch (err: any) {
       setError(err?.message ?? "Social sign-in failed.");
       setLoading(false);
+      setTimeout(() => {
+        inFlight.current = false;
+      }, 300);
     }
   }
+
+  const submitDisabled = loading || cooldown > 0;
 
   return (
     <div className={styles.page}>
@@ -130,6 +197,7 @@ export default function LoginPage() {
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@email.com"
                 required
+                disabled={submitDisabled}
               />
             </div>
           </div>
@@ -145,13 +213,14 @@ export default function LoginPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="********"
                 required
+                disabled={submitDisabled}
               />
               <button
                 type="button"
                 aria-label={showPwd ? "Hide password" : "Show password"}
                 className={styles.eyeBtn}
                 onClick={() => setShowPwd((prev) => !prev)}
-                disabled={loading}
+                disabled={submitDisabled}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   {showPwd ? (
@@ -171,13 +240,22 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {error && <div className={`${styles.alert} ${styles.alertError}`}>{error}</div>}
+          {error && (
+            <div className={`${styles.alert} ${styles.alertError}`}>
+              {error}
+              {cooldown > 0 && <span style={{ marginLeft: 8 }}>({cooldown}s)</span>}
+            </div>
+          )}
           {info && !error && <div className={`${styles.alert} ${styles.alertInfo}`}>{info}</div>}
 
           <div className={styles.field}>
             <div className={styles.actions}>
-              <button className={styles.btnPrimary} disabled={loading} type="submit">
-                {loading ? "Signing in..." : "Sign in"}
+              <button className={styles.btnPrimary} disabled={submitDisabled} type="submit">
+                {cooldown > 0
+                  ? `Please wait (${cooldown}s)`
+                  : loading
+                  ? "Signing in..."
+                  : "Sign in"}
               </button>
 
               <div className={styles.links}>
@@ -190,13 +268,28 @@ export default function LoginPage() {
 
         <div className={styles.divider}>or continue with</div>
         <div className={styles.social}>
-          <button aria-label="Google" className={styles.iconBtn} onClick={() => handleSocial("google")} disabled={loading}>
+          <button
+            aria-label="Google"
+            className={styles.iconBtn}
+            onClick={() => handleSocial("google")}
+            disabled={submitDisabled}
+          >
             <Image src="/icons/google.svg" alt="" width={20} height={20} />
           </button>
-          <button aria-label="Apple" className={styles.iconBtn} onClick={() => handleSocial("apple")} disabled={loading}>
+          <button
+            aria-label="Apple"
+            className={styles.iconBtn}
+            onClick={() => handleSocial("apple")}
+            disabled={submitDisabled}
+          >
             <Image src="/icons/apple.svg" alt="" width={20} height={20} />
           </button>
-          <button aria-label="Microsoft" className={styles.iconBtn} onClick={() => handleSocial("azure")} disabled={loading}>
+          <button
+            aria-label="Microsoft"
+            className={styles.iconBtn}
+            onClick={() => handleSocial("azure")}
+            disabled={submitDisabled}
+          >
             <Image src="/icons/microsoft.svg" alt="" width={20} height={20} />
           </button>
         </div>

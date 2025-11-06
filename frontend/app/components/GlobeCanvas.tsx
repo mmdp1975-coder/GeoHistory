@@ -128,7 +128,7 @@ function useEuropeStart(radius: number) {
   React.useEffect(() => {
     const targetLat = 47;
     const targetLon = 10;
-    const camDist = radius * 1.7; // vicino per globo grande e “curvo”
+    const camDist = radius * 1.7;
     const look = new THREE.Vector3(0, 0, 0);
     const pos = latLonToVector3(targetLat, targetLon, radius)
       .normalize()
@@ -140,7 +140,17 @@ function useEuropeStart(radius: number) {
   }, [camera, radius]);
 }
 
-function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] }) {
+function CityDots({
+  radius,
+  cities,
+  onPickCity,
+  setHoveringCity,
+}: {
+  radius: number;
+  cities: CitiesEntry[];
+  onPickCity: (lat: number, lon: number, cityName: string) => void;
+  setHoveringCity: (b: boolean) => void;
+}) {
   const [hover, setHover] = React.useState<number | null>(null);
   const [hoverPos, setHoverPos] = React.useState<THREE.Vector3 | null>(null);
 
@@ -159,10 +169,10 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
   const raycaster = React.useMemo(() => new THREE.Raycaster(), []);
   const pointer = React.useRef(new THREE.Vector2());
 
-  const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
+  const updateNearest = (clientX: number, clientY: number) => {
     const rect = (gl.domElement as HTMLCanvasElement).getBoundingClientRect();
-    pointer.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    pointer.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    pointer.current.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.current.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(pointer.current, camera);
 
@@ -175,17 +185,39 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
         minIdx = i;
       }
     }
+    return { minIdx, minDist };
+  };
+
+  const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
+    const { minIdx, minDist } = updateNearest(e.clientX, e.clientY);
     if (minIdx >= 0 && minDist < 0.15) {
       setHover(minIdx);
       setHoverPos(positions[minIdx]);
+      setHoveringCity(true);
     } else {
       setHover(null);
       setHoverPos(null);
+      setHoveringCity(false);
+    }
+  };
+
+  const onPointerLeave = () => {
+    setHover(null);
+    setHoverPos(null);
+    setHoveringCity(false);
+  };
+
+  const onPointerUp = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    const { minIdx, minDist } = updateNearest(e.clientX, e.clientY);
+    if (minIdx >= 0 && minDist < 0.12) {
+      const c = cities[minIdx];
+      onPickCity(c.latitude, c.longitude, c.name);
     }
   };
 
   return (
-    <group onPointerMove={onPointerMove}>
+    <group onPointerMove={onPointerMove} onPointerLeave={onPointerLeave} onPointerUp={onPointerUp}>
       {positions.map((p, i) => (
         <mesh key={i} position={p} geometry={geom} material={mat} />
       ))}
@@ -212,12 +244,14 @@ function CityDots({ radius, cities }: { radius: number; cities: CitiesEntry[] })
 
 function GlobeMesh({
   radius,
-  onPick,
-  yieldClicks,
+  onPickGlobePoint,
+  onDragStart,
+  onDragEnd,
 }: {
   radius: number;
-  onPick: (lat: number, lon: number) => void;
-  yieldClicks: () => void;
+  onPickGlobePoint: (lat: number, lon: number) => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
 }) {
   const colorMap = useTexture("/bg/world-satellite.jpg") as THREE.Texture;
 
@@ -230,22 +264,39 @@ function GlobeMesh({
     colorMap.needsUpdate = true;
   }, [colorMap]);
 
+  const releaseCapture = (e: ThreeEvent<PointerEvent>) => {
+    const tgt: any = e.target;
+    if (tgt && typeof tgt.releasePointerCapture === "function") {
+      try {
+        // @ts-ignore
+        tgt.releasePointerCapture(e.pointerId);
+      } catch {}
+    }
+  };
+
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    const p = e.point as THREE.Vector3;
-    const { lat, lon } = vector3ToLatLon(p);
-    onPick(lat, lon);
-    yieldClicks(); // disabilita temporaneamente il wrapper per far passare i click
+    releaseCapture(e);
+    onDragStart();
   };
 
   const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    yieldClicks(); // ulteriore sblocco al rilascio (touch/mouse)
+    releaseCapture(e);
+    onDragEnd();
+
+    // Intersezione robusta: usa il raycaster del frame event
+    const p = e.point as THREE.Vector3;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      const { lat, lon } = vector3ToLatLon(p);
+      onPickGlobePoint(lat, lon);
+    }
   };
 
   const handlePointerCancel = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    yieldClicks();
+    releaseCapture(e);
+    onDragEnd();
   };
 
   return (
@@ -265,7 +316,7 @@ function GlobeMesh({
 export default function GlobeCanvas({
   onPointSelect,
   initialRadiusKm,
-  height,               // altezza desiderata del GLOBO in px
+  height,
   radius: globeRadius,
 }: {
   onPointSelect?: (info: {
@@ -277,7 +328,7 @@ export default function GlobeCanvas({
     radiusKm: number;
   }) => void;
   initialRadiusKm?: number;
-  height?: number;       // se non passato, default 700
+  height?: number;       // default 700
   radius?: number;
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
@@ -292,23 +343,9 @@ export default function GlobeCanvas({
   const [citiesData, setCitiesData] = React.useState<CitiesEntry[]>([]);
   const dataReady = continentsData.length > 0 && countriesData.length > 0;
 
-  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-
-  // 🔒 Stato che governa i pointer-events del WRAPPER (non solo del canvas)
-  const [interactive, setInteractive] = React.useState(true);
-  const unlockDelay = 320;
-
-  // ✅ cede i click agli altri pannelli agendo sul WRAPPER
-  const yieldClicks = React.useCallback(() => {
-    // disattiva i pointer-events del wrapper, così i bottoni dietro sono cliccabili subito
-    setInteractive(false);
-    // log opzionale
-    // console.log("✅ [GeoHistory] yieldClicks: wrapper pointer-events -> none");
-    window.setTimeout(() => {
-      setInteractive(true);
-      // console.log("✅ [GeoHistory] yieldClicks: wrapper pointer-events -> auto");
-    }, unlockDelay);
-  }, []);
+  const [dragging, setDragging] = React.useState(false);
+  const [pointerOver, setPointerOver] = React.useState(false);
+  const [hoveringCity, setHoveringCity] = React.useState(false);
 
   React.useEffect(() => {
     async function loadAll() {
@@ -348,6 +385,10 @@ export default function GlobeCanvas({
     loadAll();
   }, []);
 
+  const setCityAsNearest = React.useCallback((name: string) => {
+    setNearestCity(name || "Unknown");
+  }, []);
+
   const updateAttributesFor = React.useCallback(
     (lat: number, lon: number) => {
       setPicked({ lat, lon: canonicalLon(lon) });
@@ -355,7 +396,7 @@ export default function GlobeCanvas({
       if (!dataReady) {
         setContinent("-");
         setCountry("-");
-        setNearestCity("-");
+        // Nearest city verrà ricalcolata appena i dati sono pronti
         return;
       }
 
@@ -390,7 +431,7 @@ export default function GlobeCanvas({
       }
       setCountry(countryName || "Unknown");
 
-      // nearest city — usa TUTTE le città (non diradate)
+      // nearest city — usa TUTTE le città
       if (citiesData.length) {
         let bestIdx = -1;
         let minD = Infinity;
@@ -416,8 +457,6 @@ export default function GlobeCanvas({
           }
         }
         setNearestCity(bestIdx >= 0 ? citiesData[bestIdx].name : "Unknown");
-      } else {
-        setNearestCity("Unknown");
       }
     },
     [dataReady, continentsData, countriesData, citiesData]
@@ -439,21 +478,31 @@ export default function GlobeCanvas({
 
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
-  // Dimensione wrapper del Canvas (se non passato, 700)
   const globeHeight = typeof height === "number" ? height : 700;
+
+  // Cursor: pointer su città, grab/grabbing sul globo
+  const cursorStyle = React.useMemo(() => {
+    if (hoveringCity) return "pointer";
+    if (!pointerOver) return "default";
+    return dragging ? "grabbing" : "grab";
+  }, [pointerOver, dragging, hoveringCity]);
 
   return (
     <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur">
-      {/* WRAPPER controllato: qui applico pointer-events in base a 'interactive' */}
-      <div style={{ width: "100%", height: globeHeight, pointerEvents: interactive ? "auto" : "none" }}>
+      <div
+        style={{
+          width: "100%",
+          height: globeHeight,
+          cursor: cursorStyle,
+        }}
+        onPointerEnter={() => setPointerOver(true)}
+        onPointerLeave={() => setPointerOver(false)}
+      >
         <Canvas
           style={{ width: "100%", height: "100%" }}
           dpr={[1, 2]}
           camera={{ fov: 40, near: 0.1, far: 1000 }}
           gl={{ antialias: true }}
-          onCreated={({ gl }) => {
-            canvasRef.current = gl.domElement as HTMLCanvasElement;
-          }}
         >
           <ambientLight intensity={1.0} />
           <directionalLight position={[5, 3, 5]} intensity={1.2} />
@@ -461,9 +510,17 @@ export default function GlobeCanvas({
 
           <Scene
             radius={1.0}
-            onPick={(lat, lon) => updateAttributesFor(lat, lon)}
+            onPickGlobePoint={(lat, lon) => {
+              updateAttributesFor(lat, lon);
+            }}
             cities={renderCities}
-            yieldClicks={yieldClicks}
+            onDragStart={() => setDragging(true)}
+            onDragEnd={() => setDragging(false)}
+            onPickCity={(lat, lon, cityName) => {
+              updateAttributesFor(lat, lon);
+              setCityAsNearest(cityName); // forza il nome città selezionata
+            }}
+            setHoveringCity={setHoveringCity}
           />
         </Canvas>
       </div>
@@ -501,31 +558,54 @@ export default function GlobeCanvas({
 
 function Scene({
   radius,
-  onPick,
+  onPickGlobePoint,
   cities,
-  yieldClicks,
+  onDragStart,
+  onDragEnd,
+  onPickCity,
+  setHoveringCity,
 }: {
   radius: number;
-  onPick: (lat: number, lon: number) => void;
+  onPickGlobePoint: (lat: number, lon: number) => void;
   cities: CitiesEntry[];
-  yieldClicks: () => void;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onPickCity: (lat: number, lon: number, cityName: string) => void;
+  setHoveringCity: (b: boolean) => void;
 }) {
   useEuropeStart(radius);
   const [marker, setMarker] = React.useState<THREE.Vector3 | null>(null);
 
-  const handlePick = (lat: number, lon: number) => {
+  const handlePickGlobe = (lat: number, lon: number) => {
     const p = latLonToVector3(lat, lon, radius + 0.01);
     setMarker(p);
-    onPick(lat, lon);
-    yieldClicks(); // sblocco extra al click
+    onPickGlobePoint(lat, lon);
+  };
+
+  const handlePickCity = (lat: number, lon: number, cityName: string) => {
+    const p = latLonToVector3(lat, lon, radius + 0.01);
+    setMarker(p);
+    onPickCity(lat, lon, cityName);
   };
 
   useFrame(() => {});
 
   return (
     <>
-      <GlobeMesh radius={radius} onPick={handlePick} yieldClicks={yieldClicks} />
-      {cities.length > 0 && <CityDots radius={radius} cities={cities} />}
+      <GlobeMesh
+        radius={radius}
+        onPickGlobePoint={handlePickGlobe}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+      />
+      {cities.length > 0 && (
+        <CityDots
+          radius={radius}
+          cities={cities}
+          onPickCity={handlePickCity}
+          setHoveringCity={setHoveringCity}
+        />
+      )}
       {marker && (
         <mesh position={marker}>
           <sphereGeometry args={[0.006, 16, 16]} />

@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import SupabaseProvider from "./components/SupabaseProvider";
+import IdleLogoutProvider from "./components/IdleLogoutProvider";
 
 export const metadata: Metadata = {
   title: "GeoHistory Journey",
@@ -12,7 +13,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
-        <SupabaseProvider>{children}</SupabaseProvider>
+        <SupabaseProvider>
+          <IdleLogoutProvider>
+            {children}
+          </IdleLogoutProvider>
+        </SupabaseProvider>
       </body>
     </html>
   );

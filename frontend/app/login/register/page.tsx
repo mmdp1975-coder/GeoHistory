@@ -1,14 +1,16 @@
+// frontend/app/login/register/page.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "../auth.module.css";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, Session } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import * as ClientModule from "../../../lib/supabaseBrowserClient";
 
+/* ---------- Supabase client con fallback sicuro ---------- */
 function getSupabase(): SupabaseClient {
   const modAny = ClientModule as any;
   const named = modAny?.supabase as SupabaseClient | undefined;
@@ -25,9 +27,9 @@ function getSupabase(): SupabaseClient {
   }
   return createClient(url, key);
 }
-
 const supabase = getSupabase();
 
+/* ---------- Tipi e util ---------- */
 type Persona = {
   id: string;
   code: string | null;
@@ -69,6 +71,7 @@ function passwordStrength(password: string): { label: string; color: string } {
 }
 
 export default function RegisterPage() {
+  /* ---------- Form state ---------- */
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -77,7 +80,7 @@ export default function RegisterPage() {
   const [personaId, setPersonaId] = useState<string>("");
   const [accepted, setAccepted] = useState(false);
 
-  // ✅ NEW: language selection (default = English)
+  // ✅ language con default "en"
   const [language, setLanguage] = useState("en");
 
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -87,6 +90,10 @@ export default function RegisterPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [showPwd2, setShowPwd2] = useState(false);
 
+  // guardia anti invii ravvicinati
+  const inFlight = useRef<boolean>(false);
+
+  /* ---------- Caricamento personas (senza ADMIN/MOD) ---------- */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -112,15 +119,19 @@ export default function RegisterPage() {
     };
   }, []);
 
+  /* ---------- Redirect email post signup ---------- */
   const emailRedirectTo = useMemo(() => {
     if (typeof window === "undefined") return undefined;
+    // Dopo la conferma email, rientra nella login
     return `${window.location.origin}/login`;
   }, []);
 
+  /* ---------- Locale per label personas ---------- */
   const locale =
     typeof navigator !== "undefined" && navigator.language ? navigator.language : "en";
   const strength = passwordStrength(password);
 
+  /* ---------- Validazione base ---------- */
   function validate(): string | null {
     if (!accepted) return "You must accept Terms and Privacy.";
     if (!firstName.trim() || !lastName.trim()) return "Please provide your first and last name.";
@@ -132,8 +143,11 @@ export default function RegisterPage() {
     return null;
   }
 
+  /* ---------- Submit con upsert profilo (language certo) ---------- */
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (loading || inFlight.current) return;
+
     setError(null);
     setSuccess(false);
 
@@ -144,10 +158,12 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
+    inFlight.current = true;
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const username = email.trim().toLowerCase();
 
+      // 1) SignUp con metadata (incluso language)
       const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
@@ -158,32 +174,33 @@ export default function RegisterPage() {
             full_name: fullName || null,
             persona_id: personaId || null,
             username,
-            // ✅ include language in user metadata
-            language: language || "en",
+            language: language || "en", // ✅ lingua anche in user metadata
           },
           emailRedirectTo,
         },
       });
-
       if (error) throw error;
 
       const newUserId = signUpData?.user?.id ?? null;
+
+      // 2) Upsert diretto sul profilo: lingua scritta DAVVERO
+      //    Assumo policy RLS che permette all'utente loggato di inserire/aggiornare il proprio profilo (id = user.id)
       if (newUserId) {
         const profilePayload = {
           id: newUserId,
           persona_id: personaId || null,
-          // ✅ include language in profile table
-          language: language || "en",
+          language: language || "en", // ✅ lingua in tabella profiles
+          // opzionali: se il tuo schema li prevede
+          // first_name: firstName.trim() || null,
+          // last_name: lastName.trim() || null,
+          // full_name: fullName || null,
         };
-        const response = await fetch("/api/register/profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(profilePayload),
-        });
-        if (!response.ok) {
-          const detail = await response.json().catch(() => ({}));
-          const reason = typeof detail.error === "string" ? detail.error : response.statusText;
-          throw new Error(`Profile setup failed: ${reason}`);
+
+        const { error: upsertErr } = await supabase
+          .from("profiles")
+          .upsert(profilePayload, { onConflict: "id" }); // evita duplicati, aggiorna se esiste
+        if (upsertErr) {
+          throw new Error(`Profile upsert failed: ${upsertErr.message}`);
         }
       } else {
         console.warn("[register] signUp missing user id");
@@ -197,12 +214,17 @@ export default function RegisterPage() {
         friendly = "Registrations are disabled in Supabase Auth settings.";
       } else if (/redirect/i.test(message)) {
         friendly = "Invalid redirect URL. Add it in Supabase Auth settings.";
-      } else if (/rate/i.test(message)) {
+      } else if (/rate|too many/i.test(message)) {
         friendly = "Too many requests. Try again later.";
+      } else if (/Profile upsert failed/i.test(message)) {
+        friendly = "Profile creation failed. Please retry.";
       }
       setError(`${friendly} (detail: ${message})`);
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        inFlight.current = false;
+      }, 300);
     }
   }
 

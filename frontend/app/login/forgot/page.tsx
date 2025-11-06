@@ -1,8 +1,9 @@
+// frontend/app/login/forgot/page.tsx
 "use client";
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import styles from "../auth.module.css";
 
 /* Supabase con fallback sicuro */
@@ -29,13 +30,19 @@ export default function ForgotPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const inFlight = useRef(false);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading || inFlight.current) return;
+
     setErr(null);
     setLoading(true);
+    inFlight.current = true;
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: typeof window !== "undefined" ? `${location.origin}/reset-password` : undefined,
+        redirectTo:
+          typeof window !== "undefined" ? `${location.origin}/reset-password` : undefined,
       });
       if (error) throw error;
       setSent(true);
@@ -43,6 +50,9 @@ export default function ForgotPage() {
       setErr(e?.message ?? "Unable to send reset email.");
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        inFlight.current = false;
+      }, 300);
     }
   }
 
