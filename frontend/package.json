@@ -20,7 +20,7 @@
     "framer-motion": "^12.23.24",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.544.0",
-    "maplibre-gl": "^5.8.0",
+    "maplibre-gl": "^5.12.0",
     "next": "14.2.10",
     "openai": "^6.3.0",
     "pg": "^8.16.3",
