@@ -1,4 +1,4 @@
-﻿// frontend/app/module/NewJourney/page.tsx
+﻿﻿﻿// frontend/app/module/NewJourney/page.tsx
 "use client";
 
 /**
@@ -123,7 +123,7 @@ export default function NewJourneyPage() {
         if (jErr) throw jErr;
 
         // Normalizza a unknown[] e filtra con type guard
-        const jArr = ((jRows ?? []) as unknown[]);
+        const jArr = (jRows ?? []) as unknown[];
         const journeys = jArr.filter(isVJourney) as VJourney[];
 
         // 2) Rating (come modulo /module/rating)
@@ -136,7 +136,7 @@ export default function NewJourneyPage() {
         if (sErr) throw sErr;
 
         const statsMap = new Map<string, RatingStats>();
-        const sArr = ((statsRaw ?? []) as unknown[]);
+        const sArr = (statsRaw ?? []) as unknown[];
         const stats = sArr.filter(isRatingStats) as RatingStats[];
         stats.forEach((r) => statsMap.set(r.group_event_id, r));
 
@@ -328,6 +328,7 @@ export default function NewJourneyPage() {
                       </span>
                     </div>
 
+                    {/* ✅ Torniamo alla route esistente con query string */}
                     <Link
                       href={`/module/group_event?slug=${encodeURIComponent(j.journey_slug)}`}
                       className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"

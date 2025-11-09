@@ -1,7 +1,7 @@
 // frontend/app/module/group_event/page_inner.tsx
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -12,11 +12,23 @@ import { useCurrentUser } from "@/lib/useCurrentUser";
 /* ===================== Tipi ===================== */
 type AnyObj = Record<string, any>;
 
+type MediaItem = {
+  media_id: string;
+  type: "image" | "video" | "audio" | "document" | string;
+  role?: string | null;
+  url: string;
+  preview?: string | null;
+  source?: string | null;
+  mime?: string | null;
+  lang?: string | null;
+  sort_order?: number | null;
+};
+
 type EventCore = {
   id: string;
   latitude: number | null;
   longitude: number | null;
-  era?: string | null; // "BC" | "AD"
+  era?: string | null;
   year_from?: number | null;
   year_to?: number | null;
   exact_date?: string | null;
@@ -30,6 +42,8 @@ type EventVM = EventCore & {
   wiki_url: string | null;
   video_url: string | null;
   order_key: number;
+  event_media?: MediaItem[];
+  event_media_first?: string | null;
 };
 
 /* ===================== Costanti/UI ===================== */
@@ -96,7 +110,9 @@ function formatTimelineYearLabel(year: number) {
   if (rounded === 0) return "0";
   return `${rounded} AD`;
 }
-function buildTimelineTicks(min: number, max: number, targetTicks = 8) {
+
+/** Costruisce tick “belli” e densi */
+function buildTimelineTicks(min: number, max: number, targetTicks = 12) {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [];
   const span = Math.abs(max - min);
   const rawStep = span / Math.max(1, targetTicks);
@@ -125,9 +141,9 @@ const OSM_STYLE: any = {
     osm: {
       type: "raster",
       tiles: [
-        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y].png".replace("]", "}"),
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y].png".replace("]", "}"),
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y].png".replace("]", "}"),
       ],
       tileSize: 256,
       attribution: "© OpenStreetMap contributors",
@@ -136,39 +152,208 @@ const OSM_STYLE: any = {
   layers: [{ id: "osm", type: "raster", source: "osm" }],
 };
 
-/** Hook semplice per desktop (≥lg) */
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(false);
+type OverlayMode = "overlay" | "full";
+
+/* ===================== Player Overlay (2 livelli) ===================== */
+function MediaOverlay({
+  open,
+  mode,
+  media,
+  onClose,
+  onToggleMode,
+}: {
+  open: boolean;
+  mode: OverlayMode;
+  media: MediaItem | null;
+  onClose: () => void;
+  onToggleMode: () => void;
+}) {
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const onChange = () => setIsDesktop(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-  return isDesktop;
+    if (!open) return;
+    if (mode === "full") {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [open, mode]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open || !media) return null;
+
+  const isVideo = media.type === "video";
+  const isYouTube = isVideo && /youtu\.?be/.test(media.url);
+
+  const base =
+    mode === "full"
+      ? "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80"
+      : "fixed right-4 bottom-4 z-[900]";
+
+  const box =
+    mode === "full"
+      ? "relative w/[min(96vw,1200px)] w-[min(96vw,1200px)] aspect-video rounded-2xl overflow-hidden shadow-2xl bg-black"
+      : "relative w-[min(80vw,520px)] aspect-video rounded-2xl overflow-hidden shadow-xl bg-black";
+
+  return (
+    <div className={base} aria-modal="true" role="dialog">
+      <div className={box}>
+        <div className="absolute top-2 right-2 z-[5] flex items-center gap-2">
+          <button
+            onClick={onToggleMode}
+            className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
+            title={mode === "full" ? "Riduci finestra" : "Schermo intero"}
+          >
+            {mode === "full" ? "↘" : "↗"}
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
+            title="Chiudi"
+          >
+            ✕
+          </button>
+        </div>
+
+        {isVideo ? (
+          isYouTube ? (
+            <iframe
+              className="w-full h-full"
+              src={
+                media.url
+                  .replace("watch?v=", "embed/")
+                  .replace("youtu.be/", "www.youtube.com/embed/") +
+                (media.url.includes("?") ? "" : "?") +
+                "&rel=0&modestbranding=1&playsinline=1"
+              }
+              title="Journey video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          ) : (
+            <video
+              className="w-full h-full object-contain bg-black"
+              src={media.url}
+              poster={media.preview || undefined}
+              controls
+              playsInline
+              controlsList="nodownload"
+            />
+          )
+        ) : (
+          <img src={media.url || media.preview || ""} alt="media" className="w-full h-full object-contain bg-black" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== MediaBox (con taglia XS) ===================== */
+function MediaBox({
+  items,
+  firstPreview,
+  onOpenOverlay,
+  compact = false,
+  hideHeader = false,
+  height = "md",
+}: {
+  items: MediaItem[];
+  firstPreview?: string | null;
+  onOpenOverlay: (item: MediaItem) => void;
+  compact?: boolean;
+  hideHeader?: boolean;
+  height?: "xs" | "sm" | "md" | "lg";
+}) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (!items?.length) return;
+    if (!firstPreview) { setIndex(0); return; }
+    const i = items.findIndex((m) => (m.preview || m.url) === firstPreview);
+    setIndex(i >= 0 ? i : 0);
+  }, [items, firstPreview]);
+
+  if (!items || items.length === 0) return null;
+
+  const curr = items[index];
+  const isVideo = curr?.type === "video";
+
+  const goPrev = () => setIndex((i) => (i - 1 + items.length) % items.length);
+  const goNext = () => setIndex((i) => (i + 1) % items.length);
+
+  const heightClass =
+    height === "xs" ? "h-24" :
+    height === "sm" ? "h-28" :
+    height === "lg" ? "h-56" :
+    "h-40";
+
+  return (
+    <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}>
+      {hideHeader ? (
+        <div className="absolute left-2 top-2 z-[3] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white">
+          {index + 1}/{items.length}
+        </div>
+      ) : null}
+
+      <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}>
+        {isVideo ? (
+          <div className="relative w-full h-full bg-black/80 flex items-center justify-center">
+            {curr.preview ? (
+              <img src={curr.preview} alt="video preview" className="absolute inset-0 w-full h-full object-cover opacity-60" />
+            ) : null}
+            <button
+              onClick={() => onOpenOverlay(curr)}
+              className="relative inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-sm font-medium text-gray-900 shadow hover:bg-white"
+              title="Riproduci video"
+            >
+              ▶
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => onOpenOverlay(curr)} className="block w-full h-full" title="Apri immagine">
+            <img src={curr.preview || curr.url} alt="media" className="w-full h-full object-cover" />
+          </button>
+        )}
+
+        {items.length > 1 ? (
+          <>
+            <button
+              onClick={goPrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
+              title="Precedente"
+            >
+              ◀
+            </button>
+            <button
+              onClick={goNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
+              title="Successivo"
+            >
+              ▶
+            </button>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
 }
 
 /* ===================== Pagina ===================== */
 export default function GroupEventModulePage() {
   const router = useRouter();
   const sp = useSearchParams();
-  const isDesktop = useIsDesktop();
-
-  // ✅ Supabase client (auth-helpers) per componenti client
   const supabase = useMemo(() => createClientComponentClient(), []);
-
-  // ✅ Current user centralizzato (niente getUser/onAuthStateChange sparsi)
   const { userId } = useCurrentUser();
 
-  // lingua
   const desiredLang =
     (sp.get("lang") ||
       (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
       "it").toLowerCase();
 
-  // gid
   const [gid, setGid] = useState<string | null>(null);
   const group_event_id = gid;
 
@@ -176,9 +361,12 @@ export default function GroupEventModulePage() {
   const [landingHref, setLandingHref] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = sp.get("gid")?.trim() ?? null;
-    if (raw) {
-      const clean = raw.split("?")[0].split("&")[0].trim();
+    const raw = sp.get("gid")?.trim ?? null;
+    const value = typeof raw === "function" ? sp.get("gid")?.trim() : sp.get("gid");
+    const input = (value ?? undefined) as string | undefined;
+
+    if (input) {
+      const clean = input.split("?")[0].split("&")[0].trim();
       if (UUID_RE.test(clean)) setGid(clean);
       else setErr("Missing/invalid gid. Usa /module/group_event?gid=<UUID>.");
     } else {
@@ -195,7 +383,6 @@ export default function GroupEventModulePage() {
     }
   }, [sp]);
 
-  // landing ref
   useEffect(() => {
     try {
       const ref = (typeof document !== "undefined" && document.referrer) || "";
@@ -205,24 +392,40 @@ export default function GroupEventModulePage() {
     } catch {}
   }, []);
 
-  // dati GE
   const [ge, setGe] = useState<AnyObj | null>(null);
   const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string } | null>(null);
   const [rows, setRows] = useState<EventVM[]>([]);
   const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
+
+  const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
+  const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
+
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  // mappa
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
+  const [overlayMedia, setOverlayMedia] = useState<MediaItem | null>(null);
+
+  const openOverlay = useCallback((m: MediaItem) => {
+    setOverlayMedia(m);
+    setOverlayMode("overlay");
+    setOverlayOpen(true);
+  }, []);
+  const closeOverlay = useCallback(() => {
+    setOverlayOpen(false);
+    setTimeout(() => setOverlayMedia(null), 180);
+  }, []);
+  const toggleOverlayMode = useCallback(() => {
+    setOverlayMode((prev) => (prev === "overlay" ? "full" : "overlay"));
+  }, []);
+
+  /* ===== Mappa ===== */
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<MapLibreMarker[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
-
-  // refs banda eventi
-  const bandRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   function getVisibleMapContainer(): HTMLElement | null {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-map="gehj"]'));
@@ -236,20 +439,17 @@ export default function GroupEventModulePage() {
     return null;
   }
 
-  // init map
   useEffect(() => {
     if (typeof window === "undefined" || mapRef.current) return;
 
     let cancelled = false;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 120;
+    let attempts = 120;
 
-    const init = () => {
+    const tick = () => {
       if (cancelled || mapRef.current) return;
       const container = getVisibleMapContainer();
       if (!container) {
-        attempts++;
-        if (attempts <= MAX_ATTEMPTS) return setTimeout(init, 50);
+        if (attempts-- > 0) return setTimeout(tick, 50);
         return;
       }
 
@@ -284,11 +484,11 @@ export default function GroupEventModulePage() {
       } catch (e) { console.error("[GE] Map init error:", e); }
     };
 
-    init();
+    tick();
     return () => { cancelled = true; };
   }, []);
 
-  // fetch dati
+  /* ===== Fetch ===== */
   useEffect(() => {
     if (!gid) return;
     (async () => {
@@ -324,7 +524,7 @@ export default function GroupEventModulePage() {
           .select(
             `event_id, group_event_id, description, lang, title, video_url, wikipedia_url,
              continent, country, era, exact_date, id, image_url, latitude, longitude, year_from, year_to,
-             journey_title`
+             journey_title, journey_media, journey_media_first, event_media, event_media_first`
           )
           .eq("group_event_id", gid);
         if (vjErr) throw vjErr;
@@ -342,21 +542,30 @@ export default function GroupEventModulePage() {
             location,
             image_url: r.image_url ?? null,
           };
-          return {
+          const ev: EventVM = {
             ...core,
             title: (r.title ?? location ?? "Untitled").toString(),
             description: (r.description ?? "").toString(),
             wiki_url: r.wikipedia_url ? String(r.wikipedia_url) : null,
             video_url: r.video_url ? String(r.video_url) : null,
             order_key: chronoOrderKey(core),
+            event_media: Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [],
+            event_media_first: r.event_media_first ?? null,
           };
+          return ev;
         });
         vms.sort((a, b) => a.order_key - b.order_key);
+
+        const j0 = (vjRows ?? [])[0] as any;
+        const jm: MediaItem[] = Array.isArray(j0?.journey_media) ? j0.journey_media : [];
+        const jmFirst: string | null = j0?.journey_media_first ?? null;
 
         setGe(geData);
         setGeTr(geTrData);
         setRows(vms);
-        setJourneyTitle(vjRows?.[0]?.journey_title ?? null);
+        setJourneyTitle(j0?.journey_title ?? null);
+        setJourneyMedia(jm);
+        setJourneyMediaFirst(jmFirst);
         setSelectedIndex(0);
       } catch (e: any) {
         setErr(e?.message ?? "Unknown error");
@@ -367,7 +576,8 @@ export default function GroupEventModulePage() {
     })();
   }, [gid, desiredLang, supabase]);
 
-  // preferiti (usa userId dall’hook)
+  /* ===== Preferiti ===== */
+  const { userId: _uid } = useCurrentUser();
   const [isFav, setIsFav] = useState<boolean>(false);
   const [savingFav, setSavingFav] = useState<boolean>(false);
 
@@ -375,19 +585,19 @@ export default function GroupEventModulePage() {
     (async () => {
       if (!gid) return;
       try {
-        if (!userId) { setIsFav(false); return; }
+        if (!_uid) { setIsFav(false); return; }
         let { data: fav, error } = await supabase
           .from("group_event_favourites").select("id")
-          .eq("group_event_id", gid).eq("profile_id", userId).maybeSingle();
+          .eq("group_event_id", gid).eq("profile_id", _uid).maybeSingle();
         if (error) {
           const alt = await supabase
             .from("group_event_favourites").select("id")
-            .eq("group_event_id", gid).eq("user_id", userId).maybeSingle();
+            .eq("group_event_id", gid).eq("user_id", _uid).maybeSingle();
           setIsFav(!!alt.data);
         } else setIsFav(!!fav);
       } catch { setIsFav(false); }
     })();
-  }, [gid, supabase, userId]);
+  }, [gid, supabase, _uid]);
 
   async function toggleFavourite() {
     if (!gid) return;
@@ -419,19 +629,7 @@ export default function GroupEventModulePage() {
     } finally { setSavingFav(false); }
   }
 
-  // markers
-  function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
-    const n = ids.length;
-    if (n === 1) return [[0, 0]] as [number, number][];
-    const arr: [number, number][] = [];
-    const radius = radiusBase + Math.min(12, Math.round(n * 1.2));
-    for (let i = 0; i < n; i++) {
-      const angle = (2 * Math.PI * i) / n;
-      arr.push([Math.round(radius * Math.cos(angle)), Math.round(radius * Math.sin(angle))]);
-    }
-    return arr;
-  }
-
+  /* ===== Marker rendering ===== */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -450,7 +648,17 @@ export default function GroupEventModulePage() {
 
     const pixelOffsetById = new Map<string, [number, number]>();
     groups.forEach((g) => {
-      const offs = computePixelOffsetsForSameCoords(g.ids);
+      const offs = (function computePixelOffsetsForSameCoords(ids: string[], radiusBase = 16) {
+        const n = ids.length;
+        if (n === 1) return [[0, 0]] as [number, number][];
+        const arr: [number, number][] = [];
+        const radius = radiusBase + Math.min(12, Math.round(n * 1.2));
+        for (let i = 0; i < n; i++) {
+          const angle = (2 * Math.PI * i) / n;
+          arr.push([Math.round(radius * Math.cos(angle)), Math.round(radius * Math.sin(angle))]);
+        }
+        return arr;
+      })(g.ids);
       g.ids.forEach((id, i) => pixelOffsetById.set(id, offs[i]));
     });
 
@@ -486,7 +694,7 @@ export default function GroupEventModulePage() {
       if (ev.latitude == null || ev.longitude == null) return;
 
       const el = makeMarkerEl(idx);
-      const pxOff = (pixelOffsetById.get(ev.id) as [number, number]) ?? [0, 0];
+      const pxOff = pixelOffsetById.get(ev.id) ?? [0, 0];
 
       const marker = new maplibregl.Marker({ element: el, offset: pxOff as any })
         .setLngLat([ev.longitude!, ev.latitude!])
@@ -529,7 +737,10 @@ export default function GroupEventModulePage() {
     }
   }, [selectedIndex, rows]);
 
-  // auto-scroll banda
+  /* ===== Refs per banda eventi ===== */
+  const bandRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
   useEffect(() => {
     const ev = rows[selectedIndex];
     if (!ev) return;
@@ -542,13 +753,14 @@ export default function GroupEventModulePage() {
 
   function onBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
+      (router as any).jump?.(-1);
       router.back();
       return;
     }
     router.push(landingHref || "/landing");
   }
 
-  /* ===================== Timeline ===================== */
+  /* ===== Timeline ridotta con timeframe ricco ===== */
   const timelineData = useMemo(() => {
     if (!rows.length) return null;
 
@@ -572,15 +784,13 @@ export default function GroupEventModulePage() {
     return { min, max, range: safeSpan, items } as TimelineData;
   }, [rows]);
 
-  const geTitle = (geTr?.title || ge?.title || "Journey").toString();
-
   function Timeline3D() {
     const data = timelineData;
     if (!data) return null;
 
-    const ticks = buildTimelineTicks(data.min, data.max, isDesktop ? 12 : 6);
-    const axisH = isDesktop ? "h-[12px]" : "h-[8px]";
-    const diamondSize = isDesktop ? 18 : 14;
+    const ticks = buildTimelineTicks(data.min, data.max, 12); // più etichette
+    const axisH = "h-[8px]";
+    const diamondSize = 12;
 
     let pct = 50;
     {
@@ -595,59 +805,53 @@ export default function GroupEventModulePage() {
     }
 
     return (
-      <div className={`relative flex flex-col items-center justify-center rounded-2xl border border-slate-300 bg-gradient-to-b from-white to-slate-50 px-6 ${isDesktop ? "py-6" : "py-3"} shadow-[inset_0_2px_10px_rgba(255,255,255,0.9),0_10px_18px_rgba(15,23,42,0.08)]`}>
+      <div className="relative flex flex-col justify-between h-full">
+        {/* Barra timeline */}
         <div className={`relative w-full ${axisH} rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner`}>
           <div
-            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-2 border-white bg-blue-500 shadow"
-            style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 8px rgba(30,64,175,0.55)" }}
+            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white bg-blue-500 shadow"
+            style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 6px rgba(30,64,175,0.45)" }}
           />
           {ticks.map((t, i) => {
             const pos = ((t - data.min) / data.range) * 100;
             return (
               <div
                 key={`tick-${i}`}
-                className="absolute top-0 h-[8px] w-[2px] -translate-x-1/2 bg-blue-900/60"
+                className="absolute top-0 h-[6px] w-[2px] -translate-x-1/2 bg-blue-900/60"
                 style={{ left: `${pos}%` }}
               />
             );
           })}
         </div>
 
-        {!isDesktop ? (
-          <div className="mt-1.5 relative w-full h-5">
-            <div className="absolute inset-x-0 -bottom-0 flex justify-between text-[11.5px] font-medium text-blue-800/90">
-              <span>{formatTimelineYearLabel(data.min)}</span>
-              <span>{formatTimelineYearLabel((data.min + data.max) / 2)}</span>
-              <span>{formatTimelineYearLabel(data.max)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-2 relative w-full" style={{ minHeight: 24 }}>
-            <div className="absolute left-0 -bottom-0 translate-y-1 text-[12px] font-medium text-blue-800/90">
-              {formatTimelineYearLabel(data.min)}
-            </div>
-            <div className="absolute right-0 -bottom-0 translate-y-1 text-[12px] font-medium text-blue-800/90">
-              {formatTimelineYearLabel(data.max)}
-            </div>
-            {ticks.map((t, i) => {
-              const pos = ((t - data.min) / data.range) * 100;
-              return (
-                <div
-                  key={`label-${i}`}
-                  className="absolute -bottom-0 translate-y-1 -translate-x-1/2 text-[11.5px] text-blue-900/90"
-                  style={{ left: `${pos}%`, whiteSpace: "nowrap" }}
-                >
-                  {formatTimelineYearLabel(t)}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Etichette sotto la barra: min, tick intermedi, max */}
+        <div className="relative mt-1 h-5">
+          {/* min */}
+          <span className="absolute left-0 -translate-x-0 text-[10px] text-slate-700">
+            {formatTimelineYearLabel(data.min)}
+          </span>
+          {/* intermedi */}
+          {ticks.map((t, i) => {
+            const pos = ((t - data.min) / data.range) * 100;
+            return (
+              <span
+                key={`lbl-${i}`}
+                className="absolute top-0 text-[10px] text-slate-600 -translate-x-1/2 whitespace-nowrap"
+                style={{ left: `${pos}%` }}
+              >
+                {formatTimelineYearLabel(t)}
+              </span>
+            );
+          })}
+          {/* max */}
+          <span className="absolute right-0 translate-x-0 text-[10px] text-slate-700">
+            {formatTimelineYearLabel(data.max)}
+          </span>
+        </div>
       </div>
     );
   }
 
-  /* ===================== UI states ===================== */
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
@@ -672,48 +876,65 @@ export default function GroupEventModulePage() {
     );
   }
 
+  const selectedEvent = rows[selectedIndex];
+
   /* ===================== RENDER ===================== */
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      {/* ===== HEADER: Titolo + Timeline ============ */}
-      {timelineData ? (
-        <section className="border-b border-slate-200 bg-white/95 shadow-sm">
-          <div className="mx-auto max-w-7xl px-4 py-2 lg:grid lg:grid-cols-[420px_minmax(0,1fr)] lg:items-center lg:gap-6 lg:px-8 lg:py-4">
-            {/* Colonna sinistra (titolo + preferiti) */}
-            <div className="flex flex-col justify-start rounded-xl border border-slate-200 bg-white p-3 lg:p-5 shadow-[inset_0_2px_6px_rgba(0,0,0,0.06)]">
-              <h1 className="text-base lg:text-xl font-semibold text-slate-900 text-left leading-snug break-words whitespace-pre-line">
-                {journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey"}
-              </h1>
-              <div className="mt-2 flex items-center gap-2 lg:mt-3 lg:gap-3">
-                <button
-                  onClick={toggleFavourite}
-                  disabled={!group_event_id || savingFav}
-                  className={`rounded-full border px-3 py-1 text-xs lg:text-sm transition ${
-                    isFav ? "border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {isFav ? "♥ Favourite" : "♡ Favourite"}
-                </button>
-                {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+      {/* ===== HEADER: 1 RIGA × 3 COLONNE (altezza uguale) ===== */}
+      <section className="border-b border-slate-200 bg-white/95 shadow-sm">
+        <div className="mx-auto max-w-7xl px-3 py-3 lg:px-8 lg:py-4">
+            <div className="grid grid-cols-[1.8fr_0.9fr_2.3fr] gap-3 items-stretch">
+              {/* [1] Titolo + Favourite (h uguale) */}
+              <div className="h-32 rounded-xl border border-slate-200 bg-white p-3 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex flex-col justify-between">
+                <h1 className="text-base lg:text-xl font-semibold text-slate-900 leading-snug break-words whitespace-pre-line line-clamp-2">
+                  {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
+                </h1>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={toggleFavourite}
+                    disabled={!group_event_id || savingFav}
+                    className={`rounded-full border px-3 py-1 text-xs lg:text-sm transition ${
+                      isFav ? "border-rose-400 bg-rose-50 text-rose-700 hover:bg-rose-100" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {isFav ? "♥ Favourite" : "♡ Favourite"}
+                  </button>
+                  {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+                </div>
               </div>
 
-              {/* Timeline sotto al titolo SOLO su mobile */}
-              <div className="mt-2 lg:hidden">
-                <Timeline3D />
+              {/* [2] Media del Journey (contenitore h-32, **contenuto XS**) */}
+              <div className="h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
+                <div className="flex-1">
+                  {journeyMedia?.length ? (
+                    <MediaBox
+                      items={journeyMedia}
+                      firstPreview={journeyMediaFirst || undefined}
+                      onOpenOverlay={openOverlay}
+                      hideHeader
+                      height="xs"   // ⟵ ridotto
+                      compact
+                    />
+                  ) : (
+                    <div className="h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+                      Nessun media del journey
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* [3] Timeline ridotta (più larga) con timeframe ricco */}
+              <div className="h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
+                <div className="flex-1">
+                  <Timeline3D />
+                </div>
               </div>
             </div>
+        </div>
+      </section>
 
-            {/* Colonna destra: timeline allineata al titolo su desktop */}
-            <div className="hidden lg:flex items-center">
-              <div className="w-full">
-                <Timeline3D />
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {/* ===== BANDA EVENTI (sotto header) ===== */}
+      {/* ===== BANDA EVENTI ===== */}
       <section className="border-b border-black/10 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-2" ref={bandRef}>
           <div className="flex items-center justify-between mb-1.5">
@@ -764,14 +985,12 @@ export default function GroupEventModulePage() {
         </div>
       </section>
 
-      {/* ===== MOBILE: layout panoramico senza scroll pagina ===== */}
+      {/* ===== MOBILE: Descrizione + Media evento + Mappa ===== */}
       <div className="mx-auto w-full max-w-7xl lg:hidden overflow-hidden">
-        {/* DESCRIZIONE */}
         <section className="bg-white/70 backdrop-blur">
           <div className="px-4 py-2">
             <div className="mx-auto w-full max-w-[820px]">
               <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm h-[30svh] flex flex-col">
-                {/* Barra controlli */}
                 <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
@@ -790,38 +1009,44 @@ export default function GroupEventModulePage() {
                   >⏭</button>
                 </div>
 
-                {/* Immagine (se presente) */}
-                {rows[selectedIndex]?.image_url ? (
+                {selectedEvent?.event_media?.length ? (
+                  <div className="px-3 pt-2">
+                    <MediaBox
+                      items={selectedEvent.event_media}
+                      firstPreview={selectedEvent.event_media_first || undefined}
+                      onOpenOverlay={openOverlay}
+                      compact
+                      height="sm"
+                    />
+                  </div>
+                ) : selectedEvent?.image_url ? (
                   <div className="px-3 pt-2">
                     <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
                       <img
-                        src={rows[selectedIndex]!.image_url!}
-                        alt={rows[selectedIndex]!.title}
+                        src={selectedEvent.image_url}
+                        alt={selectedEvent.title}
                         className="h-32 w-full object-cover"
                       />
                     </div>
                   </div>
                 ) : null}
 
-                {/* Località */}
-                {rows[selectedIndex]?.location ? (
+                {selectedEvent?.location ? (
                   <div className="px-3 pt-2 text-[11.5px] text-gray-600">
-                    {rows[selectedIndex]!.location}
+                    {selectedEvent.location}
                   </div>
                 ) : null}
 
-                {/* Testo con scroll interno */}
                 <div className="px-3 pt-1 pb-2">
                   <div className="h-[calc(30svh-40px-8px-8px-0.5rem)] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
                        style={{ scrollbarWidth: "thin" }}>
-                    {rows[selectedIndex]?.description || "No description available."}
+                    {selectedEvent?.description || "No description available."}
                   </div>
 
-                  {/* Link utili */}
                   <div className="pt-2 flex items-center gap-3">
-                    {rows[selectedIndex]?.wiki_url ? (
+                    {selectedEvent?.wiki_url ? (
                       <a
-                        href={rows[selectedIndex]!.wiki_url!}
+                        href={selectedEvent.wiki_url}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -829,9 +1054,9 @@ export default function GroupEventModulePage() {
                         Wikipedia →
                       </a>
                     ) : null}
-                    {rows[selectedIndex]?.video_url ? (
+                    {selectedEvent?.video_url ? (
                       <a
-                        href={rows[selectedIndex]!.video_url!}
+                        href={selectedEvent.video_url}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -847,7 +1072,6 @@ export default function GroupEventModulePage() {
           </div>
         </section>
 
-        {/* MAPPA compatta */}
         <section className="relative h-[28svh] min-h-[240px] border-t border-black/10">
           <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
           {!mapLoaded && (
@@ -858,9 +1082,9 @@ export default function GroupEventModulePage() {
         </section>
       </div>
 
-      {/* ===== DESKTOP: Descrizione (sx) -> Mappa (dx) ===== */}
+      {/* ===== DESKTOP ===== */}
       <div className="mx-auto hidden w-full max-w-7xl lg:block">
-        <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0 h-[calc(100svh-36svh)]">
+        <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0">
           {/* DESCRIZIONE */}
           <section className="overflow-y-auto bg-white/70 backdrop-blur">
             <div className="px-4 py-4">
@@ -882,36 +1106,42 @@ export default function GroupEventModulePage() {
                 >⏭</button>
               </div>
 
-              {/* Località */}
-              {rows[selectedIndex]?.location ? (
+              {selectedEvent?.location ? (
                 <div className="text-[12.5px] text-gray-600 mb-2">
-                  {rows[selectedIndex]!.location}
+                  {selectedEvent.location}
                 </div>
               ) : null}
 
-              {/* Immagine */}
-              {rows[selectedIndex]?.image_url ? (
+              {selectedEvent?.event_media?.length ? (
+                <div className="mb-3">
+                  <MediaBox
+                    items={selectedEvent.event_media}
+                    firstPreview={selectedEvent.event_media_first || undefined}
+                    onOpenOverlay={openOverlay}
+                    compact
+                    height="sm"
+                  />
+                </div>
+              ) : selectedEvent?.image_url ? (
                 <div className="mb-3">
                   <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
                     <img
-                      src={rows[selectedIndex]!.image_url!}
-                      alt={rows[selectedIndex]!.title}
+                      src={selectedEvent.image_url}
+                      alt={selectedEvent.title}
                       className="h-44 w-full object-cover"
                     />
                   </div>
                 </div>
               ) : null}
 
-              {/* Testo */}
               <div className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
-                {rows[selectedIndex]?.description || "No description available."}
+                {selectedEvent?.description || "No description available."}
               </div>
 
-              {/* Link utili */}
               <div className="pt-2 flex items-center gap-3">
-                {rows[selectedIndex]?.wiki_url ? (
+                {selectedEvent?.wiki_url ? (
                   <a
-                    href={rows[selectedIndex]!.wiki_url!}
+                    href={selectedEvent.wiki_url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -919,9 +1149,9 @@ export default function GroupEventModulePage() {
                     Wikipedia →
                   </a>
                 ) : null}
-                {rows[selectedIndex]?.video_url ? (
+                {selectedEvent?.video_url ? (
                   <a
-                    href={rows[selectedIndex]!.video_url!}
+                    href={selectedEvent.video_url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
@@ -945,6 +1175,15 @@ export default function GroupEventModulePage() {
           </section>
         </div>
       </div>
+
+      {/* Overlay/Full-screen player */}
+      <MediaOverlay
+        open={overlayOpen}
+        mode={overlayMode}
+        media={overlayMedia}
+        onClose={closeOverlay}
+        onToggleMode={toggleOverlayMode}
+      />
     </div>
   );
 }

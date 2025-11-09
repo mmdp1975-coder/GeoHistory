@@ -1,4 +1,3 @@
-// PATH: frontend/app/module/landing/page.tsx
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -87,8 +86,8 @@ export default function LandingPage(): JSX.Element {
 
       {/* GRID 2 COLONNE */}
       <div className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 md:grid-cols-2 md:gap-8 md:py-10">
-        {/* SINISTRA: pannelli — z-30 e isolate, sempre cliccabili */}
-        <div className="flex flex-col gap-4 z-30 isolate pointer-events-auto">
+        {/* SINISTRA: pannelli — z-40 per stare sempre sopra al globo */}
+        <div className="relative flex flex-col gap-4 z-40 isolate pointer-events-auto">
           {/* WELCOME */}
           <div className="relative rounded-2xl border border-neutral-200 bg-white/90 shadow-lg backdrop-blur-md">
             <div className="flex items-center justify-between gap-3 border-b border-neutral-200 px-5 py-3">
@@ -143,7 +142,7 @@ export default function LandingPage(): JSX.Element {
             </div>
           </div>
 
-          {/* DISCOVER (Most Rated, Favourites, New Journeys) */}
+          {/* DISCOVER */}
           <div className="relative rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur-md">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-base font-semibold text-neutral-900">Discover</h3>
@@ -208,7 +207,8 @@ export default function LandingPage(): JSX.Element {
           </div>
 
           <div className="px-5 pb-5 pt-3 relative">
-            <div className="p-3 relative z-10">
+            {/* declasso lo stack del contenitore interno del canvas */}
+            <div className="p-3 relative z-0">
               <div style={{ width: '100%', height: GLOBE_H }}>
                 <GlobeCanvas
                   height={GLOBE_H}

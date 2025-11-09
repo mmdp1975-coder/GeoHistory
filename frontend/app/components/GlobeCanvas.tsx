@@ -1,4 +1,3 @@
-// PATH: frontend/app/components/GlobeCanvas.tsx
 "use client";
 import * as React from "react";
 import * as THREE from "three";
@@ -188,6 +187,15 @@ function CityDots({
     return { minIdx, minDist };
   };
 
+  // Utility per sicurezza: rilascia eventuale capture sul target
+  const releaseCapture = (e: ThreeEvent<PointerEvent>) => {
+    const tgt: any = e.target;
+    try {
+      // @ts-ignore
+      tgt?.releasePointerCapture?.(e.pointerId);
+    } catch {}
+  };
+
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
     const { minIdx, minDist } = updateNearest(e.clientX, e.clientY);
     if (minIdx >= 0 && minDist < 0.15) {
@@ -209,6 +217,7 @@ function CityDots({
 
   const onPointerUp = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
+    releaseCapture(e);
     const { minIdx, minDist } = updateNearest(e.clientX, e.clientY);
     if (minIdx >= 0 && minDist < 0.12) {
       const c = cities[minIdx];
@@ -266,12 +275,10 @@ function GlobeMesh({
 
   const releaseCapture = (e: ThreeEvent<PointerEvent>) => {
     const tgt: any = e.target;
-    if (tgt && typeof tgt.releasePointerCapture === "function") {
-      try {
-        // @ts-ignore
-        tgt.releasePointerCapture(e.pointerId);
-      } catch {}
-    }
+    try {
+      // @ts-ignore
+      tgt?.releasePointerCapture?.(e.pointerId);
+    } catch {}
   };
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
@@ -285,7 +292,7 @@ function GlobeMesh({
     releaseCapture(e);
     onDragEnd();
 
-    // Intersezione robusta: usa il raycaster del frame event
+    // Intersezione robusta: usa il punto colpito
     const p = e.point as THREE.Vector3;
     if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
       const { lat, lon } = vector3ToLatLon(p);
@@ -347,6 +354,21 @@ export default function GlobeCanvas({
   const [pointerOver, setPointerOver] = React.useState(false);
   const [hoveringCity, setHoveringCity] = React.useState(false);
 
+  // ✅ Failsafe globale: qualsiasi pointerup/cancel su window chiude il drag
+  React.useEffect(() => {
+    const end = () => setDragging(false);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+    window.addEventListener("mouseup", end, true);
+    window.addEventListener("touchend", end, true);
+    return () => {
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      window.removeEventListener("mouseup", end, true);
+      window.removeEventListener("touchend", end, true);
+    };
+  }, []);
+
   React.useEffect(() => {
     async function loadAll() {
       const [cont, coun, city] = await Promise.all([
@@ -396,7 +418,6 @@ export default function GlobeCanvas({
       if (!dataReady) {
         setContinent("-");
         setCountry("-");
-        // Nearest city verrà ricalcolata appena i dati sono pronti
         return;
       }
 
@@ -431,7 +452,7 @@ export default function GlobeCanvas({
       }
       setCountry(countryName || "Unknown");
 
-      // nearest city — usa TUTTE le città
+      // nearest city — usa tutte le città
       if (citiesData.length) {
         let bestIdx = -1;
         let minD = Infinity;
@@ -478,7 +499,8 @@ export default function GlobeCanvas({
 
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
-  const globeHeight = typeof height === "number" ? height : 700;
+  // Altezza globo leggermente ridotta per avvicinare il footer senza overlap
+  const globeHeight = (typeof height === "number" ? height : 700) - 12;
 
   // Cursor: pointer su città, grab/grabbing sul globo
   const cursorStyle = React.useMemo(() => {
@@ -503,6 +525,16 @@ export default function GlobeCanvas({
           dpr={[1, 2]}
           camera={{ fov: 40, near: 0.1, far: 1000 }}
           gl={{ antialias: true }}
+          // ✅ Se il rilascio non colpisce oggetti della scena, chiudi eventuale drag/capture
+          onPointerMissed={() => {
+            setDragging(false);
+            setPointerOver(false);
+          }}
+          // ✅ Se esci dal canvas, assicurati di non “bloccare” i click esterni
+          onPointerLeave={() => {
+            setDragging(false);
+            setPointerOver(false);
+          }}
         >
           <ambientLight intensity={1.0} />
           <directionalLight position={[5, 3, 5]} intensity={1.2} />
@@ -518,7 +550,7 @@ export default function GlobeCanvas({
             onDragEnd={() => setDragging(false)}
             onPickCity={(lat, lon, cityName) => {
               updateAttributesFor(lat, lon);
-              setCityAsNearest(cityName); // forza il nome città selezionata
+              setCityAsNearest(cityName);
             }}
             setHoveringCity={setHoveringCity}
           />
@@ -526,11 +558,22 @@ export default function GlobeCanvas({
       </div>
 
       {/* FOOTER COORDINATE */}
-      <div className="border-t border-neutral-200 bg-white/90 text-xs sm:text-sm" style={{ padding: 10 }}>
+      <div
+        className="border-t border-neutral-200 bg-white/90 text-xs sm:text-sm"
+        style={{
+          padding: "4px 10px 8px 10px",
+          position: "relative",
+          zIndex: 5,
+        }}
+      >
         <div className="grid gap-x-6 gap-y-2 grid-cols-1 sm:grid-cols-2">
           <div className="min-w-0">
-            <div className="whitespace-nowrap">Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span></div>
-            <div className="whitespace-nowrap">Lon: <span className="break-words">{picked ? picked.lon.toFixed(4) : "-"}</span></div>
+            <div className="whitespace-nowrap">
+              Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span>
+            </div>
+            <div className="whitespace-nowrap">
+              Lon: <span className="break-words">{picked ? picked.lon.toFixed(4) : "-"}</span>
+            </div>
             <div className="flex items-center gap-3 mt-2">
               <span className="whitespace-nowrap">City radius (km):</span>
               <input
@@ -546,9 +589,15 @@ export default function GlobeCanvas({
             </div>
           </div>
           <div className="min-w-0 break-words">
-            <div>Continent: <span className="break-words">{continent || "-"}</span></div>
-            <div>Country: <span className="break-words">{country || "-"}</span></div>
-            <div>Nearest city: <span className="break-words">{nearestCity || "-"}</span></div>
+            <div>
+              Continent: <span className="break-words">{continent || "-"}</span>
+            </div>
+            <div>
+              Country: <span className="break-words">{country || "-"}</span>
+            </div>
+            <div>
+              Nearest city: <span className="break-words">{nearestCity || "-"}</span>
+            </div>
           </div>
         </div>
       </div>
