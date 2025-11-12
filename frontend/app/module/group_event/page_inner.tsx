@@ -1,4 +1,4 @@
-// frontend/app/module/group_event/page_inner.tsx
+﻿// frontend/app/module/group_event/page_inner.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -44,6 +44,12 @@ type EventVM = EventCore & {
   order_key: number;
   event_media?: MediaItem[];
   event_media_first?: string | null;
+};
+
+type CorrelatedJourney = {
+  id: string;
+  slug: string | null;
+  title: string | null;
 };
 
 /* ===================== Util responsive ===================== */
@@ -125,7 +131,7 @@ function formatTimelineYearLabel(year: number) {
   return `${rounded} AD`;
 }
 
-/** Tick “belli” e più densi per il timeframe sotto la barra */
+/** Tick â€œbelliâ€ e piÃ¹ densi per il timeframe sotto la barra */
 function buildTimelineTicks(min: number, max: number, targetTicks = 12) {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [];
   const span = Math.abs(max - min);
@@ -148,6 +154,11 @@ function buildTimelineTicks(min: number, max: number, targetTicks = 12) {
   return ticks;
 }
 
+// Verifica sovrapposizione tra due intervalli timeline
+function spansOverlap(a: { min: number; max: number }, b: { min: number; max: number }, tol = 0) {
+  return a.max + tol >= b.min && b.max + tol >= a.min;
+}
+
 /* ===================== Stile mappa fallback ===================== */
 const OSM_STYLE: any = {
   version: 8,
@@ -160,7 +171,7 @@ const OSM_STYLE: any = {
         "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
       ],
       tileSize: 256,
-      attribution: "© OpenStreetMap contributors",
+      attribution: "Â© OpenStreetMap contributors",
     },
   },
   layers: [{ id: "osm", type: "raster", source: "osm" }],
@@ -232,14 +243,14 @@ function MediaOverlay({
             className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
             title={mode === "full" ? "Riduci finestra" : "Schermo intero"}
           >
-            {mode === "full" ? "↘" : "↗"}
+            {mode === "full" ? "â†˜" : "â†—"}
           </button>
           <button
             onClick={onClose}
             className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
             title="Chiudi"
           >
-            ✕
+            âœ•
           </button>
         </div>
 
@@ -272,7 +283,7 @@ function MediaOverlay({
   );
 }
 
-/* ===================== MediaBox (play → overlay con autoplay) ===================== */
+/* ===================== MediaBox (play â†’ overlay con autoplay) ===================== */
 function MediaBox({
   items,
   firstPreview,
@@ -297,7 +308,28 @@ function MediaBox({
     setIndex(i >= 0 ? i : 0);
   }, [items, firstPreview]);
 
-  if (!items || items.length === 0) return null;
+  // Se non ci sono media, mostra comunque un contenitore placeholder
+  if (!items || items.length === 0) {
+    const heightClass =
+      height === "xs" ? "h-24" :
+      height === "sm" ? "h-32" :
+      height === "lg" ? "h-56" :
+      "h-40";
+    return (
+      <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}>
+        {hideHeader ? null : (
+          <div className="absolute left-2 top-2 z-[3] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white">
+            0/0
+          </div>
+        )}
+        <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}>
+          <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+            Nessun media disponibile
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const curr = items[index];
   const isVideo = curr?.type === "video";
@@ -376,6 +408,7 @@ export default function GroupEventModulePage() {
       "it").toLowerCase();
 
   const [gid, setGid] = useState<string | null>(null);
+  const [eidParam, setEidParam] = useState<string | null>(null);
   const group_event_id = gid;
 
   const [err, setErr] = useState<string | null>(null);
@@ -385,6 +418,9 @@ export default function GroupEventModulePage() {
     const raw = sp.get("gid")?.trim ?? null;
     const value = typeof raw === "function" ? sp.get("gid")?.trim() : sp.get("gid");
     const input = (value ?? undefined) as string | undefined;
+    const eidRaw = sp.get("eid")?.trim ?? null;
+    const eidVal = typeof eidRaw === "function" ? sp.get("eid")?.trim() : sp.get("eid");
+    setEidParam(eidVal || null);
 
     if (input) {
       const clean = input.split("?")[0].split("&")[0].trim();
@@ -429,6 +465,10 @@ export default function GroupEventModulePage() {
   const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
   const [overlayMedia, setOverlayMedia] = useState<MediaItem | null>(null);
   const [overlayAutoplay, setOverlayAutoplay] = useState<boolean>(false);
+  const [concurrentOther, setConcurrentOther] = useState<Array<{ evId: string; geId: string; geTitle?: string | null; evTitle: string; startYear?: number }>>([]);
+
+  // Correlazioni: cache per event_id
+  const [corrByEvent, setCorrByEvent] = useState<Record<string, CorrelatedJourney[]>>({});
 
   const openOverlay = useCallback((m: MediaItem, opts?: { autoplay?: boolean }) => {
     setOverlayMedia(m);
@@ -565,6 +605,7 @@ export default function GroupEventModulePage() {
             location,
             image_url: r.image_url ?? null,
           };
+          // Build base event VM
           const ev: EventVM = {
             ...core,
             title: (r.title ?? location ?? "Untitled").toString(),
@@ -575,6 +616,32 @@ export default function GroupEventModulePage() {
             event_media: Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [],
             event_media_first: r.event_media_first ?? null,
           };
+          // Fallback: if no structured media but a video_url exists, create a single video media item
+          if ((!ev.event_media || ev.event_media.length === 0) && ev.video_url) {
+            ev.event_media = [
+              {
+                media_id: `video:${r.event_id ?? r.id}`,
+                type: "video",
+                url: String(ev.video_url),
+                preview: r.image_url ?? null,
+                role: "primary",
+              } as MediaItem,
+            ];
+            ev.event_media_first = ev.event_media[0].preview || ev.event_media[0].url;
+          }
+          // Secondo fallback: usa image_url come media immagine
+          if ((!ev.event_media || ev.event_media.length === 0) && core.image_url) {
+            ev.event_media = [
+              {
+                media_id: `image:${r.event_id ?? r.id}`,
+                type: "image",
+                url: String(core.image_url),
+                preview: String(core.image_url),
+                role: "primary",
+              } as MediaItem,
+            ];
+            ev.event_media_first = ev.event_media[0].preview || ev.event_media[0].url;
+          }
           return ev;
         });
         vms.sort((a, b) => a.order_key - b.order_key);
@@ -589,7 +656,12 @@ export default function GroupEventModulePage() {
         setJourneyTitle(j0?.journey_title ?? null);
         setJourneyMedia(jm);
         setJourneyMediaFirst(jmFirst);
-        setSelectedIndex(0);
+        if (eidParam) {
+          const idx = vms.findIndex((ev) => ev.id === eidParam);
+          setSelectedIndex(idx >= 0 ? idx : 0);
+        } else {
+          setSelectedIndex(0);
+        }
       } catch (e: any) {
         setErr(e?.message ?? "Unknown error");
         console.error("[GE] Fetch error:", e);
@@ -597,7 +669,44 @@ export default function GroupEventModulePage() {
         setLoading(false);
       }
     })();
-  }, [gid, desiredLang, supabase]);
+  }, [gid, desiredLang, supabase, eidParam]);
+
+  // Carica correlazioni per l'evento selezionato (lazy, senza viste)
+  useEffect(() => {
+    const ev = rows[selectedIndex];
+    if (!ev?.id) return;
+    if (corrByEvent[ev.id]) return; // cache
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("event_group_event_correlated")
+          .select("group_event_id, group_events!inner(id, slug), group_event_translations!left(title, lang)")
+          .eq("event_id", ev.id)
+          .eq("group_event_translations.lang", desiredLang);
+        if (error) throw error;
+
+        // Se non c'Ã¨ traduzione nella lingua, prendi una qualsiasi
+        let rowsCorr: any[] = data ?? [];
+        if (!rowsCorr.length) {
+          const { data: anyLang } = await supabase
+            .from("event_group_event_correlated")
+            .select("group_event_id, group_events!inner(id, slug), group_event_translations!left(title, lang)")
+            .eq("event_id", ev.id)
+            .limit(5);
+          rowsCorr = anyLang ?? [];
+        }
+
+        const items: CorrelatedJourney[] = rowsCorr.map((r: any) => ({
+          id: r.group_events?.id ?? r.group_event_id,
+          slug: r.group_events?.slug ?? null,
+          title: r.group_event_translations?.title ?? null,
+        }));
+        setCorrByEvent((prev) => ({ ...prev, [ev.id]: items }));
+      } catch (e) {
+        // silenzioso: nessuna correlazione
+      }
+    })();
+  }, [rows, selectedIndex, desiredLang, supabase, corrByEvent]);
 
   /* ===== Preferiti ===== */
   const { userId: _uid } = useCurrentUser();
@@ -812,8 +921,28 @@ export default function GroupEventModulePage() {
     if (!data) return null;
 
     const ticks = buildTimelineTicks(data.min, data.max, 12);
-    const axisH = "h-[8px]";
+    const tickYears = [data.min, ...ticks, data.max];
     const diamondSize = 12;
+    // Minor ticks: per-event start years, dedup + thinning to avoid clutter
+    const eventYearsAll = Array.from(
+      new Set(
+        (data.items || [])
+          .map((it) => Math.round(it.start))
+          .filter((y) => Number.isFinite(y) && y >= data.min && y <= data.max)
+      )
+    ).sort((a, b) => a - b);
+    const majorSet = new Set(tickYears.map((y) => Math.round(y)));
+    const eventYearsFiltered = eventYearsAll.filter((y) => !majorSet.has(Math.round(y)));
+    const minorTicks = (() => {
+      const kept: number[] = [];
+      const minGapPct = 2.5; // prevent overlapping
+      let lastPos = -Infinity;
+      for (const y of eventYearsFiltered) {
+        const pos = ((y - data.min) / Math.max(1, data.range)) * 100;
+        if (pos - lastPos >= minGapPct) { kept.push(y); lastPos = pos; }
+      }
+      return kept;
+    })();
 
     let pct = 50;
     {
@@ -828,43 +957,70 @@ export default function GroupEventModulePage() {
     }
 
     return (
-      <div className="relative flex flex-col justify-between h-full">
+      <div className="relative flex flex-col items-center justify-center h-full">
         {/* Barra timeline */}
         <div className="relative w-full h-[8px] rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner">
           <div
             className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white bg-blue-500 shadow"
             style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 6px rgba(30,64,175,0.45)" }}
           />
-          {ticks.map((t, i) => {
+          {minorTicks.map((t, i) => {
+            const pos = ((t - data.min) / data.range) * 100;
+            return (
+              <div
+                key={`mtick-${i}`}
+                className="absolute top-1/2 -translate-y-1/2 h-[10px] w-[1px] -translate-x-1/2 bg-blue-900/40"
+                style={{ left: `${pos}%` }}
+              />
+            );
+          })}
+          {tickYears.map((t, i) => {
             const pos = ((t - data.min) / data.range) * 100;
             return (
               <div
                 key={`tick-${i}`}
-                className="absolute top-0 h-[6px] w-[2px] -translate-x-1/2 bg-blue-900/60"
+                className="absolute top-1/2 -translate-y-1/2 h-[14px] w-[2px] -translate-x-1/2 bg-blue-900/70"
                 style={{ left: `${pos}%` }}
               />
             );
           })}
         </div>
 
-        {/* Etichette sotto la barra */}
-        <div className="relative mt-1 h-5">
-          <span className="absolute left-0 -translate-x-0 text-[10px] text-slate-700">
+        {/* Etichette sotto la barra (alternate su due righe) */}
+        <div className="relative mt-1 h-8 w-full">
+          <span className="absolute left-0 top-0 -translate-x-0 text-[10px] text-slate-700">
             {formatTimelineYearLabel(data.min)}
           </span>
-          {ticks.map((t, i) => {
-            const pos = ((t - data.min) / data.range) * 100;
+          {(() => {
+            const inner = tickYears.slice(1, -1).map((y, i) => ({
+              year: y,
+              pos: ((y - data.min) / Math.max(1, data.range)) * 100,
+              key: `ilbl-${i}`,
+            }));
+            const kept: { year: number; pos: number; key: string }[] = [];
+            const minGap = Math.max(8, 100 / Math.max(2, inner.length + 1));
+            let last = -Infinity;
+            inner.forEach((c) => {
+              if (c.pos - last >= minGap) { kept.push(c); last = c.pos; }
+            });
             return (
-              <span
-                key={`lbl-${i}`}
-                className="absolute top-0 text-[10px] text-slate-600 -translate-x-1/2 whitespace-nowrap"
-                style={{ left: `${pos}%` }}
-              >
-                {formatTimelineYearLabel(t)}
-              </span>
+              <>
+                {kept.map((c, idx) => (
+                  <span
+                    key={c.key}
+                    className="absolute text-[10px] text-slate-600 -translate-x-1/2 whitespace-nowrap"
+                    style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? '0px' : '14px' }}
+                  >
+                    {formatTimelineYearLabel(c.year)}
+                  </span>
+                ))}
+              </>
             );
-          })}
-          <span className="absolute right-0 translate-x-0 text-[10px] text-slate-700">
+          })()}
+          <span
+            className="absolute right-0 text-[10px] text-slate-700"
+            style={{ top: '14px' }}
+          >
             {formatTimelineYearLabel(data.max)}
           </span>
         </div>
@@ -872,10 +1028,66 @@ export default function GroupEventModulePage() {
     );
   }
 
+  // Eventi contemporanei (overlap temporale con l'evento attivo)
+  const concurrent = useMemo(() => {
+    const a = rows[selectedIndex];
+    if (!a) return [] as { idx: number; ev: EventVM }[];
+    const sa = buildTimelineSpan(a);
+    if (!sa) return [] as { idx: number; ev: EventVM }[];
+    const centerA = (sa.min + sa.max) / 2;
+    const tol = 0; // tolleranza anni
+    const list = rows
+      .map((ev, i) => ({ ev, i, s: buildTimelineSpan(ev) }))
+      .filter((x) => x.i !== selectedIndex && !!x.s && spansOverlap(sa, x.s as any, tol));
+    list.sort((x, y) => {
+      const cx = ((x.s!.min + x.s!.max) / 2) - centerA;
+      const cy = ((y.s!.min + y.s!.max) / 2) - centerA;
+      const dx = Math.abs(cx);
+      const dy = Math.abs(cy);
+      if (dx !== dy) return dx - dy;
+      return x.ev.order_key - y.ev.order_key;
+    });
+    return list.map((x) => ({ idx: x.i, ev: x.ev }));
+  }, [rows, selectedIndex]);
+
+  // Eventi contemporanei di altri journey (fetch + filtro client)
+  useEffect(() => {
+    (async () => {
+      try {
+        const ev = rows[selectedIndex];
+        if (!ev || !gid) { setConcurrentOther([]); return; }
+        const s = buildTimelineSpan(ev);
+        if (!s) { setConcurrentOther([]); return; }
+        const min = Math.floor(s.min);
+        const max = Math.ceil(s.max);
+        let q = supabase
+          .from("v_journey")
+          .select("id, group_event_id, title, journey_title, year_from, year_to, exact_date, era")
+          .neq("group_event_id", gid)
+          .limit(80);
+        const or = `and(year_from.lte.${max},year_to.gte.${min}),and(year_from.gte.${min},year_from.lte.${max}),and(year_to.gte.${min},year_to.lte.${max})`;
+        // @ts-ignore
+        q = (q as any).or(or);
+        const { data, error } = await q;
+        if (error) { setConcurrentOther([]); return; }
+        const items = (data || []).map((r: any) => {
+          const yy: EventVM = {
+            id: String(r.id), title: String(r.title ?? ""), description: "", wiki_url: null, video_url: null, order_key: 0,
+            latitude: null, longitude: null, era: r.era ?? null, year_from: r.year_from ?? null, year_to: r.year_to ?? null, exact_date: r.exact_date ?? null, location: null, image_url: null,
+          } as any;
+          const spn = buildTimelineSpan(yy);
+          return { evId: String(r.id), geId: String(r.group_event_id), geTitle: r.journey_title ?? null, evTitle: String(r.title ?? "Event"), startYear: spn?.start, ev: { title: String(r.title ?? "Event") } } as any;
+        }).filter((x) => x.geId && x.evId);
+        items.sort((a, b) => (Math.abs((a.startYear ?? 0) - ((s.min + s.max) / 2)) - Math.abs((b.startYear ?? 0) - ((s.min + s.max) / 2))));
+        setConcurrentOther(items.slice(0, 20));
+      } catch { setConcurrentOther([]); }
+    })();
+  }, [rows, selectedIndex, gid, supabase]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow">Loading Journey…</div>
+        <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow">Loading Journeyâ€¦</div>
       </div>
     );
   }
@@ -888,7 +1100,7 @@ export default function GroupEventModulePage() {
           <div className="text-sm">{err}</div>
           <div className="mt-4">
             <button onClick={onBack} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition">
-              <span aria-hidden>←</span> Back
+              <span aria-hidden>â†</span> Back
             </button>
           </div>
         </div>
@@ -897,13 +1109,14 @@ export default function GroupEventModulePage() {
   }
 
   const selectedEvent = rows[selectedIndex];
+  const related = selectedEvent ? corrByEvent[selectedEvent.id] ?? [] : [];
 
   /* ===================== RENDER ===================== */
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      {/* ===== HEADER: mobile colonna, desktop 3 colonne; mobile h-auto, desktop h-32 ===== */}
+      {/* ===== HEADER (container allargato) ===== */}
       <section className="border-b border-slate-200 bg-white/95 shadow-sm">
-        <div className="mx-auto max-w-7xl px-3 py-3 lg:px-8 lg:py-4">
+        <div className="mx-auto w-full max-w-[120rem] px-3 py-3 lg:px-8 lg:py-4">
           <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_0.9fr_2.3fr] gap-3 items-stretch">
             {/* [1] Titolo + Favourite */}
             <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-3 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex flex-col justify-between">
@@ -921,30 +1134,172 @@ export default function GroupEventModulePage() {
                   {isFav ? "♥ Favourite" : "♡ Favourite"}
                 </button>
                 {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+                {/* Link "Apri pagina" rimosso */}
+
+              </div>
+              {/* Nuovo layout: Nav + Griglia 2 colonne (descrizione / media+sezioni) */}
+              <div className="hidden flex items-center justify-end gap-2 mb-3">
+                <button
+                  onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title="Previous"
+                >ï¿½?ï¿½</button>
+                <button
+                  onClick={() => setIsPlaying((p) => !p)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title={isPlaying ? "Pause" : "Play"}
+                >{isPlaying ? "ï¿½?ï¿½" : "ï¿½-ï¿½"}</button>
+                <button
+                  onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title="Next"
+                >ï¿½?ï¿½</button>
+              </div>
+
+              <div className="hidden grid grid-cols-2 gap-3 items-start">
+                {/* Colonna sinistra: Location + Descrizione + Link */}
+                <div className="min-w-0 rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+                  {selectedEvent?.location ? (
+                    <div className="text-[12.5px] text-gray-600 mb-2">{selectedEvent.location}</div>
+                  ) : null}
+                  <div className="max-h-[40svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800" style={{ scrollbarWidth: 'thin' }}>
+                    {selectedEvent?.description || "No description available."}
+                  </div>
+                  {/* Eventi contemporanei (MOBILE) - altri journey */}
+                  <div className="mb-2">
+                    <div className="text-[12px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+                    {concurrentOther && concurrentOther.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {concurrentOther.map((c) => {
+                          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+                          return (
+                            <button
+                              key={`${c.geId}:${c.evId}`}
+                              onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[12px] text-slate-800 hover:bg-slate-50"
+                              title={c.evTitle}
+                            >
+                              {label ? `${label} Â· ` : ""}{c.evTitle}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[12px] text-gray-500">Nessun evento concomitante.</div>
+                    )}
+                  </div>
+                  <div className="pt-2 flex items-center gap-3">
+                    {selectedEvent?.wiki_url ? (
+                      <a
+                        href={selectedEvent.wiki_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                      >
+                        Wikipedia ï¿½ï¿½'
+                      </a>
+                    ) : null}
+                    {selectedEvent?.video_url ? (
+                      <a
+                        href={selectedEvent.video_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                        title="Guarda il video dell'evento"
+                      >
+                        ï¿½-ï¿½ Guarda il video
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Colonna destra: Media evento + Eventi contemporanei + Related */}
+                <div className="space-y-3">
+                  <div>
+                    <MediaBox
+                      items={selectedEvent?.event_media ?? []}
+                      firstPreview={selectedEvent?.event_media_first || undefined}
+                      onOpenOverlay={openOverlay}
+                      compact
+                      height="sm"
+                    />
+                  </div>
+
+                  {/* Rimosso elenco contemporanei dello stesso journey */}
+
+                  {/* Eventi contemporanei (altri journey) */}
+                  <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm p-3">
+                    <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+                    {concurrentOther && concurrentOther.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {concurrentOther.map((c) => {
+                          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+                          return (
+                            <button
+                              key={`${c.geId}:${c.evId}`}
+                              onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[12.5px] text-slate-800 hover:bg-slate-50"
+                              title={c.evTitle}
+                            >
+                              {label ? `${label} Â· ` : ""}{c.evTitle}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[12.5px] text-gray-500">Nessun evento concomitante.</div>
+                    )}
+                  </div>
+
+                  {related?.length ? (
+                    <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+                      <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                      <div className="flex flex-wrap gap-1.5 overflow-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                        {related.map((r) => (
+                          <button
+                            key={r.id}
+                            onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
+                            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-[12.5px] text-indigo-800 hover:bg-indigo-100"
+                            title={r.title ?? r.slug ?? "Open journey"}
+                          >
+                            ï¿½Y"- {r.title ?? r.slug ?? "Journey"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+                      <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                      <div className="text-[12.5px] text-gray-500">Nessun collegamento.</div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* [2] Media del Journey – altezza xs su desktop, più comodo su mobile */}
+            {/* [2] Media del Journey (ristretto) */}
             <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
-              <div className="flex-1">
+              <div className="flex-1 flex items-center justify-center">
                 {journeyMedia?.length ? (
-                  <MediaBox
-                    items={journeyMedia}
-                    firstPreview={journeyMediaFirst || undefined}
-                    onOpenOverlay={openOverlay}
-                    hideHeader
-                    height={isLg ? "xs" : "sm"}
-                    compact
-                  />
+                  <div className="w-full max-w-[260px]">
+                    <MediaBox
+                      items={journeyMedia}
+                      firstPreview={journeyMediaFirst || undefined}
+                      onOpenOverlay={openOverlay}
+                      hideHeader
+                      height={isLg ? "xs" : "sm"}
+                      compact
+                    />
+                  </div>
                 ) : (
-                  <div className="h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+                  <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
                     Nessun media del journey
                   </div>
                 )}
               </div>
             </div>
 
-            {/* [3] Timeline – più larga su desktop; sotto mostra più anni */}
+            {/* [3] Timeline */}
             <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
               <div className="flex-1">
                 <Timeline3D />
@@ -954,9 +1309,9 @@ export default function GroupEventModulePage() {
         </div>
       </section>
 
-      {/* ===== BANDA EVENTI ===== */}
+      {/* ===== BANDA EVENTI (container allargato) ===== */}
       <section className="border-b border-black/10 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-2" ref={bandRef}>
+        <div className="mx-auto w-full max-w-[120rem] px-4 py-2" ref={bandRef}>
           <div className="flex items-center justify-between mb-1.5">
             <div className="text-[13px] font-medium text-gray-900">Eventi (ordine cronologico)</div>
             {rows.length ? (
@@ -970,8 +1325,11 @@ export default function GroupEventModulePage() {
             <div className="flex items-stretch gap-2 min-w-max">
               {rows.map((ev, idx) => {
                 const active = idx === selectedIndex;
-                const span = buildTimelineSpan(ev);
-                const label = span ? formatTimelineYearLabel(span.start) : "";
+                const fromY = signedYear(ev.year_from, ev.era);
+                const toY = signedYear(ev.year_to, ev.era);
+                const fromLabel = fromY != null ? formatTimelineYearLabel(fromY) : "";
+                const toLabel = toY != null ? formatTimelineYearLabel(toY) : "";
+                const info = [fromLabel, toLabel, ev.location || ""].filter(Boolean).join(" - ");
                 return (
                   <button
                     key={ev.id}
@@ -993,7 +1351,7 @@ export default function GroupEventModulePage() {
                           {ev.title}
                         </div>
                         <div className={`truncate text-[11.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
-                          {label}{ev.location ? ` • ${ev.location}` : ""}
+                          {info}
                         </div>
                       </div>
                     </div>
@@ -1006,50 +1364,45 @@ export default function GroupEventModulePage() {
       </section>
 
       {/* ===== MOBILE: Descrizione + Media evento + Mappa ===== */}
-      <div className="mx-auto w-full max-w-7xl lg:hidden overflow-hidden">
+      <div className="mx-auto w-full max-w-[120rem] lg:hidden overflow-hidden">
         <section className="bg-white/70 backdrop-blur">
           <div className="px-4 py-2">
             <div className="mx-auto w-full max-w-[820px]">
               <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col">
                 <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
+                  <a
+                    href={ge?.slug ? `/landing/${ge.slug}` : (group_event_id ? `/module/group_event?gid=${group_event_id}` : undefined)}
+                    className="mr-auto inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[12px] text-indigo-800 hover:bg-indigo-100"
+                    title="Apri pagina Group Event"
+                  >
+                    Apri pagina
+                  </a>
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                     title="Previous"
-                  >⏮</button>
+                  >◀</button>
                   <button
                     onClick={() => setIsPlaying((p) => !p)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                     title={isPlaying ? "Pause" : "Play"}
                   >{isPlaying ? "⏸" : "▶"}</button>
                   <button
                     onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-xs text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                     title="Next"
-                  >⏭</button>
+                  >▶</button>
                 </div>
 
-                {selectedEvent?.event_media?.length ? (
-                  <div className="px-3 pt-2">
-                    <MediaBox
-                      items={selectedEvent.event_media}
-                      firstPreview={selectedEvent.event_media_first || undefined}
-                      onOpenOverlay={openOverlay}
-                      compact
-                      height="sm"
-                    />
-                  </div>
-                ) : selectedEvent?.image_url ? (
-                  <div className="px-3 pt-2">
-                    <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                      <img
-                        src={selectedEvent.image_url}
-                        alt={selectedEvent.title}
-                        className="h-36 w-full object-cover"
-                      />
-                    </div>
-                  </div>
-                ) : null}
+                <div className="px-3 pt-2">
+                  <MediaBox
+                    items={selectedEvent?.event_media ?? []}
+                    firstPreview={selectedEvent?.event_media_first || undefined}
+                    onOpenOverlay={openOverlay}
+                    compact
+                    height="sm"
+                  />
+                </div>
 
                 {selectedEvent?.location ? (
                   <div className="px-3 pt-2 text-[11.5px] text-gray-600">
@@ -1057,7 +1410,58 @@ export default function GroupEventModulePage() {
                   </div>
                 ) : null}
 
-                <div className="px-3 pt-1 pb-3">
+                <div className="px-3 pt-1">
+                  {/* Eventi contemporanei (MOBILE) */}
+                  <div className="hidden mb-2">
+                    <div className="text-[12px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+                    {concurrentOther && concurrentOther.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {concurrentOther.map((c) => {
+                          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+                          return (
+                            <button
+                              key={`${c.geId}:${c.evId}`}
+                              onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[12px] text-slate-800 hover:bg-slate-50"
+                              title={c.evTitle}
+                            >
+                              {label ? `${label} Â· ` : ""}{c.evTitle}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[12px] text-gray-500">Nessun evento concomitante.</div>
+                    )}
+                  </div>
+
+                  {/* Related journeys (MOBILE) */}
+                  {related?.length ? (
+                    <div className="mb-2">
+                      <div className="text-[12px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {related.map((r) => (
+                          <button
+                            key={r.id}
+                            onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
+                            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-[12px] text-indigo-800 hover:bg-indigo-100"
+                            title={r.title ?? r.slug ?? "Open journey"}
+                          >
+                            ðŸ”— {r.title ?? r.slug ?? "Journey"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {(!related || related.length === 0) ? (
+                    <div className="mb-2">
+                      <div className="text-[12px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                      <div className="text-[12px] text-gray-500">Nessun collegamento.</div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="px-3 pb-3">
                   <div
                     className="max-h-[35svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
                     style={{ scrollbarWidth: "thin" }}
@@ -1094,73 +1498,196 @@ export default function GroupEventModulePage() {
           </div>
         </section>
 
-        <section className="relative h-[28svh] min-h-[240px] border-t border-black/10">
+        <section className="relative h-[40svh] min-h-[300px] border-t border-black/10">
           <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
           {!mapLoaded && (
             <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
-              Inizializzazione mappa…
+              Inizializzazione mappaâ€¦
             </div>
           )}
         </section>
       </div>
 
-      {/* ===== DESKTOP ===== */}
-      <div className="mx-auto hidden w-full max-w-7xl lg:block">
-        <div className="grid grid-cols-[500px_minmax(0,1fr)] gap-0">
+      {/* ===== DESKTOP (container allargato) ===== */}
+      <div className="mx-auto hidden w-full max-w-[120rem] lg:block">
+        <div className="grid grid-cols-[560px_minmax(0,1fr)] gap-0">
           {/* DESCRIZIONE */}
-          <section className="overflow-y-auto bg-white/70 backdrop-blur">
-            <div className="px-4 py-4">
-              <div className="flex items-center justify-end gap-2 mb-3">
+          <section className="bg-white h-[60svh] min-h-[480px] overflow-hidden">
+            <div className="px-4 py-4 h-full">
+              {/* Area inferiore desktop: 2 colonne con altezza pari alla mappa */}
+              <div className="grid grid-cols-2 gap-3 items-stretch h-full">
+                {/* Colonna sinistra: Location (piccola) + Descrizione (grande) */}
+                <div className="flex flex-col space-y-3 h-full">
+                  <div className="px-1">
+                    <div className="text-[12.5px] text-gray-600">{selectedEvent?.location || ""}</div>
+                  </div>
+                  <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3 flex-1 overflow-hidden">
+                    <div className="h-full overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap" style={{ scrollbarWidth: "thin" }}>
+                      {selectedEvent?.description || "No description available."}
+                    </div>
+                    <div className="pt-2 flex items-center gap-3">
+                      {selectedEvent?.wiki_url ? (
+                        <a href={selectedEvent.wiki_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800">Wikipedia</a>
+                      ) : null}
+                      {selectedEvent?.video_url ? (
+                        <a href={selectedEvent.video_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800" title="Guarda il video dell'evento">▶ Guarda il video</a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+                {/* Colonna destra: Nav + Media + Concomitanti + Related */}
+                <div className="flex flex-col space-y-3 h-full">
+                  <div className="p-2">
+                    <div className="hidden items-center justify-end gap-2">
+                      <button onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40" title="Previous">â€¹</button>
+                      <button onClick={() => setIsPlaying((p) => !p)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40" title={isPlaying ? "Pause" : "Play"}>{isPlaying ? "âšâš" : "â–¶"}</button>
+                      <button onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40" title="Next">â€º</button>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                        title="Previous"
+                      >◀</button>
+                      <button
+                        onClick={() => setIsPlaying((p) => !p)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                        title={isPlaying ? "Pause" : "Play"}
+                      >{isPlaying ? "⏸" : "▶"}</button>
+                      <button
+                        onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                        title="Next"
+                      >▶</button>
+                    </div>
+                  </div>
+                  <div className="p-0">
+                    <MediaBox items={selectedEvent?.event_media ?? []} firstPreview={selectedEvent?.event_media_first || undefined} onOpenOverlay={openOverlay} compact height="sm" />
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white/95 shadow-sm p-3">
+                    <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+                    {concurrentOther && concurrentOther.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {concurrentOther.map((c) => {
+                          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+                          return (
+                            <button key={`${c.geId}:${c.evId}`} onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)} className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2.5 py-1 text-[12.5px] text-slate-800 hover:bg-slate-50" title={c.evTitle}>
+                              {label ? `${label} Â· ` : ""}{c.evTitle}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[12.5px] text-gray-500">Nessun evento concomitante.</div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3 flex-1 overflow-hidden">
+                    <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Journey di approfondimento</div>
+                    <div className="h-full overflow-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+                      {related?.length ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {related.map((r) => (
+                            <button key={r.id} onClick={() => router.push(`/module/group_event?gid=${r.id}`)} className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-[12.5px] text-indigo-800 hover:bg-indigo-100" title={r.title ?? r.slug ?? "Open journey"}>
+                              {r.title ?? r.slug ?? "Journey"}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-[12.5px] text-gray-500">Nessun collegamento.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="hidden">
                 <button
                   onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                   title="Previous"
-                >⏮</button>
+                >◀</button>
                 <button
                   onClick={() => setIsPlaying((p) => !p)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                   title={isPlaying ? "Pause" : "Play"}
                 >{isPlaying ? "⏸" : "▶"}</button>
                 <button
                   onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-black/10 bg-white/80 text-sm text-gray-800 shadow-sm transition hover:scale-105 hover:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
                   title="Next"
-                >⏭</button>
+                >▶</button>
+              </div>
+
+              <div className="hidden mb-3 flex gap-3 items-stretch">
+              {/* Player evento (MediaBox) */}
+              <div className="flex-none basis-[25%] min-w-[220px]">
+                <MediaBox
+                  items={selectedEvent?.event_media ?? []}
+                  firstPreview={selectedEvent?.event_media_first || undefined}
+                  onOpenOverlay={openOverlay}
+                  compact
+                  height="sm"
+                />
+              </div>
+
+              
+
+              {/* Correlazioni evento â†’ altri group_event (chips cliccabili) */}
+              {related?.length ? (
+                <div className="flex-1 rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3 h-full">
+                  <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                  <div className="flex flex-wrap gap-1.5 overflow-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                    {related.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
+                        className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/70 px-2.5 py-1 text-[12.5px] text-indigo-800 hover:bg-indigo-100"
+                        title={r.title ?? r.slug ?? "Open journey"}
+                      >
+                        ðŸ”— {r.title ?? r.slug ?? "Journey"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {(!related || related.length === 0) ? (
+                <div className="flex-1 rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3 h-full">
+                  <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+                  <div className="text-[12.5px] text-gray-500">Nessun collegamento.</div>
+                </div>
+              ) : null}
+
+              </div>
+
+              {/* Bottoni di navigazione spostati sotto i Related Journeys */}
+              <div className="hidden flex items-center justify-end gap-2 mb-3">
+                <button
+                  onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title="Previous"
+                >ï¿½?ï¿½</button>
+                <button
+                  onClick={() => setIsPlaying((p) => !p)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title={isPlaying ? "Pause" : "Play"}
+                >{isPlaying ? "ï¿½?ï¿½" : "ï¿½-ï¿½"}</button>
+                <button
+                  onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-sm text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+                  title="Next"
+                >ï¿½?ï¿½</button>
               </div>
 
               {selectedEvent?.location ? (
-                <div className="text-[12.5px] text-gray-600 mb-2">
+                <div className="hidden text-[12.5px] text-gray-600 mb-2">
                   {selectedEvent.location}
                 </div>
               ) : null}
 
-              {selectedEvent?.event_media?.length ? (
-                <div className="mb-3">
-                  <MediaBox
-                    items={selectedEvent.event_media}
-                    firstPreview={selectedEvent.event_media_first || undefined}
-                    onOpenOverlay={openOverlay}
-                    compact
-                    height="sm"
-                  />
-                </div>
-              ) : selectedEvent?.image_url ? (
-                <div className="mb-3">
-                  <div className="relative overflow-hidden rounded-xl ring-1 ring-black/10">
-                    <img
-                      src={selectedEvent.image_url}
-                      alt={selectedEvent.title}
-                      className="h-44 w-full object-cover"
-                    />
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800">
+              <div className="hidden max-h-[35svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800" style={{ scrollbarWidth: "thin" }}>
                 {selectedEvent?.description || "No description available."}
               </div>
 
-              <div className="pt-2 flex items-center gap-3">
+              <div className="hidden pt-2 flex items-center gap-3">
                 {selectedEvent?.wiki_url ? (
                   <a
                     href={selectedEvent.wiki_url}
@@ -1168,30 +1695,30 @@ export default function GroupEventModulePage() {
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
                   >
-                    Wikipedia →
+                    Wikipedia â†’
                   </a>
                 ) : null}
                 {selectedEvent?.video_url ? (
-                  <a
-                    href={selectedEvent.video_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-                    title="Guarda il video dell'evento"
-                  >
-                    ▶ Guarda il video
-                  </a>
+                      <a
+                        href={selectedEvent.video_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+                        title="Guarda il video dell'evento"
+                      >
+                        ▶ Guarda il video
+                      </a>
                 ) : null}
               </div>
             </div>
           </section>
 
           {/* MAPPA */}
-          <section className="relative min-h-[320px]">
+          <section className="relative h-[60svh] min-h-[480px]">
             <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
             {!mapLoaded && (
               <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
-                Inizializzazione mappa…
+                Inizializzazione mappaâ€¦
               </div>
             )}
           </section>
@@ -1210,3 +1737,4 @@ export default function GroupEventModulePage() {
     </div>
   );
 }
+
