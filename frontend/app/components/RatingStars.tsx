@@ -3,6 +3,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
+const STAR_FILL = "#facc15"; // amber-300
+const STAR_STROKE = "#eab308"; // amber-400
+
 type Props = {
   journeyId?: string;
   group_event_id?: string; // compat
@@ -80,9 +83,9 @@ export default function RatingStars(props: Props) {
               width={size}
               height={size}
               viewBox="0 0 24 24"
-              fill={n <= stars.full ? "currentColor" : "none"}
-              stroke="currentColor"
-              strokeWidth="1.5"
+              fill={n <= stars.full ? STAR_FILL : "none"}
+              stroke={STAR_STROKE}
+              strokeWidth="1.6"
             >
               <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
             </svg>
