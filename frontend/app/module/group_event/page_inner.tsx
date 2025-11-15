@@ -1425,13 +1425,6 @@ export default function GroupEventModulePage() {
  <div className="mx-auto w-full max-w-[820px]">
  <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col">
  <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
- <a
- href={ge?.slug ? `/landing/${ge.slug}` : (group_event_id ? `/module/group_event?gid=${group_event_id}` : undefined)}
- className="mr-auto inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[12px] text-indigo-800 hover:bg-indigo-100"
- title="Apri pagina Group Event"
- >
- Apri pagina
- </a>
   <button
   onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
   className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
@@ -1594,7 +1587,7 @@ export default function GroupEventModulePage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[180px] flex flex-col">
-        <div className="text-[12px] font-semibold text-slate-800">Eventi correlati</div>
+        <div className="text-[12px] font-semibold text-slate-800">Eventi contemporanei</div>
         {concurrentOther && concurrentOther.length ? (
           <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
             {concurrentOther.map((c) => {
@@ -1614,7 +1607,7 @@ export default function GroupEventModulePage() {
           </div>
         ) : (
           <div className="mt-2 flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-            Nessun evento correlato.
+            Nessun evento contemporaneo.
           </div>
         )}
       </div>
