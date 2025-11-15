@@ -1,1 +1,2 @@
 ﻿* text=auto eol=crlf
+frontend/public/GeoHistoryVideo/GeoHistoryIntro.mp4 filter=lfs diff=lfs merge=lfs -text
