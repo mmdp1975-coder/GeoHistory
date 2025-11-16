@@ -178,12 +178,29 @@ export default function LandingPage(): JSX.Element {
               <Link href="/module/NewJourney" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
                 <div>
                   <div className="flex items-center gap-2">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-600" fill="currentColor">
-                      <path d="M11 11V6a1 1 0 1 1 2 0v5h5a1 1 0 1 1 0 2h-5v5a1 1 0 1 1-2 0v-5H6a1 1 0 1 1 0-2h5z" />
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 text-sky-600" fill="none" stroke="currentColor" strokeWidth="1.7">
+                      <path d="M5 5h10l4 4v10H5z" />
+                      <path d="M9 9h6" />
+                      <path d="M9 13h6" />
+                      <path d="M9 17h3" />
                     </svg>
                     <span className="text-sm font-semibold text-neutral-900">New Journeys</span>
                   </div>
                   <p className="mt-1 text-xs text-neutral-600">Latest journeys published by users.</p>
+                </div>
+                <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">Open</span>
+              </Link>
+
+              <Link href="/module/build-journey" className="group flex items-center justify-between rounded-xl border border-neutral-200 bg-white/90 p-4 shadow hover:shadow-md">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="1.7">
+                      <path d="M12 5v14" strokeLinecap="round" />
+                      <path d="M5 12h14" strokeLinecap="round" />
+                    </svg>
+                    <span className="text-sm font-semibold text-neutral-900">Build Journey</span>
+                  </div>
+                  <p className="mt-1 text-xs text-neutral-600">Create or edit your own multi-event journey.</p>
                 </div>
                 <span className="rounded-md bg-neutral-900 px-2 py-1 text-xs font-semibold text-white">Open</span>
               </Link>

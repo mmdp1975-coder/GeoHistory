@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { Scorecard } from '@/app/components/Scorecard';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { useCurrentUser } from '@/lib/useCurrentUser';
@@ -82,23 +82,6 @@ function isStatsRow(v: unknown): v is StatsRow {
 }
 
 /* ===== Helpers UI ===== */
-function formatYearBC(y: number | null | undefined) {
-  if (y == null || !Number.isFinite(y)) return '—';
-  if (y < 0) return `${Math.abs(y)} BC`;
-  return String(y);
-}
-function formatDateShort(iso: string | null) {
-  if (!iso) return null;
-  try {
-    const d = new Date(iso);
-    const day = String(d.getDate()).padStart(2, '0');
-    const month = d.toLocaleString('it-IT', { month: 'short' });
-    const year = String(d.getFullYear()).slice(-2);
-    return `${day} ${month} ${year}`; // es: 03 nov 25
-  } catch {
-    return null;
-  }
-}
 function niceStep(span: number, targetTicks = 7) {
   const raw = Math.max(1, span) / targetTicks;
   const pow10 = Math.pow(10, Math.floor(Math.log10(Math.max(1, Math.abs(raw)))));
@@ -780,136 +763,23 @@ export default function TimelinePage() {
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {cards.map((g) => {
             const isFav = favs.has(g.id);
-            const published = formatDateShort(g.approved_at);
-            const hasRating = (g.ratings_count ?? 0) > 0 && g.avg_rating !== null;
-
             return (
-              <li key={g.id}>
-                <Link
-                  href={`/module/group_event?gid=${g.id}`}
-                  className="group block h-full overflow-hidden rounded-2xl border border-neutral-200 bg-white/90 shadow transition-shadow hover:shadow-lg"
-                >
-                  {/* HEADER IMMAGINE */}
-                  <div className="relative h-36 w-full overflow-hidden bg-neutral-100">
-                    {g.cover_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={g.cover_url}
-                        alt={g.title || g.slug || 'Cover'}
-                        className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-3xl">🧭</div>
-                    )}
-
-                    {/* cuore in alto a destra */}
-                    <button
-                      type="button"
-                      role="button"
-                      aria-pressed={isFav}
-                      onClick={(e) => toggleFavourite(e, g.id)}
-                      className="absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/85 shadow backdrop-blur hover:bg-white"
-                      title={isFav ? 'Remove from favourites' : 'Add to favourites'}
-                    >
-                      {isFav ? (
-                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="currentColor" aria-hidden>
-                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                          <path d="M12.1 20.3C7.14 16.24 4 13.39 4 9.86 4 7.3 6.05 5.25 8.6 5.25c1.54 0 3.04.81 3.85 2.09.81-1.28 2.31-2.09 3.85-2.09 2.55 0 4.6 2.05 4.6 4.61 0 3.53-3.14 6.38-8.1 10.44l-.7.6-.7-.6z" />
-                        </svg>
-                      )}
-                    </button>
-
-                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/15 to-transparent" />
-                  </div>
-
-                  {/* BODY */}
-                  <div className="p-4">
-                    {/* GRID: titolo (2 righe) + data (row1, no-wrap) + stella (row2) */}
-                    <div
-                      className="
-                        mb-1 grid gap-x-2
-                        [grid-template-columns:1fr_auto]
-                        [grid-template-rows:auto_auto]
-                        items-start
-                      "
-                    >
-                      {/* Titolo su 2 righe fisse */}
-                      <h3
-                        className="
-                          col-[1] row-[1_/_span_2]
-                          line-clamp-2 min-h-[2.6rem]
-                          text-base font-semibold leading-snug text-neutral-900
-                        "
-                        title={g.title || g.slug || 'Untitled'}
-                      >
-                        {g.title || g.slug || 'Untitled'}
-                      </h3>
-
-                      {/* Data: SEMPRE su 1 riga */}
-                      {published && (
-                        <span
-                          className="
-                            col-[2] row-[1]
-                            rounded bg-neutral-100 px-2 py-[2px]
-                            text-xs font-medium text-neutral-700
-                            whitespace-nowrap
-                          "
-                          title="Publication date"
-                        >
-                          {published}
-                        </span>
-                      )}
-
-                      {/* Stella sotto la data */}
-                      <div className="col-[2] row-[2] mt-[2px] flex justify-end">
-                        {hasRating ? (
-                          <span className="inline-flex items-center gap-1 text-sm text-neutral-800" title="Average rating and votes">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-500" fill="currentColor" aria-hidden>
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                            </svg>
-                            {Number(g.avg_rating).toFixed(1)} ({g.ratings_count})
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-sm text-neutral-500" title="No ratings yet">
-                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                            </svg>
-                            (0)
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* META bottom: events + years */}
-                    <div className="mt-3 flex items-center justify-between gap-2 text-xs text-neutral-600">
-                      <div className="flex flex-wrap items-center gap-3">
-                        {/* numero eventi */}
-                        <span className="inline-flex items-center gap-1" title="Events count">
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                            <path d="M3 6h18v2H3V6zm2 4h14v8H5v-8zm2 2v4h10v-4H7z" />
-                          </svg>
-                          {g.events_count ?? 0} events
-                        </span>
-
-                        {/* range anni con BC */}
-                        <span className="inline-flex items-center gap-1" title="Time span">
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                            <path d="M12 5v14m-7-7h14" />
-                          </svg>
-                          {formatYearBC(g.year_from_min)} → {formatYearBC(g.year_to_max)}
-                        </span>
-                      </div>
-
-                      <span className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white">
-                        Open
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              </li>
+              <Scorecard
+                key={g.id}
+                href={`/module/group_event?gid=${encodeURIComponent(g.id)}`}
+                title={g.title || g.slug || 'Untitled'}
+                coverUrl={g.cover_url}
+                isFavourite={isFav}
+                onToggleFavourite={(event) => toggleFavourite(event, g.id)}
+                publishedAt={g.approved_at}
+                averageRating={g.avg_rating}
+                ratingsCount={g.ratings_count}
+                eventsCount={g.events_count}
+                yearFrom={g.year_from_min}
+                yearTo={g.year_to_max}
+                prefetch={false}
+                liProps={{ 'data-jid': g.id }}
+              />
             );
           })}
         </ul>

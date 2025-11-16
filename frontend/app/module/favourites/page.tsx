@@ -19,8 +19,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Scorecard } from "@/app/components/Scorecard";
 
 type UUID = string;
 
@@ -79,27 +79,7 @@ function isStatsRow(v: unknown): v is StatsRow {
   );
 }
 
-function formatDateShort(iso: string | null) {
-  if (!iso) return null;
-  try {
-    const d = new Date(iso);
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = d.toLocaleString("it-IT", { month: "short" }); // "nov"
-    const year = String(d.getFullYear()).slice(-2); // "25"
-    return `${day} ${month} ${year}`; // es: "03 nov 25"
-  } catch {
-    return null;
-  }
-}
-
-function formatYear(y: number | null | undefined) {
-  if (y === null || y === undefined) return "—";
-  if (y < 0) return `${Math.abs(y)} BC`;
-  return String(y);
-}
-
 export default function FavouritesPage() {
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -233,13 +213,7 @@ export default function FavouritesPage() {
     [supabase, rows, loadData]
   );
 
-  // 4) Apertura dettaglio
-  const openJourney = useCallback(
-    (id: string) => router.push(`/module/group_event?gid=${id}`),
-    [router]
-  );
-
-  // 5) Render
+  // 4) Render
   if (!userId)
     return (
       <main className="mx-auto max-w-6xl px-4 py-6 text-center">
@@ -290,152 +264,36 @@ export default function FavouritesPage() {
           <p className="text-sm">Browse the timeline and tap the heart to add Journeys.</p>
         </div>
       ) : (
-        <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map((j) => {
-            const title = j.translation_title ?? "Untitled journey";
-            const published = formatDateShort(j.approved_at);
-            const hasRating = (j.ratings_count ?? 0) > 0 && j.avg_rating !== null;
-
-            return (
-              <article
-                key={j.journey_id}
-                className="group relative overflow-hidden rounded-2xl border border-neutral-200 bg-white/90 shadow transition-shadow hover:shadow-lg"
-              >
-                {/* HEADER IMMAGINE (clic su cover apre il journey) */}
-                <button
-                  onClick={() => openJourney(j.journey_id)}
-                  className="relative block h-40 w-full overflow-hidden bg-neutral-100"
-                >
-                  {j.journey_cover_url ? (
-                    <Image
-                      src={j.journey_cover_url}
-                      alt={title}
-                      fill
-                      className="object-cover transition duration-300 group-hover:scale-[1.02]"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-3xl">🧭</div>
-                  )}
-
-                  {/* CUORE in alto a destra (toggle) */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavourite(j.journey_id);
-                    }}
-                    disabled={busyId === j.journey_id}
-                    className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/85 shadow backdrop-blur hover:bg-white"
-                    title={j.is_favourite ? "Remove from favourites" : "Add to favourites"}
-                    aria-label="Toggle favourite"
-                  >
-                    {j.is_favourite ? (
-                      <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="currentColor" aria-hidden>
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" className="h-5 w-5 text-rose-500" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                        <path d="M12.1 20.3C7.14 16.24 4 13.39 4 9.86 4 7.3 6.05 5.25 8.6 5.25c1.54 0 3.04.81 3.85 2.09.81-1.28 2.31-2.09 3.85-2.09 2.55 0 4.6 2.05 4.6 4.61 0 3.53-3.14 6.38-8.1 10.44l-.7.6-.7-.6z" />
-                      </svg>
-                    )}
-                  </button>
-
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/15 to-transparent" />
-                </button>
-
-                {/* BODY */}
-                <div className="p-4">
-                  {/* GRID: titolo (2 righe) + data (row1, no-wrap) + stella (row2) */}
-                  <div
-                    className="
-                      mb-1 grid gap-x-2
-                      [grid-template-columns:1fr_auto]
-                      [grid-template-rows:auto_auto]
-                      items-start
-                    "
-                  >
-                    {/* Titolo: col 1, span 2 righe */}
-                    <h3
-                      className="
-                        col-[1] row-[1_/_span_2]
-                        line-clamp-2 min-h-[2.6rem]
-                        text-base font-semibold leading-snug text-neutral-900
-                      "
-                      title={title}
-                    >
-                      {title}
-                    </h3>
-
-                    {/* Data: col 2, row 1 — SEMPRE su UNA riga */}
-                    {published && (
-                      <span
-                        className="
-                          col-[2] row-[1]
-                          rounded bg-neutral-100 px-2 py-[2px]
-                          text-xs font-medium text-neutral-700
-                          whitespace-nowrap
-                        "
-                        title="Publication date"
-                      >
-                        {published}
-                      </span>
-                    )}
-
-                    {/* Stella: col 2, row 2 — sotto la data */}
-                    <div className="col-[2] row-[2] mt-[2px] flex justify-end">
-                      {(j.ratings_count ?? 0) > 0 && j.avg_rating !== null ? (
-                        <span className="inline-flex items-center gap-1 text-sm text-neutral-800">
-                          <svg viewBox="0 0 24 24" className="h-4 w-4 text-amber-500" fill="currentColor" aria-hidden>
-                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                          </svg>
-                          {Number(j.avg_rating).toFixed(1)} ({j.ratings_count})
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-sm text-neutral-500" title="No ratings yet">
-                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                          </svg>
-                          (0)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* META bottom */}
-                  <div className="mt-3 flex items-center justify-between gap-2 text-xs text-neutral-600">
-                    <div className="flex flex-wrap items-center gap-3">
-                      {/* numero eventi */}
-                      <span className="inline-flex items-center gap-1" title="Events count">
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                          <path d="M3 6h18v2H3V6zm2 4h14v8H5v-8zm2 2v4h10v-4H7z" />
-                        </svg>
-                        {j.events_count ?? 0} events
-                      </span>
-
-                      {/* range anni con BC */}
-                      <span className="inline-flex items-center gap-1" title="Time span">
-                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
-                          <path d="M12 5v14m-7-7h14" />
-                        </svg>
-                        {formatYear(j.year_from_min)} → {formatYear(j.year_to_max)}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => openJourney(j.journey_id)}
-                      className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800"
-                    >
-                      Open
-                    </button>
-                  </div>
-                </div>
-
-                {/* Hover ring */}
-                <span className="pointer-events-none absolute inset-0 rounded-2xl ring-0 ring-sky-300/0 transition group-hover:ring-4 group-hover:ring-sky-300/30" />
-              </article>
-            );
-          })}
+        <section>
+          <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {rows.map((j) => {
+              const title = j.translation_title ?? "Untitled journey";
+              return (
+                <Scorecard
+                  key={j.journey_id}
+                  href={`/module/group_event?gid=${encodeURIComponent(j.journey_id)}`}
+                  title={title}
+                  coverUrl={j.journey_cover_url}
+                  isFavourite={j.is_favourite}
+                  publishedAt={j.approved_at}
+                  averageRating={j.avg_rating}
+                  ratingsCount={j.ratings_count}
+                  eventsCount={j.events_count}
+                  yearFrom={j.year_from_min}
+                  yearTo={j.year_to_max}
+                  prefetch={false}
+                  onToggleFavourite={() => toggleFavourite(j.journey_id)}
+                  favouriteToggleDisabled={busyId === j.journey_id}
+                  favouriteToggleTitle={j.is_favourite ? "Remove from favourites" : "Add to favourites"}
+                  favouriteToggleAriaLabel="Toggle favourite"
+                  liProps={{
+                    "data-jid": j.journey_id,
+                    ...(j.journey_slug ? { "data-slug": j.journey_slug } : {}),
+                  }}
+                />
+              );
+            })}
+          </ul>
         </section>
       )}
     </main>
