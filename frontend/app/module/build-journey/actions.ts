@@ -27,6 +27,14 @@ type Visibility = "private" | "public";
 type MediaRole = "cover" | "attachment" | "gallery";
 type EntityType = "group_event" | "event";
 
+type GroupEventTranslationPayload = {
+  lang: string;
+  title?: string;
+  short_name?: string;
+  description?: string;
+  video_url?: string;
+};
+
 // ====== Mappatura tabelle (aggiorna se necessario) ======
 const T = {
   group_events: "group_events",
@@ -345,15 +353,14 @@ export async function analyzeVideoDeep(input: { videoUrl: string; lang?: string 
     provider: /youtu/i.test(videoUrl) ? "YouTube" : "Vimeo",
     video: { url: videoUrl, title, author, thumbnail },
     prefill: {
-      group_event: {
-        title,
-        pitch: "",
-        description: "",
-        cover_url: thumbnail,
-        visibility: "private" as Visibility,
-        status: "draft" as const,
-        language: lang,
-      },
+        group_event: {
+          title,
+          pitch: "",
+          description: "",
+          cover_url: thumbnail,
+          visibility: "private" as Visibility,
+          language: lang,
+        },
       events: events.map((e) => ({
         era: e.era,
         year_from: e.year_from,
@@ -388,24 +395,28 @@ export async function analyzeVideoDeep(input: { videoUrl: string; lang?: string 
 
 // ========================= SALVATAGGIO (immutato) =========================
 export type SaveJourneyPayload = {
+  group_event_id?: string;
   group_event: {
     title: string;
     cover_url: string;
     visibility: Visibility;
-    status: "draft" | "published";
+    status?: string;
     pitch?: string;
     description?: string;
     language?: string;
+
+    allow_fan?: boolean;
+    allow_stud_high?: boolean;
+    allow_stud_middle?: boolean;
+    allow_stud_primary?: boolean;
 
     code?: string;
     slug?: string;
     is_official?: boolean;
     owner_user_ref?: string;
     owner_profile_id?: string;
-    color_hex?: string;
     icon_name?: string;
     workflow_state?: string;
-    audience_scope?: string;
     requested_approval_at?: string;
     approved_at?: string;
     approved_by_profile_id?: string;
@@ -413,19 +424,17 @@ export type SaveJourneyPayload = {
     refused_by_profile_id?: string;
     refusal_reason?: string;
 
+    created_at?: string;
+    updated_at?: string;
+
     era_from?: "AD" | "BC" | null;
     era_to?: "AD" | "BC" | null;
     year_from?: number | null;
     year_to?: number | null;
   };
 
-  group_event_translation?: {
-    lang: string;
-    title?: string;
-    short_name?: string;
-    description?: string;
-    video_url?: string;
-  } | null;
+  group_event_translations?: GroupEventTranslationPayload[];
+  deleted_group_event_translation_langs?: string[];
 
   video_media_url?: string | null;
 
@@ -481,6 +490,66 @@ async function updateRow(table: string, match: any, patch: any) {
   return data;
 }
 
+async function upsertGroupEventTranslations(
+  group_event_id: string,
+  translations?: GroupEventTranslationPayload[] | null,
+) {
+  const payloads =
+    translations
+      ?.map((translation) => ({
+        ...translation,
+        lang: translation.lang?.trim(),
+      }))
+      .filter((translation) => translation.lang && translation.lang.length)
+      .map((translation) => ({
+        group_event_id,
+        lang: translation.lang as string,
+        title: translation.title ?? null,
+        short_name: translation.short_name ?? null,
+        description: translation.description ?? null,
+        video_url: translation.video_url ?? null,
+        updated_at: ts(),
+      })) ?? [];
+  if (!payloads.length) {
+    return null;
+  }
+  const { error } = await sb()
+    .from(T.ge_trans)
+    .upsert(payloads, { onConflict: "group_event_id,lang" })
+    .select();
+  if (error) throw new Error(`group_event_translations upsert: ${error.message}`);
+  return true;
+}
+
+async function deleteGroupEventTranslations(
+  group_event_id: string,
+  langs?: string[] | null,
+) {
+  const trimmed = (langs ?? []).map((lang) => lang.trim()).filter(Boolean);
+  if (!trimmed.length) {
+    return null;
+  }
+  const { error } = await sb()
+    .from(T.ge_trans)
+    .delete()
+    .eq("group_event_id", group_event_id)
+    .in("lang", trimmed);
+  if (error) throw new Error(`group_event_translations delete: ${error.message}`);
+  return true;
+}
+
+function normalizeDeletedTranslationLangs(
+  deleted?: string[] | null,
+  translations?: GroupEventTranslationPayload[] | null,
+) {
+  const normalizedDeleted = (deleted ?? []).map((lang) => lang.trim()).filter(Boolean);
+  if (!normalizedDeleted.length) {
+    return [];
+  }
+  const translationLangs = new Set((translations ?? []).map((tr) => tr.lang));
+  return normalizedDeleted.filter((lang) => !translationLangs.has(lang));
+}
+
 export async function saveJourney(payload: SaveJourneyPayload) {
   const created = {
     group_event_id: "" as string,
@@ -492,15 +561,18 @@ export async function saveJourney(payload: SaveJourneyPayload) {
   };
 
   try {
-    // 1) GROUP EVENT
-    const geRow = await insertRow(T.group_events, {
+    const now = ts();
+    const groupEventPayload = {
       title: payload.group_event.title,
       cover_url: payload.group_event.cover_url ?? null,
+      status: payload.group_event.status ?? null,
       visibility: payload.group_event.visibility,
-      status: payload.group_event.status,
       pitch: payload.group_event.pitch ?? null,
       description: payload.group_event.description ?? null,
-      color_hex: payload.group_event.color_hex ?? null,
+      allow_fan: payload.group_event.allow_fan ?? false,
+      allow_stud_high: payload.group_event.allow_stud_high ?? false,
+      allow_stud_middle: payload.group_event.allow_stud_middle ?? false,
+      allow_stud_primary: payload.group_event.allow_stud_primary ?? false,
       icon_name: payload.group_event.icon_name ?? null,
       is_official: payload.group_event.is_official ?? false,
       owner_user_ref: payload.group_event.owner_user_ref ?? null,
@@ -508,39 +580,48 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       code: payload.group_event.code ?? null,
       slug: payload.group_event.slug ?? null,
       workflow_state: payload.group_event.workflow_state ?? null,
-      audience_scope: payload.group_event.audience_scope ?? null,
       requested_approval_at: payload.group_event.requested_approval_at ?? null,
       approved_at: payload.group_event.approved_at ?? null,
       approved_by_profile_id: payload.group_event.approved_by_profile_id ?? null,
       refused_at: payload.group_event.refused_at ?? null,
       refused_by_profile_id: payload.group_event.refused_by_profile_id ?? null,
       refusal_reason: payload.group_event.refusal_reason ?? null,
-
       era_from: payload.group_event.era_from ?? null,
       era_to: payload.group_event.era_to ?? null,
       year_from: payload.group_event.year_from ?? null,
       year_to: payload.group_event.year_to ?? null,
+    };
 
-      created_at: ts(),
-      updated_at: ts(),
+    if (payload.group_event_id) {
+      await updateRow(T.group_events, { id: payload.group_event_id }, {
+        ...groupEventPayload,
+        updated_at: now,
+      });
+      const deletedLangs = normalizeDeletedTranslationLangs(
+        payload.deleted_group_event_translation_langs,
+        payload.group_event_translations,
+      );
+      await deleteGroupEventTranslations(payload.group_event_id, deletedLangs);
+      await upsertGroupEventTranslations(payload.group_event_id, payload.group_event_translations);
+      return { ok: true, group_event_id: payload.group_event_id };
+    }
+
+    // 1) GROUP EVENT
+    const geRow = await insertRow(T.group_events, {
+      ...groupEventPayload,
+      created_at: now,
+      updated_at: now,
     });
 
     const group_event_id = geRow.id as string;
     created.group_event_id = group_event_id;
 
-    // 1b) TRADUZIONE opzionale
-    if (payload.group_event_translation?.lang) {
-      await insertRow(T.ge_trans, {
-        group_event_id,
-        lang: payload.group_event_translation.lang,
-        title: payload.group_event_translation.title ?? null,
-        short_name: payload.group_event_translation.short_name ?? null,
-        description: payload.group_event_translation.description ?? null,
-        video_url: payload.group_event_translation.video_url ?? null,
-        created_at: ts(),
-        updated_at: ts(),
-      });
-    }
+    const deletedLangs = normalizeDeletedTranslationLangs(
+      payload.deleted_group_event_translation_langs,
+      payload.group_event_translations,
+    );
+    await deleteGroupEventTranslations(group_event_id, deletedLangs);
+    await upsertGroupEventTranslations(group_event_id, payload.group_event_translations);
 
     // 1c) COVER in media_assets + media_attachments
     if (payload.group_event.cover_url) {
