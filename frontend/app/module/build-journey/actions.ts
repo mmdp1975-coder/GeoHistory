@@ -398,7 +398,7 @@ export type SaveJourneyPayload = {
   group_event_id?: string;
   group_event: {
     title: string;
-    cover_url: string;
+    cover_url?: string;
     visibility: Visibility;
     status?: string;
     pitch?: string;
@@ -412,10 +412,8 @@ export type SaveJourneyPayload = {
 
     code?: string;
     slug?: string;
-    is_official?: boolean;
     owner_user_ref?: string;
     owner_profile_id?: string;
-    icon_name?: string;
     workflow_state?: string;
     requested_approval_at?: string;
     approved_at?: string;
@@ -427,10 +425,6 @@ export type SaveJourneyPayload = {
     created_at?: string;
     updated_at?: string;
 
-    era_from?: "AD" | "BC" | null;
-    era_to?: "AD" | "BC" | null;
-    year_from?: number | null;
-    year_to?: number | null;
   };
 
   group_event_translations?: GroupEventTranslationPayload[];
@@ -564,17 +558,13 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     const now = ts();
     const groupEventPayload = {
       title: payload.group_event.title,
-      cover_url: payload.group_event.cover_url ?? null,
       status: payload.group_event.status ?? null,
       visibility: payload.group_event.visibility,
       pitch: payload.group_event.pitch ?? null,
-      description: payload.group_event.description ?? null,
       allow_fan: payload.group_event.allow_fan ?? false,
       allow_stud_high: payload.group_event.allow_stud_high ?? false,
       allow_stud_middle: payload.group_event.allow_stud_middle ?? false,
       allow_stud_primary: payload.group_event.allow_stud_primary ?? false,
-      icon_name: payload.group_event.icon_name ?? null,
-      is_official: payload.group_event.is_official ?? false,
       owner_user_ref: payload.group_event.owner_user_ref ?? null,
       owner_profile_id: payload.group_event.owner_profile_id ?? null,
       code: payload.group_event.code ?? null,
@@ -586,10 +576,6 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       refused_at: payload.group_event.refused_at ?? null,
       refused_by_profile_id: payload.group_event.refused_by_profile_id ?? null,
       refusal_reason: payload.group_event.refusal_reason ?? null,
-      era_from: payload.group_event.era_from ?? null,
-      era_to: payload.group_event.era_to ?? null,
-      year_from: payload.group_event.year_from ?? null,
-      year_to: payload.group_event.year_to ?? null,
     };
 
     if (payload.group_event_id) {

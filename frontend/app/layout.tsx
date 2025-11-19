@@ -5,7 +5,7 @@ import SupabaseProvider from "./components/SupabaseProvider";
 import IdleLogoutProvider from "./components/IdleLogoutProvider";
 
 export const metadata: Metadata = {
-  title: "GeoHistory Journey",
+  title: "GeoHistory – Where time and space turn into stories",
   description: "Where time and space turn into stories",
 };
 
