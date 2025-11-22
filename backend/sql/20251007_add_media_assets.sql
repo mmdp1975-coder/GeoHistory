@@ -183,7 +183,8 @@ create unique index if not exists media_attachments_group_cover_uidx
   where role = 'cover';
 
 -- Expanded view with asset details for API consumption
-create or replace view media_attachments_expanded as
+drop view if exists media_attachments_expanded;
+create or replace view v_media_attachments_expanded as
 select
   ma.id,
   ma.media_id,

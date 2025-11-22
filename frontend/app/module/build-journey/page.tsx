@@ -2,7 +2,14 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { saveJourney, type SaveJourneyPayload } from "./actions";
+import {
+  saveJourney,
+  saveJourneyEvents,
+  type SaveJourneyPayload,
+  type GroupEventMediaEntry,
+  type MediaKind,
+  type JourneyEventEditPayload,
+} from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Scorecard } from "@/app/components/Scorecard";
@@ -48,11 +55,175 @@ type ProfileNameRow = {
   username: string | null;
 };
 
-const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
+type MediaAttachmentRow = {
+  id: string;
+  media_id: string | null;
+  role: string | null;
+  title: string | null;
+  caption: string | null;
+  alt_text: string | null;
+  is_primary: boolean | null;
+  sort_order: number | null;
+  public_url: string | null;
+  source_url: string | null;
+  media_type: string | null;
+};
+
+type GroupEventMediaItem = GroupEventMediaEntry & {
+  id?: string;
+  media_id?: string;
+  tempId: string;
+  kind: MediaKind;
+};
+
+const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
+  { value: "image", label: "Immagine" },
+  { value: "video", label: "Video" },
+  { value: "other", label: "Altro" },
+];
+
+type JourneyFilterValue = "all" | Visibility;
+
+const JOURNEY_FILTER_OPTIONS: { value: JourneyFilterValue; label: string }[] = [
+  { value: "all", label: "Tutti i miei video" },
+  { value: "private", label: "Solo quelli privati" },
+  { value: "public", label: "Solo quelli pubblici" },
+];
+
+type JourneySortValue = "approved_desc" | "approved_asc";
+
+const JOURNEY_SORT_OPTIONS: { value: JourneySortValue; label: string }[] = [
+  { value: "approved_desc", label: "Ultimi approvati" },
+  { value: "approved_asc", label: "Primi approvati" },
+];
+
+type JourneyRating = {
+  avg_rating: number | null;
+  ratings_count: number | null;
+};
+
+type JourneyEventSummary = {
+  event_id: string;
+  title: string;
+  description_short?: string;
+  exact_date?: string | null;
+  year_from?: number | null;
+  year_to?: number | null;
+  country?: string | null;
+  location?: string | null;
+  role?: string | null;
+};
+
+type JourneyEventEditor = {
+  tempId: string;
+  event_id?: string;
+  added_by_user_ref?: string | null;
+  activeLang: string;
+  event: {
+    era: "AD" | "BC" | null;
+    created_at: string | null;
+    year_from: number | null;
+    year_to: number | null;
+    exact_date: string | null;
+    continent: string | null;
+    country: string | null;
+    location: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    geom: string | null;
+    source_event_id: string | null;
+    image_url: string | null;
+    images_json: any | null;
+  };
+  translation: {
+    id?: string;
+    lang: string;
+    title: string;
+    description_short: string;
+    description: string;
+    wikipedia_url: string;
+    video_url: string;
+  };
+  translations_all: {
+    id?: string;
+    lang: string;
+    title: string;
+    description_short: string;
+    description: string;
+    wikipedia_url: string;
+    video_url: string;
+  }[];
+  type_codes: string[];
+  media: GroupEventMediaItem[];
+  correlations: { group_event_id: string; correlation_type?: string | null }[];
+};
+
+const normalizeMediaKind = (value?: string | null): MediaKind => {
+  if (!value) {
+    return "image";
+  }
+  const normalized = value.toLowerCase();
+  return MEDIA_KIND_OPTIONS.some((option) => option.value === normalized)
+    ? (normalized as MediaKind)
+    : "image";
+};
+
+const buildTempMediaId = () => `tmp-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+
+const createEmptyGroupEventMediaItem = (): GroupEventMediaItem => ({
+  tempId: buildTempMediaId(),
+  kind: "image",
+  role: "gallery",
+  public_url: "",
+  source_url: "",
   title: "",
+  caption: "",
+  alt_text: "",
+  is_primary: false,
+  sort_order: undefined,
+});
+
+const createEmptyEventTranslation = (lang: string, id?: string) => ({
+  id,
+  lang,
+  title: "",
+  description_short: "",
+  description: "",
+  wikipedia_url: "",
+  video_url: "",
+});
+
+const createEmptyEventEditor = (): JourneyEventEditor => ({
+  tempId: buildTempMediaId(),
+  event_id: undefined,
+  added_by_user_ref: null,
+  activeLang: DEFAULT_LANGUAGE,
+  event: {
+    era: "AD",
+    created_at: null,
+    year_from: null,
+    year_to: null,
+    exact_date: null,
+    continent: null,
+    country: null,
+    location: null,
+    latitude: null,
+    longitude: null,
+    geom: null,
+    source_event_id: null,
+    image_url: null,
+    images_json: null,
+  },
+  translation: createEmptyEventTranslation(DEFAULT_LANGUAGE),
+  translations_all: [createEmptyEventTranslation(DEFAULT_LANGUAGE)],
+  type_codes: [],
+  media: [],
+  correlations: [],
+});
+
+const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
   cover_url: "",
   visibility: "private",
-  status: "draft",
   pitch: "",
   description: "",
   language: DEFAULT_LANGUAGE,
@@ -129,9 +300,29 @@ export default function BuildJourneyPage() {
   const [newTranslationLang, setNewTranslationLang] = useState("");
   const [deletedTranslationLangs, setDeletedTranslationLangs] = useState<string[]>([]);
   const existingTranslationLangsRef = useRef<string[]>([]);
+  const [groupEventMedia, setGroupEventMedia] = useState<GroupEventMediaItem[]>([]);
   const [profileNames, setProfileNames] = useState<Record<string, string>>({});
+  const [journeyVisibilityMap, setJourneyVisibilityMap] = useState<Record<string, Visibility>>({});
+  const [journeyFilter, setJourneyFilter] = useState<JourneyFilterValue>("all");
+  const [journeySort, setJourneySort] = useState<JourneySortValue>("approved_desc");
+  const [journeyRatingMap, setJourneyRatingMap] = useState<Record<string, JourneyRating>>({});
+  const [activeTab, setActiveTab] = useState<"group" | "translations" | "media" | "events">("group");
+  const [journeyEvents, setJourneyEvents] = useState<JourneyEventEditor[]>([]);
+  const [deletedEventIds, setDeletedEventIds] = useState<string[]>([]);
+  const [eventsSaving, setEventsSaving] = useState(false);
+  const [eventsSaveError, setEventsSaveError] = useState<string | null>(null);
+  const [eventsSaveOk, setEventsSaveOk] = useState<string | null>(null);
+  const [relatedEvents, setRelatedEvents] = useState<JourneyEventSummary[]>([]);
+  const [relatedEventsLoading, setRelatedEventsLoading] = useState(false);
+  const [relatedEventsError, setRelatedEventsError] = useState<string | null>(null);
 
   const selectedJourney = useMemo(() => journeys.find((j) => j.id === selectedJourneyId) ?? null, [journeys, selectedJourneyId]);
+  const filteredJourneys = useMemo(() => {
+    if (journeyFilter === "all") {
+      return journeys;
+    }
+    return journeys.filter((journey) => journeyVisibilityMap[journey.id] === journeyFilter);
+  }, [journeyFilter, journeyVisibilityMap, journeys]);
 
   const resetForm = useCallback(() => {
     setGe({ ...EMPTY_GROUP_EVENT, owner_profile_id: profile?.id || "" });
@@ -139,6 +330,14 @@ export default function BuildJourneyPage() {
     setTranslation({ ...EMPTY_GROUP_EVENT_TRANSLATION, lang: DEFAULT_LANGUAGE });
     setSelectedTranslationLang(DEFAULT_LANGUAGE);
     setTranslations([]);
+    setGroupEventMedia([]);
+    setRelatedEvents([]);
+    setRelatedEventsError(null);
+    setRelatedEventsLoading(false);
+    setJourneyEvents([]);
+    setDeletedEventIds([]);
+    setEventsSaveError(null);
+    setEventsSaveOk(null);
   }, [profile?.id]);
 
   const handleNewJourney = () => {
@@ -154,6 +353,8 @@ export default function BuildJourneyPage() {
     }
     setJourneysLoading(true);
     setJourneysError(null);
+    setJourneyVisibilityMap({});
+    setJourneyRatingMap({});
     try {
       const { data: owned, error: ownedError } = await supabase
         .from("group_events")
@@ -163,13 +364,14 @@ export default function BuildJourneyPage() {
       const ownerIds = (owned ?? []).map((row) => row.id).filter(Boolean);
       if (!ownerIds.length) {
         setJourneys([]);
+        setJourneyVisibilityMap({});
         return;
       }
       const { data: rows, error } = await supabase
         .from("v_journeys")
         .select("journey_id,journey_cover_url,translation_title,approved_at,events_count,year_from_min,year_to_max")
         .in("journey_id", ownerIds)
-        .order("approved_at", { ascending: false });
+        .order("approved_at", { ascending: journeySort === "approved_asc" });
       if (error) throw error;
       const journeysFromView = (rows ?? []) as VJourneyRow[];
       setJourneys(
@@ -184,12 +386,44 @@ export default function BuildJourneyPage() {
           owner_profile_id: profile.id,
         }))
       );
+      const journeyIds = journeysFromView.map((journey) => journey.journey_id);
+      const { data: visibilityRows, error: visibilityError } = await supabase
+        .from("group_events")
+        .select("id,visibility")
+        .in("id", ownerIds);
+      if (visibilityError) throw visibilityError;
+      const visibilityMap: Record<string, Visibility> = {};
+      (visibilityRows ?? []).forEach((row) => {
+        if (row.id && (row.visibility === "private" || row.visibility === "public")) {
+          visibilityMap[row.id] = row.visibility as Visibility;
+        }
+      });
+      setJourneyVisibilityMap(visibilityMap);
+
+      const ratingMap: Record<string, JourneyRating> = {};
+      if (journeyIds.length) {
+        const { data: stats, error: statsError } = await supabase
+          .from("v_group_event_rating_stats")
+          .select("group_event_id,avg_rating,ratings_count")
+          .in("group_event_id", journeyIds);
+        if (statsError) throw statsError;
+        (stats ?? []).forEach((row) => {
+          const record = row as Record<string, unknown>;
+          if (typeof record.group_event_id === "string") {
+            ratingMap[record.group_event_id] = {
+              avg_rating: typeof record.avg_rating === "number" ? record.avg_rating : null,
+              ratings_count: typeof record.ratings_count === "number" ? record.ratings_count : null,
+            };
+          }
+        });
+      }
+      setJourneyRatingMap(ratingMap);
     } catch (err: any) {
       setJourneysError(err?.message || "Impossibile caricare i journeys.");
     } finally {
       setJourneysLoading(false);
     }
-  }, [profile?.id, supabase]);
+  }, [profile?.id, supabase, journeySort]);
 
   const loadJourneyDetails = useCallback(async (journeyId: string | null) => {
     if (!journeyId) {
@@ -208,7 +442,6 @@ export default function BuildJourneyPage() {
         ...prev,
         cover_url: base.cover_url || "",
         visibility: (base.visibility || "private") as Visibility,
-        status: (base.status as "draft" | "published") ?? prev.status,
         pitch: base.pitch || "",
         description: base.description || "",
         language,
@@ -268,12 +501,198 @@ export default function BuildJourneyPage() {
       setNewTranslationLang("");
       setDeletedTranslationLangs([]);
 
+      const { data: mediaData, error: mediaError } = await supabase
+        .from("v_media_attachments_expanded")
+        .select(
+          "id,media_id,entity_type,role,title,caption,alt_text,is_primary,sort_order,public_url,source_url,media_type",
+        )
+        .eq("group_event_id", journeyId)
+        .eq("entity_type", "group_event")
+        .order("sort_order", { ascending: true });
+      if (mediaError) throw mediaError;
+      const normalizedMedia =
+        ((mediaData ?? []) as MediaAttachmentRow[]).map((row) => ({
+          id: row.id,
+          media_id: row.media_id ?? undefined,
+          role: (row.role as any) ?? "gallery",
+          kind: normalizeMediaKind(row.media_type),
+          public_url: row.public_url ?? "",
+          source_url: row.source_url ?? "",
+          title: row.title ?? "",
+          caption: row.caption ?? "",
+          alt_text: row.alt_text ?? "",
+          sort_order: row.sort_order ?? undefined,
+          is_primary: !!row.is_primary,
+          tempId: row.id,
+        })) ?? [];
+      setGroupEventMedia(normalizedMedia);
+
+      setRelatedEventsLoading(true);
+      setRelatedEventsError(null);
+      try {
+        const { data: evData, error: evError } = await supabase
+          .from("event_group_event")
+          .select("event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images)")
+          .eq("group_event_id", journeyId)
+          .order("created_at", { ascending: true });
+        if (evError) throw evError;
+        const rows = (evData ?? []) as any[];
+        const eventIds = rows
+          .map((row) => row.event_id || row.events_list?.id)
+          .filter((id): id is string => Boolean(id));
+
+        const translationsMap: Record<string, { primary: JourneyEventEditor["translation"]; all: JourneyEventEditor["translations_all"] }> = {};
+        if (eventIds.length) {
+          const { data: trData } = await supabase
+            .from("event_translations")
+            .select("id, event_id, lang, title, description_short, description, wikipedia_url, video_url")
+            .in("event_id", eventIds);
+          (trData ?? []).forEach((row: any) => {
+            if (!row?.event_id) return;
+            const trObj = {
+              id: row.id as string | undefined,
+              lang: row.lang || DEFAULT_LANGUAGE,
+              title: row.title || "",
+              description_short: row.description_short || "",
+              description: row.description || "",
+              wikipedia_url: row.wikipedia_url || "",
+              video_url: row.video_url || "",
+            };
+            const existing = translationsMap[row.event_id];
+            if (!existing) {
+              translationsMap[row.event_id] = { primary: trObj, all: [trObj] };
+            } else {
+              existing.all.push(trObj);
+              // prefer the default language as "primary"
+              if (trObj.lang === DEFAULT_LANGUAGE) {
+                existing.primary = trObj;
+              }
+            }
+          });
+        }
+
+        const typeMap: Record<string, string[]> = {};
+        if (eventIds.length) {
+          const { data: typeRows } = await supabase
+            .from("event_type_map")
+            .select("event_id, type_code")
+            .in("event_id", eventIds);
+          (typeRows ?? []).forEach((row: any) => {
+            if (!row?.event_id || !row?.type_code) return;
+            typeMap[row.event_id] = typeMap[row.event_id] || [];
+            if (!typeMap[row.event_id].includes(row.type_code)) {
+              typeMap[row.event_id].push(row.type_code);
+            }
+          });
+        }
+
+        const corrMap: Record<string, { group_event_id: string; correlation_type?: string | null }[]> = {};
+        if (eventIds.length) {
+          const { data: corrRows } = await supabase
+            .from("event_group_event_correlated")
+            .select("event_id, group_event_id, correlation_type")
+            .in("event_id", eventIds);
+          (corrRows ?? []).forEach((row: any) => {
+            if (!row?.event_id || !row?.group_event_id) return;
+            corrMap[row.event_id] = corrMap[row.event_id] || [];
+            corrMap[row.event_id].push({
+              group_event_id: row.group_event_id,
+              correlation_type: row.correlation_type ?? "related",
+            });
+          });
+        }
+
+        const mediaMap: Record<string, GroupEventMediaItem[]> = {};
+        if (eventIds.length) {
+          const { data: mediaRows } = await supabase
+            .from("v_media_attachments_expanded")
+            .select(
+              "id,media_id,entity_type,role,title,caption,alt_text,is_primary,sort_order,public_url,source_url,media_type,event_id",
+            )
+            .eq("entity_type", "event")
+            .in("event_id", eventIds)
+            .order("sort_order", { ascending: true });
+          (mediaRows ?? []).forEach((row: any) => {
+            if (!row?.event_id) return;
+            mediaMap[row.event_id] = mediaMap[row.event_id] || [];
+            mediaMap[row.event_id].push({
+              id: row.id,
+              media_id: row.media_id ?? undefined,
+              role: row.role ?? "gallery",
+              kind: normalizeMediaKind(row.media_type),
+              public_url: row.public_url ?? "",
+              source_url: row.source_url ?? "",
+              title: row.title ?? "",
+              caption: row.caption ?? "",
+              alt_text: row.alt_text ?? "",
+              sort_order: row.sort_order ?? undefined,
+              is_primary: !!row.is_primary,
+              tempId: row.id,
+            });
+          });
+        }
+
+        const mapped: JourneyEventEditor[] = rows.map((row) => {
+          const ev = row.events_list || {};
+          const eventId = row.event_id || ev.id;
+          const tr = translationsMap[eventId]?.primary || {
+            ...createEmptyEventTranslation(DEFAULT_LANGUAGE),
+          };
+          const trAll = translationsMap[eventId]?.all || [createEmptyEventTranslation(DEFAULT_LANGUAGE)];
+          const media = mediaMap[eventId] || [];
+          return {
+            tempId: eventId || buildTempMediaId(),
+            event_id: eventId,
+            added_by_user_ref: row.added_by_user_ref ?? null,
+            activeLang: tr.lang || DEFAULT_LANGUAGE,
+            event: {
+              era: (ev.era as "AD" | "BC") || "AD",
+              created_at: ev.created_at ?? null,
+              year_from: ev.year_from ?? null,
+              year_to: ev.year_to ?? null,
+              exact_date: ev.exact_date ?? null,
+              continent: ev.continent ?? null,
+              country: ev.country ?? null,
+              location: ev.location ?? null,
+              latitude: ev.latitude ?? null,
+              longitude: ev.longitude ?? null,
+              geom: ev.geom ?? null,
+              source_event_id: ev.source_event_id ?? null,
+              image_url: ev.image_url ?? null,
+              images_json: ev.images ?? null,
+            },
+            translation: tr,
+            translations_all: trAll,
+            type_codes: typeMap[eventId] ?? [],
+            media,
+            correlations: corrMap[eventId] ?? [],
+          };
+        });
+        setJourneyEvents(mapped);
+        setRelatedEvents(
+          mapped.map((ev) => ({
+            event_id: ev.event_id || ev.tempId,
+            title: ev.translation.title || "(Untitled event)",
+            description_short: ev.translation.description_short,
+            exact_date: ev.event.exact_date,
+            year_from: ev.event.year_from,
+            year_to: ev.event.year_to,
+            country: ev.event.country,
+            location: ev.event.location,
+          })),
+        );
+      } catch (evErr: any) {
+        setRelatedEventsError(evErr?.message || "Errore nel caricamento degli eventi collegati.");
+      } finally {
+        setRelatedEventsLoading(false);
+      }
+
     } catch (err: any) {
       setJourneyDetailsError(err?.message || "Errore durante il caricamento dei dettagli.");
     } finally {
       setLoadingJourneyDetails(false);
     }
-  }, [supabase, profile?.id]);
+  }, [supabase, profile?.id, setGroupEventMedia]);
 
   useEffect(() => {
     loadJourneys();
@@ -424,6 +843,23 @@ export default function BuildJourneyPage() {
     }
   }, [selectedTranslationLang, translations]);
 
+  const addMediaItem = useCallback(() => {
+    setGroupEventMedia((prev) => [...prev, createEmptyGroupEventMediaItem()]);
+  }, []);
+
+  const removeMediaItem = useCallback((index: number) => {
+    setGroupEventMedia((prev) => prev.filter((_, idx) => idx !== index));
+  }, []);
+
+  const updateMediaItemField = useCallback(
+    <K extends keyof GroupEventMediaItem>(index: number, field: K, value: GroupEventMediaItem[K]) => {
+      setGroupEventMedia((prev) =>
+        prev.map((item, idx) => (idx === index ? { ...item, [field]: value } : item)),
+      );
+    },
+    [],
+  );
+
   const selectJourney = useCallback((journeyId: string) => {
     setSelectedJourneyId(journeyId);
   }, []);
@@ -438,23 +874,6 @@ export default function BuildJourneyPage() {
       resetForm();
     }
   }, [selectedJourneyId, loadJourneyDetails, resetForm]);
-
-  useEffect(() => {
-    if (!selectedJourney) {
-      return;
-    }
-    setGe((prev) => ({
-      ...prev,
-      title: selectedJourney.title ?? prev.title,
-    }));
-  }, [selectedJourney]);
-
-  useEffect(() => {
-    setGe((prev) => ({
-      ...prev,
-      title: translation.title,
-    }));
-  }, [translation.title]);
 
   const canSaveMetadata =
     (ge.slug ?? "").trim().length > 0 && (ge.code ?? "").trim().length > 0;
@@ -485,13 +904,26 @@ export default function BuildJourneyPage() {
       }))
       .filter((row) => row.lang);
 
+    const mediaPayload = groupEventMedia
+      .map((entry, index) => ({
+        public_url: entry.public_url?.trim() || undefined,
+        source_url: entry.source_url?.trim() || undefined,
+        title: entry.title?.trim() || undefined,
+        caption: entry.caption?.trim() || undefined,
+        alt_text: entry.alt_text?.trim() || undefined,
+        role: entry.role,
+        sort_order: entry.sort_order ?? index,
+        is_primary: entry.is_primary,
+        kind: entry.kind,
+      }))
+      .filter((entry) => entry.public_url || entry.source_url);
+
     const payload: SaveJourneyPayload = {
       group_event_id: selectedJourneyId ?? undefined,
       group_event: {
-        title: ge.title,
+        // Title is maintained in translations; group_events table no longer stores it.
         cover_url: ge.cover_url,
         visibility: ge.visibility,
-        status: ge.status,
         pitch: ge.pitch || undefined,
         description: ge.description || undefined,
         language: ge.language || DEFAULT_LANGUAGE,
@@ -514,6 +946,7 @@ export default function BuildJourneyPage() {
       deleted_group_event_translation_langs:
         deletedTranslationLangs.length > 0 ? deletedTranslationLangs : undefined,
       video_media_url: null,
+      group_event_media: mediaPayload,
       events: [],
     };
 
@@ -541,119 +974,254 @@ export default function BuildJourneyPage() {
 
     return (
       <section className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
-                <p className="text-sm font-semibold text-neutral-700">Dati identificativi</p>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <Input
-                    label="Slug"
-                    value={ge.slug}
-                    onChange={(value) => setGe((prev) => ({ ...prev, slug: value }))}
-                    placeholder="Es. age-of-exploration"
-                  />
-                  <Input
-                    label="Code"
-                    value={ge.code}
-                    onChange={(value) => setGe((prev) => ({ ...prev, code: value }))}
-                    placeholder="Es. EXP001"
-                  />
-                  <Select
-                    label="Visibility"
-                    value={ge.visibility}
-                    onChange={(value) => setGe((prev) => ({ ...prev, visibility: value as Visibility }))}
-                    options={[
-                      { value: "private", label: "Private" },
-                      { value: "public", label: "Public" },
-                    ]}
-                  />
-                  <Select
-                    label="Workflow state"
-                    value={ge.workflow_state || "draft"}
-                    onChange={(value) => setGe((prev) => ({ ...prev, workflow_state: value }))}
-                    options={[
-                      { value: "draft", label: "Draft" },
-                      { value: "submitted", label: "Submitted" },
-                      { value: "refused", label: "Refused" },
-                      { value: "published", label: "Published" },
-                    ]}
-                  />
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              activeTab === "group" ? "border-sky-600 bg-sky-50 text-sky-700" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
+            }`}
+            onClick={() => setActiveTab("group")}
+          >
+            Group events
+          </button>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              activeTab === "translations" ? "border-sky-600 bg-sky-50 text-sky-700" : "border-neutral-300 bg-white text-neutral-600 hover-border-neutral-400"
+            }`}
+            onClick={() => setActiveTab("translations")}
+          >
+            Group translations
+          </button>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              activeTab === "media" ? "border-sky-600 bg-sky-50 text-sky-700" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
+            }`}
+            onClick={() => setActiveTab("media")}
+          >
+            Group media
+          </button>
+          <button
+            type="button"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+              activeTab === "events" ? "border-sky-600 bg-sky-50 text-sky-700" : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
+            }`}
+            onClick={() => setActiveTab("events")}
+          >
+            Eventi
+          </button>
+        </div>
+
+        {activeTab === "group" && (
+          <div className="mt-6 space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
+                  <p className="text-sm font-semibold text-neutral-700">Dati identificativi</p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <Input
+                      label="Slug"
+                      value={ge.slug}
+                      onChange={(value) => setGe((prev) => ({ ...prev, slug: value }))}
+                      placeholder="Es. age-of-exploration"
+                    />
+                    <Input
+                      label="Code"
+                      value={ge.code}
+                      onChange={(value) => setGe((prev) => ({ ...prev, code: value }))}
+                      placeholder="Es. EXP001"
+                    />
+                    <Select
+                      label="Visibility"
+                      value={ge.visibility}
+                      onChange={(value) => setGe((prev) => ({ ...prev, visibility: value as Visibility }))}
+                      options={[
+                        { value: "private", label: "Private" },
+                        { value: "public", label: "Public" },
+                      ]}
+                    />
+                    <Select
+                      label="Workflow state"
+                      value={ge.workflow_state || "draft"}
+                      onChange={(value) => setGe((prev) => ({ ...prev, workflow_state: value }))}
+                      options={[
+                        { value: "draft", label: "Draft" },
+                        { value: "submitted", label: "Submitted" },
+                        { value: "refused", label: "Refused" },
+                        { value: "published", label: "Published" },
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
+                  <p className="text-sm font-semibold text-neutral-700">Audience flags</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {allowFlags.map((flag) => (
+                      <label
+                        key={flag.key}
+                        className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
+                          checked={!!ge[flag.key]}
+                          onChange={(event) => setGe((prev) => ({ ...prev, [flag.key]: event.target.checked }))}
+                        />
+                        <span>{flag.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
-                <p className="text-sm font-semibold text-neutral-700">Audience flags</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {allowFlags.map((flag) => (
-                    <label
-                      key={flag.key}
-                      className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
-                        checked={!!ge[flag.key]}
-                        onChange={(event) => setGe((prev) => ({ ...prev, [flag.key]: event.target.checked }))}
-                      />
-                      <span>{flag.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-5">
-                <ProfileField
-                  label="Owner profile"
-                  profileId={ge.owner_profile_id}
-                  displayName={getProfileDisplayName(ge.owner_profile_id)}
-                />
-                <div className="grid gap-6 md:grid-cols-3">
-                  <Input
-                    label="Requested approval at"
-                    type="datetime-local"
-                    value={toDateTimeLocalValue(ge.requested_approval_at)}
-                    onChange={(value) =>
-                      setGe((prev) => ({ ...prev, requested_approval_at: fromDateTimeLocalValue(value) }))
-                    }
-                  />
-                  <Input
-                    label="Approved at"
-                    type="datetime-local"
-                    value={toDateTimeLocalValue(ge.approved_at)}
-                    onChange={(value) => setGe((prev) => ({ ...prev, approved_at: fromDateTimeLocalValue(value) }))}
-                  />
-                  <Input
-                    label="Refused at"
-                    type="datetime-local"
-                    value={toDateTimeLocalValue(ge.refused_at)}
-                    onChange={(value) => setGe((prev) => ({ ...prev, refused_at: fromDateTimeLocalValue(value) }))}
-                  />
-                </div>
-                <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-6">
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-5">
                   <ProfileField
-                    label="Approved by profile"
-                    profileId={ge.approved_by_profile_id}
-                    displayName={getProfileDisplayName(ge.approved_by_profile_id)}
-                    className="w-full"
+                    label="Owner profile"
+                    profileId={ge.owner_profile_id}
+                    displayName={getProfileDisplayName(ge.owner_profile_id)}
                   />
-                  <ProfileField
-                    label="Refused by profile"
-                    profileId={ge.refused_by_profile_id}
-                    displayName={getProfileDisplayName(ge.refused_by_profile_id)}
-                    className="w-full"
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <Input
+                      label="Requested approval at"
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(ge.requested_approval_at)}
+                      onChange={(value) =>
+                        setGe((prev) => ({ ...prev, requested_approval_at: fromDateTimeLocalValue(value) }))
+                      }
+                    />
+                    <Input
+                      label="Approved at"
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(ge.approved_at)}
+                      onChange={(value) => setGe((prev) => ({ ...prev, approved_at: fromDateTimeLocalValue(value) }))}
+                    />
+                    <Input
+                      label="Refused at"
+                      type="datetime-local"
+                      value={toDateTimeLocalValue(ge.refused_at)}
+                      onChange={(value) => setGe((prev) => ({ ...prev, refused_at: fromDateTimeLocalValue(value) }))}
+                    />
+                  </div>
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <ProfileField
+                      label="Approved by profile"
+                      profileId={ge.approved_by_profile_id}
+                      displayName={getProfileDisplayName(ge.approved_by_profile_id)}
+                      className="w-full"
+                    />
+                    <ProfileField
+                      label="Refused by profile"
+                      profileId={ge.refused_by_profile_id}
+                      displayName={getProfileDisplayName(ge.refused_by_profile_id)}
+                      className="w-full"
+                    />
+                  </div>
+                  <Textarea
+                    label="Refusal reason"
+                    value={ge.refusal_reason}
+                    onChange={(value) => setGe((prev) => ({ ...prev, refusal_reason: value }))}
+                    placeholder="Spiega perch? ? stato rifiutato"
                   />
                 </div>
-                <Textarea
-                  label="Refusal reason"
-                  value={ge.refusal_reason}
-                  onChange={(value) => setGe((prev) => ({ ...prev, refusal_reason: value }))}
-                  placeholder="Spiega perch? ? stato rifiutato"
-                />
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4">
+        )}
+
+        {activeTab === "media" && (
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-4 mt-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-neutral-700">Media</p>
+                <p className="text-xs text-neutral-500">Gestisci gli asset collegati al journey.</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600 hover:border-neutral-400"
+                onClick={addMediaItem}
+              >
+                + Nuovo media
+              </button>
+            </div>
+            {groupEventMedia.length === 0 ? (
+              <p className="text-sm text-neutral-500">Nessun media collegato.</p>
+            ) : (
+              <div className="space-y-3">
+                {groupEventMedia.map((media, index) => (
+                  <div
+                    key={media.id ?? media.media_id ?? media.tempId ?? index}
+                    className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">
+                        Posizione {index + 1}
+                      </p>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-red-600"
+                        onClick={() => removeMediaItem(index)}
+                      >
+                        Elimina
+                      </button>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Input
+                        label="URL pubblico"
+                        value={media.public_url}
+                        onChange={(value) => updateMediaItemField(index, "public_url", value)}
+                        placeholder="https://"
+                      />
+                      <Input
+                        label="URL sorgente"
+                        value={media.source_url}
+                        onChange={(value) => updateMediaItemField(index, "source_url", value)}
+                        placeholder="https://"
+                      />
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <Input
+                        label="Titolo"
+                        value={media.title}
+                        onChange={(value) => updateMediaItemField(index, "title", value)}
+                        placeholder="Titolo asset"
+                      />
+                      <Input
+                        label="Didascalia"
+                        value={media.caption}
+                        onChange={(value) => updateMediaItemField(index, "caption", value)}
+                        placeholder="Didascalia"
+                      />
+                      <Input
+                        label="Alt text"
+                        value={media.alt_text}
+                        onChange={(value) => updateMediaItemField(index, "alt_text", value)}
+                        placeholder="Alt text"
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Select
+                        label="Tipo"
+                        value={media.kind}
+                        onChange={(value) => updateMediaItemField(index, "kind", value as MediaKind)}
+                        options={MEDIA_KIND_OPTIONS}
+                      />
+                      <Input
+                        label="Ordine"
+                        type="number"
+                        value={(media.sort_order ?? index + 1).toString()}
+                        onChange={(value) => updateMediaItemField(index, "sort_order", value ? Number(value) : undefined)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "translations" && (
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6">
             <div className="grid gap-6 lg:grid-cols-[200px,1fr]">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Lingue</p>
@@ -729,7 +1297,699 @@ export default function BuildJourneyPage() {
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "events" && (
+          <div className="rounded-2xl border border-neutral-200 bg-white p-4 mt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Eventi correlati</p>
+                <p className="text-sm text-neutral-500">
+                  Gestisci gli eventi collegati: dati base, traduzioni, tipi, correlazioni e media.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
+                onClick={() => setJourneyEvents((prev) => [...prev, createEmptyEventEditor()])}
+              >
+                + Aggiungi evento
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {relatedEventsLoading ? (
+                <p className="text-sm text-neutral-500">Caricamento eventi…</p>
+              ) : relatedEventsError ? (
+                <p className="text-sm text-red-600">{relatedEventsError}</p>
+              ) : journeyEvents.length === 0 ? (
+                <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
+              ) : (
+                journeyEvents.map((ev, idx) => {
+                  const dateLabel =
+                    ev.event.exact_date ||
+                    (ev.event.year_from && ev.event.year_to
+                      ? `${ev.event.year_from}–${ev.event.year_to}`
+                      : ev.event.year_from || ev.event.year_to || "Data n/d");
+                  return (
+                    <div key={ev.tempId} className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-900">
+                            {ev.translation.title || "(Nuovo evento)"}
+                          </p>
+                          <p className="text-xs text-neutral-500">{dateLabel}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-red-600"
+                          onClick={() => {
+                            setJourneyEvents((prev) => prev.filter((e) => e.tempId !== ev.tempId));
+                            if (ev.event_id) {
+                              setDeletedEventIds((prev) => (prev.includes(ev.event_id!) ? prev : [...prev, ev.event_id!]));
+                            }
+                          }}
+                        >
+                          Elimina
+                        </button>
+                      </div>
+                      <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">events_list</p>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <p className="text-[11px] text-neutral-500">ID</p>
+                            <p className="text-sm text-neutral-800">{ev.event_id || "---"}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] text-neutral-500">Created at</p>
+                            <p className="text-sm text-neutral-800">{ev.event.created_at || "---"}</p>
+                          </div>
+                          <Select
+                            label="Era"
+                            value={ev.event.era || "AD"}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, era: (value as any) || "AD" } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            options={[
+                              { value: "AD", label: "AD" },
+                              { value: "BC", label: "BC" },
+                            ]}
+                          />
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <Input
+                            label="Anno da"
+                            value={ev.event.year_from?.toString() ?? ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, year_from: value ? Number(value) : null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="number"
+                          />
+                          <Input
+                            label="Anno a"
+                            value={ev.event.year_to?.toString() ?? ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, year_to: value ? Number(value) : null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="number"
+                          />
+                          <Input
+                            label="Data esatta"
+                            value={ev.event.exact_date || ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, exact_date: value || null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="date"
+                          />
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <Input
+                            label="Latitudine"
+                            value={ev.event.latitude?.toString() ?? ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, latitude: value ? Number(value) : null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="number"
+                          />
+                          <Input
+                            label="Longitudine"
+                            value={ev.event.longitude?.toString() ?? ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, longitude: value ? Number(value) : null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                            type="number"
+                          />
+                          <Input
+                            label="Continent"
+                            value={ev.event.continent || ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, event: { ...item.event, continent: value || null } }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <Input
+                            label="Paese"
+                            value={ev.event.country || ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId ? { ...item, event: { ...item.event, country: value || null } } : item,
+                                ),
+                              )
+                            }
+                          />
+                          <Input
+                            label="Luogo"
+                            value={ev.event.location || ""}
+                            onChange={(value) =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId ? { ...item, event: { ...item.event, location: value || null } } : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                        <Textarea
+                          label="Geom"
+                          value={ev.event.geom || ""}
+                          onChange={(value) =>
+                            setJourneyEvents((prev) =>
+                              prev.map((item) =>
+                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, geom: value || null } } : item,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          label="Image URL"
+                          value={ev.event.image_url || ""}
+                          onChange={(value) =>
+                            setJourneyEvents((prev) =>
+                              prev.map((item) =>
+                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, image_url: value || null } } : item,
+                              ),
+                            )
+                          }
+                        />
+                        <Textarea
+                          label="Images (JSON)"
+                          value={
+                            typeof ev.event.images_json === "string"
+                              ? ev.event.images_json
+                              : JSON.stringify(ev.event.images_json ?? "", null, 2)
+                          }
+                          onChange={(value) =>
+                            setJourneyEvents((prev) =>
+                              prev.map((item) =>
+                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, images_json: value || null } } : item,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          label="Source event ID"
+                          value={ev.event.source_event_id || ""}
+                          onChange={(value) =>
+                            setJourneyEvents((prev) =>
+                              prev.map((item) =>
+                                item.tempId === ev.tempId
+                                  ? { ...item, event: { ...item.event, source_event_id: value || null } }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <Select
+                          label="Lingua"
+                          value={ev.activeLang}
+                          onChange={(value) => {
+                            const nextLang = (value || DEFAULT_LANGUAGE).trim() || DEFAULT_LANGUAGE;
+                            const existing = ev.translations_all.find((tr) => tr.lang === nextLang);
+                            setJourneyEvents((prev) =>
+                              prev.map((item) => {
+                                if (item.tempId !== ev.tempId) return item;
+                                const nextTranslation = existing || createEmptyEventTranslation(nextLang);
+                                const hasLang = item.translations_all.some((tr) => tr.lang === nextLang);
+                                return {
+                                  ...item,
+                                  activeLang: nextLang,
+                                  translation: { ...nextTranslation },
+                                  translations_all: hasLang
+                                    ? item.translations_all
+                                    : [...item.translations_all, nextTranslation],
+                                };
+                              }),
+                            );
+                          }}
+                          options={Array.from(
+                            new Set([ev.activeLang, ...ev.translations_all.map((t) => t.lang || DEFAULT_LANGUAGE)]),
+                          ).map((lang) => ({ value: lang, label: lang }))}
+                        />
+                        <div>
+                          <p className="text-[11px] text-neutral-500">Translation ID</p>
+                          <p className="text-sm text-neutral-800">{ev.translation.id || "---"}</p>
+                        </div>
+                        <div />
+                      </div>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Input
+                          label="Titolo"
+                          value={ev.translation.title}
+                          onChange={(value) => {
+                            setJourneyEvents((prev) =>
+                              prev.map((item) => {
+                                if (item.tempId !== ev.tempId) return item;
+                                const nextTranslation = { ...item.translation, title: value, lang: item.activeLang };
+                                const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
+                                  ? item.translations_all.map((tr) =>
+                                      tr.lang === item.activeLang ? { ...tr, title: value } : tr,
+                                    )
+                                  : [...item.translations_all, nextTranslation];
+                                return { ...item, translation: nextTranslation, translations_all: updatedAll };
+                              }),
+                            );
+                          }}
+                        />
+                        <Input
+                          label="Video URL"
+                          value={ev.translation.video_url}
+                          onChange={(value) => {
+                            setJourneyEvents((prev) =>
+                              prev.map((item) => {
+                                if (item.tempId !== ev.tempId) return item;
+                                const nextTranslation = { ...item.translation, video_url: value, lang: item.activeLang };
+                                const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
+                                  ? item.translations_all.map((tr) =>
+                                      tr.lang === item.activeLang ? { ...tr, video_url: value } : tr,
+                                    )
+                                  : [...item.translations_all, nextTranslation];
+                                return { ...item, translation: nextTranslation, translations_all: updatedAll };
+                              }),
+                            );
+                          }}
+                        />
+                        <Input
+                          label="Wikipedia URL"
+                          value={ev.translation.wikipedia_url}
+                          onChange={(value) => {
+                            setJourneyEvents((prev) =>
+                              prev.map((item) => {
+                                if (item.tempId !== ev.tempId) return item;
+                                const nextTranslation = { ...item.translation, wikipedia_url: value, lang: item.activeLang };
+                                const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
+                                  ? item.translations_all.map((tr) =>
+                                      tr.lang === item.activeLang ? { ...tr, wikipedia_url: value } : tr,
+                                    )
+                                  : [...item.translations_all, nextTranslation];
+                                return { ...item, translation: nextTranslation, translations_all: updatedAll };
+                              }),
+                            );
+                          }}
+                        />
+                      </div>
+                      <div className="rounded-lg border border-dashed border-neutral-200 bg-white p-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Traduzioni esistenti</p>
+                        {ev.translations_all.length === 0 ? (
+                          <p className="text-xs text-neutral-500 mt-1">Nessuna traduzione salvata.</p>
+                        ) : (
+                          <div className="mt-2 space-y-2">
+                            {ev.translations_all.map((tr) => (
+                              <div key={`${ev.tempId}-${tr.lang}`} className="rounded-md border border-neutral-100 bg-neutral-50 px-3 py-2">
+                                <p className="text-xs font-semibold text-neutral-700">{tr.lang}</p>
+                                <p className="text-xs text-neutral-600">{tr.title || "(senza titolo)"} {tr.id ? `· ${tr.id}` : ""}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <Textarea
+                        label="Descrizione breve"
+                        value={ev.translation.description_short}
+                        onChange={(value) => {
+                          setJourneyEvents((prev) =>
+                            prev.map((item) => {
+                              if (item.tempId !== ev.tempId) return item;
+                              const nextTranslation = { ...item.translation, description_short: value, lang: item.activeLang };
+                              const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
+                                ? item.translations_all.map((tr) =>
+                                    tr.lang === item.activeLang ? { ...tr, description_short: value } : tr,
+                                  )
+                                : [...item.translations_all, nextTranslation];
+                              return { ...item, translation: nextTranslation, translations_all: updatedAll };
+                            }),
+                          );
+                        }}
+                      />
+                    <Textarea
+                      label="Descrizione"
+                      value={ev.translation.description}
+                      onChange={(value) => {
+                        setJourneyEvents((prev) =>
+                          prev.map((item) => {
+                            if (item.tempId !== ev.tempId) return item;
+                            const nextTranslation = { ...item.translation, description: value, lang: item.activeLang };
+                            const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
+                              ? item.translations_all.map((tr) =>
+                                  tr.lang === item.activeLang ? { ...tr, description: value } : tr,
+                                )
+                              : [...item.translations_all, nextTranslation];
+                            return { ...item, translation: nextTranslation, translations_all: updatedAll };
+                          }),
+                        );
+                      }}
+                    />
+                      <div className="space-y-2">
+                        <Input
+                          label="Tipi (separa con virgola)"
+                          value={ev.type_codes.join(", ")}
+                          onChange={(value) => {
+                            const codes = value
+                              .split(",")
+                              .map((v) => v.trim())
+                              .filter(Boolean);
+                            setJourneyEvents((prev) =>
+                              prev.map((item) => (item.tempId === ev.tempId ? { ...item, type_codes: codes } : item)),
+                            );
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Correlazioni (event_group_event_correlated)</p>
+                        {(ev.correlations.length === 0 ? [{ group_event_id: "", correlation_type: "related" }] : ev.correlations).map(
+                          (corr, cIdx) => (
+                            <div key={cIdx} className="grid gap-3 md:grid-cols-2">
+                              <Input
+                                label="Group event ID"
+                                value={corr.group_event_id}
+                                onChange={(value) =>
+                                  setJourneyEvents((prev) =>
+                                    prev.map((item) => {
+                                      if (item.tempId !== ev.tempId) return item;
+                                      const nextCorr = [...item.correlations];
+                                      nextCorr[cIdx] = { ...nextCorr[cIdx], group_event_id: value };
+                                      return { ...item, correlations: nextCorr };
+                                    }),
+                                  )
+                                }
+                              />
+                              <Input
+                                label="Correlation type"
+                                value={corr.correlation_type || "related"}
+                                onChange={(value) =>
+                                  setJourneyEvents((prev) =>
+                                    prev.map((item) => {
+                                      if (item.tempId !== ev.tempId) return item;
+                                      const nextCorr = [...item.correlations];
+                                      nextCorr[cIdx] = { ...nextCorr[cIdx], correlation_type: value || "related" };
+                                      return { ...item, correlations: nextCorr };
+                                    }),
+                                  )
+                                }
+                              />
+                            </div>
+                          ),
+                        )}
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-neutral-700"
+                          onClick={() =>
+                            setJourneyEvents((prev) =>
+                              prev.map((item) =>
+                                item.tempId === ev.tempId
+                                  ? { ...item, correlations: [...item.correlations, { group_event_id: "", correlation_type: "related" }] }
+                                  : item,
+                              ),
+                            )
+                          }
+                        >
+                          + Aggiungi correlazione
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Media (media_assets + media_attachments)</p>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-neutral-700"
+                            onClick={() =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, media: [...item.media, createEmptyGroupEventMediaItem()] }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            + Media
+                          </button>
+                        </div>
+                        {ev.media.length === 0 ? (
+                          <p className="text-sm text-neutral-500">Nessun media per l'evento.</p>
+                        ) : (
+                          ev.media.map((m, mIdx) => (
+                            <div key={m.tempId} className="rounded-lg border border-neutral-200 bg-white p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">Item {mIdx + 1}</p>
+                                <button
+                                  type="button"
+                                  className="text-xs text-red-600"
+                                  onClick={() =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) =>
+                                        item.tempId === ev.tempId
+                                          ? { ...item, media: item.media.filter((_, idx) => idx !== mIdx) }
+                                          : item,
+                                      ),
+                                    )
+                                  }
+                                >
+                                  Elimina
+                                </button>
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <Input
+                                  label="URL pubblico"
+                                  value={m.public_url}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], public_url: value };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                                <Input
+                                  label="URL sorgente"
+                                  value={m.source_url}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], source_url: value };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <Input
+                                  label="Titolo"
+                                  value={m.title}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], title: value };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                                <Input
+                                  label="Didascalia"
+                                  value={m.caption}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], caption: value };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                                <Input
+                                  label="Alt text"
+                                  value={m.alt_text}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], alt_text: value };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <Select
+                                  label="Tipo"
+                                  value={m.kind}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], kind: value as MediaKind };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                  options={MEDIA_KIND_OPTIONS}
+                                />
+                                <Select
+                                  label="Ruolo"
+                                  value={m.role}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], role: value as any };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                  options={[
+                                    { value: "gallery", label: "Gallery" },
+                                    { value: "attachment", label: "Attachment" },
+                                    { value: "cover", label: "Cover" },
+                                    { value: "document", label: "Document" },
+                                    { value: "story_track", label: "Story track" },
+                                  ]}
+                                />
+                                <Input
+                                  label="Ordine"
+                                  type="number"
+                                  value={(m.sort_order ?? mIdx).toString()}
+                                  onChange={(value) =>
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+                                        const nextMedia = [...item.media];
+                                        nextMedia[mIdx] = { ...nextMedia[mIdx], sort_order: value ? Number(value) : undefined };
+                                        return { ...item, media: nextMedia };
+                                      }),
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-xs text-neutral-500">
+                {eventsSaveOk ? `Eventi salvati (${eventsSaveOk})` : eventsSaveError ? (
+                  <span className="text-red-600">{eventsSaveError}</span>
+                ) : (
+                  "Modifica eventi e salva per applicare le variazioni."
+                )}
+              </div>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-2 text-xs font-semibold ${
+                  selectedJourneyId && !eventsSaving ? "bg-neutral-900 text-white" : "bg-neutral-300 text-neutral-600"
+                }`}
+                disabled={!selectedJourneyId || eventsSaving}
+                onClick={async () => {
+                  if (!selectedJourneyId) return;
+                  setEventsSaving(true);
+                  setEventsSaveError(null);
+                  setEventsSaveOk(null);
+                  const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => ({
+                    event_id: ev.event_id,
+                    added_by_user_ref: ev.added_by_user_ref ?? null,
+                    event: { ...ev.event },
+                    translation: { ...ev.translation },
+                    translations: ev.translations_all,
+                    type_codes: ev.type_codes,
+                    correlations: ev.correlations.filter((c) => c.group_event_id),
+                    media: ev.media
+                      .map((m, mIdx) => ({
+                        public_url: m.public_url?.trim() || undefined,
+                        source_url: m.source_url?.trim() || undefined,
+                        title: m.title?.trim() || undefined,
+                        caption: m.caption?.trim() || undefined,
+                        alt_text: m.alt_text?.trim() || undefined,
+                        role: m.role ?? "gallery",
+                        sort_order: m.sort_order ?? mIdx,
+                        is_primary: m.is_primary,
+                        kind: m.kind,
+                      }))
+                      .filter((m) => m.public_url || m.source_url),
+                  }));
+                  try {
+                    const res = await saveJourneyEvents({
+                      group_event_id: selectedJourneyId,
+                      events: eventsPayload,
+                      delete_event_ids: deletedEventIds,
+                    });
+                    setEventsSaveOk(res.event_ids?.join(", "));
+                    setDeletedEventIds([]);
+                    await loadJourneyDetails(selectedJourneyId);
+                  } catch (err: any) {
+                    setEventsSaveError(err?.message || "Errore salvataggio eventi.");
+                  } finally {
+                    setEventsSaving(false);
+                  }
+                }}
+              >
+                {eventsSaving ? "Salvataggio..." : "Salva eventi"}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     );
   };
@@ -737,7 +1997,7 @@ export default function BuildJourneyPage() {
   return (
     <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
       <aside className="flex w-full max-w-[320px] flex-col border-r border-neutral-200 bg-white">
-        <div className="flex flex-col gap-2 border-b border-neutral-200 px-4 py-5">
+        <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-neutral-400">Journeys</p>
@@ -747,33 +2007,72 @@ export default function BuildJourneyPage() {
               New
             </button>
           </div>
-          <p className="text-xs text-neutral-500">{journeys.length} saved</p>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {JOURNEY_FILTER_OPTIONS.map((option) => {
+                const isActive = journeyFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                      isActive
+                        ? "border-sky-500 bg-sky-50 text-sky-700"
+                        : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-400"
+                    }`}
+                    onClick={() => setJourneyFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <Select
+              label="Ordina per"
+              value={journeySort}
+              onChange={(value) => setJourneySort(value as JourneySortValue)}
+              options={JOURNEY_SORT_OPTIONS}
+              className="w-full max-w-[220px]"
+            />
+          </div>
+          <p className="text-xs text-neutral-500">
+            {filteredJourneys.length === journeys.length
+              ? `${journeys.length} saved`
+              : `${filteredJourneys.length} di ${journeys.length} saved (filtrato)`}
+          </p>
           <p className="text-xs text-neutral-400">Seleziona un journey salvato per caricarne i campi e modificarli.</p>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6">
           {journeysLoading ? (
-            <p className="text-sm text-neutral-500">Caricamento journeysâ€¦</p>
+            <p className="text-sm text-neutral-500">Caricamento journeys…</p>
           ) : journeysError ? (
             <p className="text-sm text-red-600">{journeysError}</p>
           ) : journeys.length === 0 ? (
             <p className="text-sm text-neutral-500">Nessun journey salvato. Crea un nuovo flow.</p>
+          ) : filteredJourneys.length === 0 ? (
+            <p className="text-sm text-neutral-500">Nessun journey corrisponde al filtro attivo.</p>
           ) : (
             <ul className="space-y-3">
-              {journeys.map((journey) => (
-      <Scorecard
-        key={journey.id}
-        title={journey.title || "(Untitled journey)"}
-        coverUrl={journey.coverUrl ?? undefined}
-        publishedAt={journey.publishedAt ?? null}
-        eventsCount={journey.eventsCount ?? null}
-        yearFrom={journey.yearFrom ?? null}
-        yearTo={journey.yearTo ?? null}
-        ctaLabel="Modifica"
-        className={`w-full ${selectedJourneyId === journey.id ? "border-sky-500 bg-sky-50" : ""}`}
-        favouriteToggleDisabled
-        usePlainImg
-        onCardClick={() => selectJourney(journey.id)}
-      />
+              {filteredJourneys.map((journey) => (
+                <Scorecard
+                  key={journey.id}
+                  title={journey.title || "(Untitled journey)"}
+                  coverUrl={journey.coverUrl ?? undefined}
+                  publishedAt={journey.publishedAt ?? null}
+                  eventsCount={journey.eventsCount ?? null}
+                  yearFrom={journey.yearFrom ?? null}
+                  yearTo={journey.yearTo ?? null}
+                  ctaLabel="Modifica"
+                  className="w-full"
+                  liProps={{
+                    className: selectedJourneyId === journey.id ? "border-sky-500 bg-sky-50" : "",
+                  }}
+                  averageRating={journeyRatingMap[journey.id]?.avg_rating ?? null}
+                  ratingsCount={journeyRatingMap[journey.id]?.ratings_count ?? null}
+                  favouriteToggleDisabled
+                  prefetch={false}
+                  onCardClick={() => selectJourney(journey.id)}
+                />
               ))}
             </ul>
           )}

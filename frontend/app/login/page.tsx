@@ -12,6 +12,7 @@ import type { Session } from "@supabase/supabase-js";
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClientComponentClient();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [videoMuted, setVideoMuted] = useState(true);
 
   // Cooldown locale se scatta il rate-limit
   const [cooldown, setCooldown] = useState<number>(0);
@@ -77,6 +79,17 @@ export default function LoginPage() {
       cooldownRef.current = null;
     };
   }, [cooldown]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const play = () => {
+      el.play().catch(() => {
+        /* autoplay can be blocked until user interacts */
+      });
+    };
+    play();
+  }, []);
 
   // 🔹 Submit con redirect immediato e fallback
   async function handleSubmit(event: React.FormEvent) {
@@ -163,6 +176,17 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.bg} />
+      <video
+        ref={videoRef}
+        className={styles.video}
+        autoPlay
+        muted={videoMuted}
+        loop
+        playsInline
+        aria-hidden="true"
+      >
+        <source src="/GHJLogin/GHJLogin.mp4" type="video/mp4" />
+      </video>
       <div className={styles.veil} />
 
       <div className={styles.card}>
@@ -294,6 +318,45 @@ export default function LoginPage() {
           </button>
         </div>
       </div>
+
+      <button
+        type="button"
+        className={styles.audioToggle}
+        onClick={() => setVideoMuted((prev) => !prev)}
+        aria-pressed={!videoMuted}
+        aria-label={videoMuted ? "Attiva audio" : "Muta audio"}
+      >
+        {videoMuted ? (
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              d="M3 9v6h4l5 4V5L7 9H3Z"
+              fill="currentColor"
+              fillOpacity="0.9"
+            />
+            <path
+              d="m16 9 5 5m0-5-5 5"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path
+              d="M3 9v6h4l5 4V5L7 9H3Z"
+              fill="currentColor"
+              fillOpacity="0.9"
+            />
+            <path
+              d="M16 9.5c1 .8 1.5 1.8 1.5 2.5s-.5 1.7-1.5 2.5m2.5-6.5c1.5 1.2 2.5 2.7 2.5 4s-1 2.8-2.5 4"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }

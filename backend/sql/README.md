@@ -34,7 +34,7 @@ This folder contains handcrafted SQL migrations that extend the GeoHistory data 
    supabase db push --file backend/sql/20251007_migrate_legacy_media.sql
    ```
 
-4. Verify that the helper views `event_cover_assets`, `group_event_cover_assets`, and the `media_attachments_expanded` view expose the expected rows (rows stay `NULL` until attachments exist).
+4. Verify that the helper views `event_cover_assets`, `group_event_cover_assets`, and the `v_media_attachments_expanded` view expose the expected rows (rows stay `NULL` until attachments exist).
 
 ## Data migration checklist
 
@@ -45,13 +45,13 @@ This folder contains handcrafted SQL migrations that extend the GeoHistory data 
 
 ## Query helpers
 
-- `media_attachments_expanded` view joins attachments and assets, returning both metadata blobs plus every derivative field (`public_url`, `preview_url`, dimensions, etc.).
+- `v_media_attachments_expanded` view joins attachments and assets, returning both metadata blobs plus every derivative field (`public_url`, `preview_url`, dimensions, etc.).
 - `event_cover_assets` / `group_event_cover_assets` expose a single cover (or `NULL`) per entity and are ideal for lightweight lookups.
 - Typical pattern to list gallery items for an event group:
 
   ```sql
   select *
-  from media_attachments_expanded
+  from v_media_attachments_expanded
   where entity_type = 'group_event'::media_attachment_entity
     and group_event_id = '<uuid>'
   order by role, sort_order, created_at;

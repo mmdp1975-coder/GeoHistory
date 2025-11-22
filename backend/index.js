@@ -220,7 +220,7 @@ app.get("/api/events", async (req, res) => {
         ].join(",");
 
         const { data: mediaRows, error: mediaError } = await supabase
-          .from("media_attachments_expanded")
+          .from("v_media_attachments_expanded")
           .select(attachmentColumns)
           .in("event_id", eventIds);
 

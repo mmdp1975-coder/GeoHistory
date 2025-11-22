@@ -18,13 +18,27 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabaseServerClient";
+import { supabaseAdmin } from "@/lib/supabaseServerClient";
 import { YoutubeTranscript } from "youtube-transcript";
 import { z } from "zod";
 import OpenAI from "openai";
 
 type Visibility = "private" | "public";
 type MediaRole = "cover" | "attachment" | "gallery";
+export type MediaKind = "image" | "video" | "other";
+type MediaAssetType = "image" | "video" | "audio" | "document";
+
+export type GroupEventMediaEntry = {
+  public_url?: string;
+  source_url?: string;
+  title?: string;
+  caption?: string;
+  alt_text?: string;
+  role?: MediaRole;
+  sort_order?: number;
+  is_primary?: boolean;
+  kind?: MediaKind;
+};
 type EntityType = "group_event" | "event";
 
 type GroupEventTranslationPayload = {
@@ -35,6 +49,23 @@ type GroupEventTranslationPayload = {
   video_url?: string;
 };
 
+type EventTranslationPayload = {
+  id?: string;
+  lang: string;
+  title?: string;
+  description_short?: string;
+  description?: string;
+  wikipedia_url?: string;
+  video_url?: string;
+};
+
+type EventCorrelationPayload = {
+  group_event_id: string;
+  correlation_type?: string | null;
+};
+
+const DEFAULT_LANGUAGE = "it";
+
 // ====== Mappatura tabelle (aggiorna se necessario) ======
 const T = {
   group_events: "group_events",
@@ -42,17 +73,25 @@ const T = {
   events: "events_list",
   ev_trans: "event_translations",
   ev_ge: "event_group_event",
-  ev_types: "event_types",
   ev_type_map: "event_type_map",
   media: "media_assets",
   attach: "media_attachments",
+  ev_corr: "event_group_event_correlated",
+  ev_types: "event_types",
 } as const;
 
 function sb() {
-  return createClient();
+  return supabaseAdmin;
 }
 function ts() {
   return new Date().toISOString();
+}
+
+function toMediaAssetType(kind?: MediaKind | null): MediaAssetType {
+  if (kind === "video") return "video";
+  if (kind === "image") return "image";
+  // Bucket anything unknown/other as document to fit the enum.
+  return "document";
 }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -397,10 +436,8 @@ export async function analyzeVideoDeep(input: { videoUrl: string; lang?: string 
 export type SaveJourneyPayload = {
   group_event_id?: string;
   group_event: {
-    title: string;
     cover_url?: string;
     visibility: Visibility;
-    status?: string;
     pitch?: string;
     description?: string;
     language?: string;
@@ -412,7 +449,6 @@ export type SaveJourneyPayload = {
 
     code?: string;
     slug?: string;
-    owner_user_ref?: string;
     owner_profile_id?: string;
     workflow_state?: string;
     requested_approval_at?: string;
@@ -431,6 +467,8 @@ export type SaveJourneyPayload = {
   deleted_group_event_translation_langs?: string[];
 
   video_media_url?: string | null;
+
+  group_event_media?: GroupEventMediaEntry[];
 
   events: Array<{
     era?: "AD" | "BC";
@@ -473,15 +511,45 @@ export type SaveJourneyPayload = {
   }>;
 };
 
+export type JourneyEventEditPayload = {
+  event_id?: string;
+  event: {
+    era?: "AD" | "BC" | null;
+    year_from?: number | null;
+    year_to?: number | null;
+    exact_date?: string | null;
+    continent?: string | null;
+    country?: string | null;
+    location?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    geom?: string | null;
+    source_event_id?: string | null;
+    image_url?: string | null;
+    images_json?: any | null;
+  };
+  translation?: EventTranslationPayload | null;
+  type_codes?: string[];
+  media?: GroupEventMediaEntry[];
+  correlations?: EventCorrelationPayload[];
+  added_by_user_ref?: string | null;
+};
+
+export type SaveJourneyEventsPayload = {
+  group_event_id: string;
+  events: JourneyEventEditPayload[];
+  delete_event_ids?: string[];
+};
+
 async function insertRow(table: string, record: any) {
   const { data, error } = await sb().from(table).insert(record).select().single();
   if (error) throw new Error(`${table} insert: ${error.message}`);
   return data;
 }
 async function updateRow(table: string, match: any, patch: any) {
-  const { data, error } = await sb().from(table).update(patch).match(match).select().single();
+  const { error } = await sb().from(table).update(patch).match(match);
   if (error) throw new Error(`${table} update: ${error.message}`);
-  return data;
+  return true;
 }
 
 async function upsertGroupEventTranslations(
@@ -502,7 +570,6 @@ async function upsertGroupEventTranslations(
         short_name: translation.short_name ?? null,
         description: translation.description ?? null,
         video_url: translation.video_url ?? null,
-        updated_at: ts(),
       })) ?? [];
   if (!payloads.length) {
     return null;
@@ -556,16 +623,18 @@ export async function saveJourney(payload: SaveJourneyPayload) {
 
   try {
     const now = ts();
+    const fallbackTitle =
+      payload.group_event_translations?.[0]?.title?.trim() ||
+      payload.group_event.slug ||
+      payload.group_event.code ||
+      "journey";
     const groupEventPayload = {
-      title: payload.group_event.title,
-      status: payload.group_event.status ?? null,
       visibility: payload.group_event.visibility,
       pitch: payload.group_event.pitch ?? null,
       allow_fan: payload.group_event.allow_fan ?? false,
       allow_stud_high: payload.group_event.allow_stud_high ?? false,
       allow_stud_middle: payload.group_event.allow_stud_middle ?? false,
       allow_stud_primary: payload.group_event.allow_stud_primary ?? false,
-      owner_user_ref: payload.group_event.owner_user_ref ?? null,
       owner_profile_id: payload.group_event.owner_profile_id ?? null,
       code: payload.group_event.code ?? null,
       slug: payload.group_event.slug ?? null,
@@ -577,6 +646,9 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       refused_by_profile_id: payload.group_event.refused_by_profile_id ?? null,
       refusal_reason: payload.group_event.refusal_reason ?? null,
     };
+    const galleryOnlyMedia = (payload.group_event_media ?? []).filter(
+      (m) => (m.role ?? "gallery") !== "cover",
+    );
 
     if (payload.group_event_id) {
       await updateRow(T.group_events, { id: payload.group_event_id }, {
@@ -589,6 +661,44 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       );
       await deleteGroupEventTranslations(payload.group_event_id, deletedLangs);
       await upsertGroupEventTranslations(payload.group_event_id, payload.group_event_translations);
+      if (galleryOnlyMedia.length) {
+        await sb()
+          .from(T.attach)
+          .delete()
+          .eq("entity_type", "group_event")
+          .eq("group_event_id", payload.group_event_id)
+          .eq("role", "gallery");
+      for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
+        const m = galleryOnlyMedia[mIdx];
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) {
+          continue;
+        }
+        const asset = await insertRow(T.media, {
+          storage_bucket: "public",
+          storage_path: resolvedUrl,
+          public_url: resolvedUrl,
+          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
+          media_type: toMediaAssetType(m.kind),
+          status: "ready",
+          created_at: ts(),
+        });
+          created.media_ids.push(asset.id);
+          const att = await insertRow(T.attach, {
+            media_id: asset.id,
+            entity_type: "group_event" as EntityType,
+            group_event_id: payload.group_event_id,
+            role: m.role ?? "gallery",
+            sort_order: m.sort_order ?? mIdx,
+            is_primary: !!m.is_primary,
+            title: m.title ?? null,
+            caption: m.caption ?? null,
+            alt_text: m.alt_text ?? null,
+            created_at: ts(),
+          });
+          created.ge_attach_ids.push(att.id);
+        }
+      }
       return { ok: true, group_event_id: payload.group_event_id };
     }
 
@@ -612,18 +722,21 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     // 1c) COVER in media_assets + media_attachments
     if (payload.group_event.cover_url) {
       const cov = await insertRow(T.media, {
-        url: payload.group_event.cover_url,
-        kind: "image",
-        alt_text: `${payload.group_event.title} cover`,
+        storage_bucket: "public",
+        storage_path: payload.group_event.cover_url,
+        public_url: payload.group_event.cover_url,
+        source_url: payload.group_event.cover_url,
+        media_type: "image" as MediaAssetType,
+        status: "ready",
         created_at: ts(),
       });
       created.media_ids.push(cov.id);
       const att = await insertRow(T.attach, {
         media_id: cov.id,
         entity_type: "group_event" as EntityType,
-        entity_id: group_event_id,
+        group_event_id,
         role: "cover" as MediaRole,
-        position: 0,
+        sort_order: 0,
         is_primary: true,
         created_at: ts(),
       });
@@ -634,22 +747,65 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     // 1d) VIDEO allegato al group_event (se presente)
     if (payload.video_media_url) {
       const v = await insertRow(T.media, {
-        url: payload.video_media_url,
-        kind: "video",
-        alt_text: `${payload.group_event.title} video`,
+        storage_bucket: "public",
+        storage_path: payload.video_media_url,
+        public_url: payload.video_media_url,
+        source_url: payload.video_media_url,
+        media_type: "video" as MediaAssetType,
+        status: "ready",
         created_at: ts(),
       });
       created.media_ids.push(v.id);
       const att = await insertRow(T.attach, {
         media_id: v.id,
         entity_type: "group_event" as EntityType,
-        entity_id: group_event_id,
+        group_event_id,
         role: "attachment" as MediaRole,
-        position: 1,
+        sort_order: 1,
         is_primary: false,
         created_at: ts(),
       });
       created.ge_attach_ids.push(att.id);
+    }
+
+    if (galleryOnlyMedia.length) {
+      await sb()
+        .from(T.attach)
+        .delete()
+        .eq("entity_type", "group_event")
+        .eq("group_event_id", group_event_id)
+        .eq("role", "gallery");
+
+      for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
+        const m = galleryOnlyMedia[mIdx];
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) {
+          continue;
+        }
+        const asset = await insertRow(T.media, {
+          storage_bucket: "public",
+          storage_path: resolvedUrl,
+          public_url: resolvedUrl,
+          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
+          media_type: toMediaAssetType(m.kind),
+          status: "ready",
+          created_at: ts(),
+        });
+          created.media_ids.push(asset.id);
+          const att = await insertRow(T.attach, {
+          media_id: asset.id,
+          entity_type: "group_event" as EntityType,
+          group_event_id,
+          role: m.role ?? "gallery",
+          sort_order: m.sort_order ?? mIdx,
+          is_primary: !!m.is_primary,
+          title: m.title ?? null,
+          caption: m.caption ?? null,
+          alt_text: m.alt_text ?? null,
+          created_at: ts(),
+        });
+        created.ge_attach_ids.push(att.id);
+      }
     }
 
     // 2) EVENTS + traduzioni + tipi + media
@@ -717,11 +873,17 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       // 2e) media per evento
       for (let mIdx = 0; mIdx < (ev.media?.length || 0); mIdx++) {
         const m = ev.media[mIdx];
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) {
+          continue;
+        }
         const asset = await insertRow(T.media, {
-          url: m.public_url ?? m.source_url ?? null,
-          source_url: m.source_url ?? null,
-          kind: "other",
-          alt_text: m.alt_text ?? null,
+          storage_bucket: "public",
+          storage_path: resolvedUrl,
+          public_url: resolvedUrl,
+          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
+          media_type: toMediaAssetType((m as any).kind ?? null),
+          status: "ready",
           created_at: ts(),
         });
         created.media_ids.push(asset.id);
@@ -729,9 +891,9 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         const att = await insertRow(T.attach, {
           media_id: asset.id,
           entity_type: "event" as EntityType,
-          entity_id: event_id,
+          event_id,
           role: m.role,
-          position: m.sort_order ?? mIdx,
+          sort_order: m.sort_order ?? mIdx,
           is_primary: !!m.is_primary,
           title: m.title ?? null,
           caption: m.caption ?? null,
@@ -762,5 +924,201 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         await s.from(T.group_events).delete().eq("id", created.group_event_id);
     } catch {}
     throw new Error(`saveJourney failed: ${err.message}`);
+  }
+}
+
+export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
+  if (!payload.group_event_id) {
+    throw new Error("group_event_id mancante.");
+  }
+  const now = ts();
+  const processedEventIds: string[] = [];
+  const toDelete = new Set(payload.delete_event_ids ?? []);
+  try {
+    for (const item of payload.events ?? []) {
+      // 1) upsert event
+      let event_id = item.event_id;
+      const base = item.event || {};
+      if (event_id) {
+        await updateRow(T.events, { id: event_id }, {
+          era: base.era ?? null,
+          year_from: base.year_from ?? null,
+          year_to: base.year_to ?? null,
+          exact_date: base.exact_date ?? null,
+          continent: base.continent ?? null,
+          country: base.country ?? null,
+          location: base.location ?? null,
+          latitude: base.latitude ?? null,
+          longitude: base.longitude ?? null,
+          geom: base.geom ?? null,
+          source_event_id: base.source_event_id ?? null,
+          image_url: base.image_url ?? null,
+          images: base.images_json ?? null,
+          updated_at: now,
+        });
+      } else {
+        const evRow = await insertRow(T.events, {
+          era: base.era ?? null,
+          year_from: base.year_from ?? null,
+          year_to: base.year_to ?? null,
+          exact_date: base.exact_date ?? null,
+          continent: base.continent ?? null,
+          country: base.country ?? null,
+          location: base.location ?? null,
+          latitude: base.latitude ?? null,
+          longitude: base.longitude ?? null,
+          geom: base.geom ?? null,
+          source_event_id: base.source_event_id ?? null,
+          image_url: base.image_url ?? null,
+          images: base.images_json ?? null,
+          created_at: now,
+          updated_at: now,
+        });
+        event_id = evRow.id;
+      }
+      if (!event_id) {
+        throw new Error("event_id non risolto.");
+      }
+      processedEventIds.push(event_id);
+      toDelete.delete(event_id);
+
+      // 2) upsert translation (solo lang fornita)
+      const translationsArray =
+        (item as any).translations && Array.isArray((item as any).translations)
+          ? ((item as any).translations as EventTranslationPayload[])
+          : (item.translation?.lang ? [item.translation] : []);
+
+      if (translationsArray.length) {
+        await sb().from(T.ev_trans).delete().eq("event_id", event_id);
+        const payloads = translationsArray
+          .map((tr) => ({
+            event_id,
+            lang: tr.lang || DEFAULT_LANGUAGE,
+            title: tr.title ?? null,
+            description_short: tr.description_short ?? null,
+            description: tr.description ?? null,
+            wikipedia_url: tr.wikipedia_url ?? null,
+            video_url: tr.video_url ?? null,
+            created_at: now,
+            updated_at: now,
+          }))
+          .filter((tr) => tr.lang);
+        if (payloads.length) {
+          const { error: trError } = await sb().from(T.ev_trans).upsert(payloads, { onConflict: "event_id,lang" }).select();
+          if (trError) throw new Error(`event_translations upsert: ${trError.message}`);
+        }
+      } else if (item.translation?.lang) {
+        const tr = item.translation;
+        const { error: trError } = await sb()
+          .from(T.ev_trans)
+          .upsert(
+            [
+              {
+                event_id,
+                lang: tr.lang,
+                title: tr.title ?? null,
+                description_short: tr.description_short ?? null,
+                description: tr.description ?? null,
+                wikipedia_url: tr.wikipedia_url ?? null,
+                video_url: tr.video_url ?? null,
+                created_at: now,
+                updated_at: now,
+              },
+            ],
+            { onConflict: "event_id,lang" },
+          )
+          .select();
+        if (trError) throw new Error(`event_translations upsert: ${trError.message}`);
+      }
+
+      // 3) replace type_map
+      await sb().from(T.ev_type_map).delete().eq("event_id", event_id);
+      for (const code of item.type_codes ?? []) {
+        await insertRow(T.ev_type_map, {
+          event_id,
+          type_code: code,
+          created_at: now,
+        });
+      }
+
+      // 4) replace media (attachments + assets)
+      await sb()
+        .from(T.attach)
+        .delete()
+        .eq("entity_type", "event")
+        .eq("event_id", event_id);
+
+      for (let mIdx = 0; mIdx < (item.media?.length || 0); mIdx++) {
+        const m = item.media![mIdx];
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) continue;
+        const asset = await insertRow(T.media, {
+          storage_bucket: "public",
+          storage_path: resolvedUrl,
+          public_url: resolvedUrl,
+          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
+          media_type: toMediaAssetType(m.kind),
+          status: "ready",
+          created_at: now,
+        });
+        const att = await insertRow(T.attach, {
+          media_id: asset.id,
+          entity_type: "event" as EntityType,
+          event_id,
+          role: m.role ?? "gallery",
+          sort_order: m.sort_order ?? mIdx,
+          is_primary: !!m.is_primary,
+          title: m.title ?? null,
+          caption: m.caption ?? null,
+          alt_text: m.alt_text ?? null,
+          created_at: now,
+        });
+        // track ids for potential cleanup not needed here
+      }
+
+      // 5) ensure link event_group_event
+      await sb()
+        .from(T.ev_ge)
+        .delete()
+        .eq("event_id", event_id)
+        .eq("group_event_id", payload.group_event_id);
+      await insertRow(T.ev_ge, {
+        event_id,
+        group_event_id: payload.group_event_id,
+        role: "primary",
+        title: null,
+        caption: null,
+        alt_text: null,
+        added_by_user_ref: item.added_by_user_ref ?? null,
+        created_at: now,
+      });
+
+      // 6) correlations
+      await sb().from(T.ev_corr).delete().eq("event_id", event_id);
+      for (const corr of item.correlations ?? []) {
+        if (!corr.group_event_id) continue;
+        await insertRow(T.ev_corr, {
+          event_id,
+          group_event_id: corr.group_event_id,
+          correlation_type: corr.correlation_type ?? "related",
+          created_at: now,
+        });
+      }
+    }
+
+    // Delete requested events (only if not processed)
+    for (const event_id of Array.from(toDelete)) {
+      await sb().from(T.attach).delete().eq("entity_type", "event").eq("event_id", event_id);
+      await sb().from(T.ev_type_map).delete().eq("event_id", event_id);
+      await sb().from(T.ev_trans).delete().eq("event_id", event_id);
+      await sb().from(T.ev_corr).delete().eq("event_id", event_id);
+      await sb().from(T.ev_ge).delete().eq("event_id", event_id).eq("group_event_id", payload.group_event_id);
+      await sb().from(T.events).delete().eq("id", event_id);
+    }
+
+    revalidatePath("/module/build-journey");
+    return { ok: true, event_ids: processedEventIds };
+  } catch (err: any) {
+    throw new Error(`saveJourneyEvents failed: ${err.message}`);
   }
 }

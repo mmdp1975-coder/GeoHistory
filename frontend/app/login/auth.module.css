@@ -4,21 +4,35 @@
 .page {
   position: relative;
   min-height: 100vh;
-  display: grid;
-  place-items: center;          /* centro la card in pagina */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;    /* sposto la card a destra */
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   color: #111827;
   overflow: hidden;
-  padding: 16px;
+  padding: 16px 24px;
+  box-sizing: border-box;
+}
+@media (max-width: 900px) {
+  .page {
+    justify-content: center;    /* sui device piccoli rimane centrata */
+  }
 }
 .bg {
   position: fixed;
   inset: 0;
-  background-image: url("/bg/login-map.jpg");
-  background-size: cover;
-  background-position: center;
-  opacity: 0.7;
+  background: #000;             /* fallback sotto il video */
   z-index: 0;
+}
+.video {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  filter: brightness(0.8);
+  pointer-events: none;
 }
 .veil {
   position: fixed;
@@ -33,7 +47,8 @@
   z-index: 2;
   width: 100%;
   max-width: 520px;             /* allineata alla larghezza dei campi */
-  margin: 0 auto;               /* centrare anche in fallback */
+  margin-left: auto;            /* sposta a destra */
+  margin-right: 0;
   background: #ffffff;
   border-radius: 16px;
   padding: 26px 24px 22px;
@@ -204,6 +219,31 @@
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+.audioToggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 3;
+  border: 1px solid rgba(255,255,255,0.6);
+  background: rgba(17,24,39,0.75);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 46px;
+  height: 46px;
+}
+.audioToggle:hover {
+  background: rgba(17,24,39,0.9);
 }
 
 /* Alert */
