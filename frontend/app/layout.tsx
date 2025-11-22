@@ -8,7 +8,7 @@ const siteUrl = "https://geohistory.io";
 const title = "GeoHistory – Where time and space turn into stories";
 const description =
   "GeoHistory is the interactive platform where time and space turn into stories. Explore world history on a live map and timeline, discover events, civilizations and journeys designed for students, teachers and history lovers.";
-const ogImageUrl = `${siteUrl}/og-geohistory.jpg`;
+const ogImageUrl = `${siteUrl}/og-geohistory.jpg`; // solo logo, quadrato
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -23,10 +23,10 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: ogImageUrl, // URL ASSOLUTO, non relativo
-        width: 1200,
-        height: 630,
-        alt: "GeoHistory – Where time and space turn into stories",
+        url: ogImageUrl,
+        width: 800,   // quadrato: adatta al file che hai creato
+        height: 800,
+        alt: "GeoHistory logo",
       },
     ],
   },
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    images: [ogImageUrl], // URL ASSOLUTO
+    images: [ogImageUrl],
   },
 };
 
