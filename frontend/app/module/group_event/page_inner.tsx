@@ -458,10 +458,19 @@ export default function GroupEventModulePage() {
  const { userId } = useCurrentUser();
  const isLg = useIsLg();
 
- const desiredLang =
-  (sp.get("lang") ||
-  (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
- "it").toLowerCase();
+const desiredLang = (() => {
+  const qp = sp.get("lang");
+  if (qp && qp.trim()) return qp.trim().slice(0, 2).toLowerCase();
+  if (typeof navigator !== "undefined") {
+    const cand = (navigator.languages && navigator.languages.find((l) => !!l)) || navigator.language;
+    if (cand) return cand.slice(0, 2).toLowerCase();
+  }
+  try {
+    const intl = Intl.DateTimeFormat().resolvedOptions().locale;
+    if (intl) return intl.slice(0, 2).toLowerCase();
+  } catch {}
+  return "it";
+})();
 
  const [gid, setGid] = useState<string | null>(null);
  const [eidParam, setEidParam] = useState<string | null>(null);
@@ -516,13 +525,18 @@ export default function GroupEventModulePage() {
  } catch {}
  }, []);
 
- const [ge, setGe] = useState<AnyObj | null>(null);
- const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string } | null>(null);
- const [rows, setRows] = useState<EventVM[]>([]);
- const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
+const [ge, setGe] = useState<AnyObj | null>(null);
+const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string; lang?: string } | null>(null);
+const [rows, setRows] = useState<EventVM[]>([]);
+const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
 
- const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
- const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
+const resolvedLang = useMemo(
+  () => geTr?.lang?.toLowerCase?.() || desiredLang,
+  [geTr, desiredLang]
+);
+
+const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
+const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
 
  const [selectedIndex, setSelectedIndex] = useState(0);
  const [loading, setLoading] = useState(true);
@@ -779,40 +793,68 @@ useEffect(() => {
 
  // Carica correlazioni per l'evento selezionato (lazy, senza viste)
  useEffect(() => {
- const ev = rows[selectedIndex];
- if (!ev?.id) return;
- if (corrByEvent[ev.id]) return; // cache
- (async () => {
- try {
- const { data, error } = await supabase
- .from("event_group_event_correlated")
- .select("group_event_id, group_events!inner(id, slug), group_event_translations!left(title, lang)")
- .eq("event_id", ev.id)
- .eq("group_event_translations.lang", desiredLang);
- if (error) throw error;
+const ev = rows[selectedIndex];
+if (!ev?.id) return;
+if (corrByEvent[ev.id]) return; // cache
+(async () => {
+try {
+  const { data, error } = await supabase
+  .from("event_group_event_correlated")
+  .select("group_event_id, group_events!inner(id, slug, visibility, approved_at), group_event_translations!left(title, lang)")
+  .eq("event_id", ev.id)
+  .eq("group_events.visibility", "public")
+  .not("group_events.approved_at", "is", null);
+if (error) throw error;
 
  // Se non c'è traduzione nella lingua, prendi una qualsiasi
  let rowsCorr: any[] = data ?? [];
  if (!rowsCorr.length) {
  const { data: anyLang } = await supabase
  .from("event_group_event_correlated")
- .select("group_event_id, group_events!inner(id, slug), group_event_translations!left(title, lang)")
- .eq("event_id", ev.id)
- .limit(5);
+.select("group_event_id, group_events!inner(id, slug, visibility, approved_at), group_event_translations!left(title, lang)")
+.eq("event_id", ev.id)
+.eq("group_events.visibility", "public")
+.not("group_events.approved_at", "is", null)
+.limit(5);
  rowsCorr = anyLang ?? [];
  }
 
- const items: CorrelatedJourney[] = rowsCorr.map((r: any) => ({
- id: r.group_events?.id ?? r.group_event_id,
- slug: r.group_events?.slug ?? null,
- title: r.group_event_translations?.title ?? null,
- }));
+ const items: CorrelatedJourney[] = rowsCorr
+  // sicurezza: accetta solo journey pubblici e approvati
+  .filter((r: any) => r.group_events?.visibility === "public" && !!r.group_events?.approved_at)
+  .map((r: any) => {
+    const translationsRaw = Array.isArray(r.group_event_translations)
+      ? r.group_event_translations
+      : r.group_event_translations
+      ? [r.group_event_translations]
+      : [];
+    const translations = translationsRaw.map((t: any) => ({
+      lang: (t?.lang || "").toLowerCase(),
+      title: t?.title ?? null,
+    }));
+    const norm = (v: string | null | undefined) => (v || "").toLowerCase();
+    const order = [norm(resolvedLang), "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+    let title: string | null = null;
+    for (const target of order) {
+      const found = translations.find((t: any) => t.lang === target);
+      if (found?.title) { title = found.title; break; }
+    }
+    if (!title) {
+      const first = translations.find((t: any) => t?.title);
+      title = first?.title ?? null;
+    }
+    return {
+      id: r.group_events?.id ?? r.group_event_id,
+      slug: r.group_events?.slug ?? null,
+      title,
+    };
+  });
  setCorrByEvent((prev) => ({ ...prev, [ev.id]: items }));
  } catch (e) {
  // silenzioso: nessuna correlazione
  }
  })();
- }, [rows, selectedIndex, desiredLang, supabase, corrByEvent]);
+ }, [rows, selectedIndex, resolvedLang, supabase, corrByEvent]);
 
  /* ===== Preferiti ===== */
  const { userId: _uid } = useCurrentUser();
@@ -1203,28 +1245,90 @@ if (!map || !mapReady || !gid) return;
  const maxAbs = Math.max(Math.abs(minSigned), Math.abs(maxSigned));
 
  const { data, error } = await supabase
- .from("v_journey")
- .select("id, group_event_id, title, journey_title, year_from, year_to, exact_date, era, latitude, longitude, image_url")
+ .from("event_group_event")
+ .select(`
+   event_id,
+   group_event_id,
+   group_events!inner(id, visibility, workflow_state),
+   events_list!inner(
+     id,
+     year_from,
+     year_to,
+     era,
+     exact_date,
+     latitude,
+     longitude,
+     image_url,
+     event_translations!left(title,lang)
+   )
+ `)
  .neq("group_event_id", gid)
- .eq("era", era)
- .limit(400);
- if (error) { setConcurrentOther([]); return; }
- const items = (data || []).map((r: any) => {
+.eq("events_list.era", era)
+.eq("group_events.visibility", "public")
+.eq("group_events.workflow_state", "published")
+.limit(400);
+if (error) { setConcurrentOther([]); return; }
+
+ const pickTitle = (translations: any[], lang: string) => {
+   const norm = (v: string | null | undefined) => (v || "").toLowerCase();
+   const order = [lang, "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+   for (const target of order) {
+     const found = translations.find((t: any) => norm(t?.lang) === target);
+     if (found?.title) return found.title;
+   }
+   const first = translations.find((t: any) => t?.title);
+   return first?.title ?? null;
+ };
+
+const items = (data || []).map((r: any) => {
+const evRow = (r as any).events_list || (r as any);
+const translations = Array.isArray(evRow.event_translations) ? evRow.event_translations : [];
+ const title =
+  pickTitle(translations, (resolvedLang || "").toLowerCase()) ||
+  evRow.title ||
+  (evRow.location ?? evRow.country ?? evRow.continent ?? "Event");
  const yy: EventVM = {
- id: String(r.id), title: String(r.title ?? ""), description: "", wiki_url: null, video_url: null, order_key: 0,
- latitude: r.latitude ?? null, longitude: r.longitude ?? null, era: r.era ?? null, year_from: r.year_from ?? null, year_to: r.year_to ?? null, exact_date: r.exact_date ?? null, location: null, image_url: r.image_url ?? null,
+ id: String(evRow.id),
+ title: String(title ?? "Event"),
+ description: "",
+ wiki_url: null,
+ video_url: null,
+ order_key: 0,
+ latitude: evRow.latitude ?? null,
+ longitude: evRow.longitude ?? null,
+ era: evRow.era ?? null,
+ year_from: evRow.year_from ?? null,
+ year_to: evRow.year_to ?? null,
+ exact_date: evRow.exact_date ?? null,
+ location: evRow.location ?? evRow.country ?? evRow.continent ?? null,
+ image_url: evRow.image_url ?? null,
  } as any;
  const spn = buildTimelineSpan(yy);
- return { evId: String(r.id), geId: String(r.group_event_id), geTitle: r.journey_title ?? null, evTitle: String(r.title ?? "Event"), span: spn, startYear: spn?.start, ev: yy } as any;
-}).filter((x) => x.geId && x.evId && x.span);
- // filtro client-side su span reale
+ return {
+   evId: String(evRow.id),
+   geId: String((r as any).group_event_id ?? ""),
+   geTitle: null,
+   evTitle: String(yy.title || "Event"),
+   span: spn,
+   startYear: spn?.start,
+   ev: yy,
+ } as any;
+}).filter((x) => x.geId && x.evId);
+ // filtro su span reale; se manca span includo comunque
  const center = (s.min + s.max) / 2;
- const overlapping = items.filter((it) => spansOverlap(s, it.span as any, 0));
- overlapping.sort((a, b) => (Math.abs((a.startYear ?? 0) - center) - Math.abs((b.startYear ?? 0) - center)));
+ const overlapping = items.filter((it) => {
+ if (it.span) return spansOverlap(s, it.span as any, 0);
+ return true;
+ });
+ overlapping.sort((a, b) => {
+ const da = a.startYear != null ? Math.abs((a.startYear as any) - center) : Number.POSITIVE_INFINITY;
+ const db = b.startYear != null ? Math.abs((b.startYear as any) - center) : Number.POSITIVE_INFINITY;
+ return da - db;
+ });
  setConcurrentOther(overlapping.slice(0, 20));
  } catch { setConcurrentOther([]); }
  })();
-}, [rows, selectedIndex, gid, supabase]);
+}, [rows, selectedIndex, gid, supabase, resolvedLang]);
 
  if (loading) {
  return (
@@ -1255,7 +1359,12 @@ const related = (() => {
  const sel = rows[selectedIndex];
  const base = sel ? corrByEvent[sel.id] ?? [] : [];
  if (relatedFrom && !base.some((r) => r.id === relatedFrom.id)) {
-   return [relatedFrom, ...base];
+   const withFrom: CorrelatedJourney = {
+     id: relatedFrom.id,
+     slug: relatedFrom.slug,
+     title: relatedFrom.title || "Journey di provenienza",
+   };
+   return [withFrom, ...base];
  }
  return base;
 })();
@@ -1811,21 +1920,21 @@ const mapTextureStyle: CSSProperties = {
 
       <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[160px] flex flex-col">
         <div className="text-[12px] font-semibold text-gray-800">Journey di approfondimento</div>
-        {related?.length ? (
-          <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
-            {related.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => router.push(geUrl(r.id))}
-                className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
-                title={r.title ?? r.slug ?? "Open journey"}
-              >
-                {r.title ?? r.slug ?? "Journey"}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-gray-500">Nessun collegamento.</p>
+          {related?.length ? (
+            <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
+              {related.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => router.push(geUrl(r.id))}
+                  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
+                  title={r.title ?? r.slug ?? "Open journey"}
+                >
+                  {r.title ?? r.slug ?? "Journey"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-gray-500">Nessun collegamento.</p>
         )}
       </div>
     </div>
