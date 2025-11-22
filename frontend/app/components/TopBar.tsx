@@ -1,4 +1,4 @@
-﻿// frontend/app/components/TopBar.tsx
+// frontend/app/components/TopBar.tsx
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -143,7 +143,7 @@ export default function TopBar() {
               title="Guarda il video introduttivo"
             >
               <PlayCircle className="w-5 h-5" />
-              <span className="hidden md:inline">Intro Video</span>
+              <span className="hidden md:inline">Guide</span>
             </button>
 
             {/* Logout */}
@@ -211,3 +211,4 @@ export default function TopBar() {
     </>
   );
 }
+

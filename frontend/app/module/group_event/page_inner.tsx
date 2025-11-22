@@ -394,6 +394,62 @@ function MediaBox({
  );
 }
 
+/* ===================== Collapsible (mobile) ===================== */
+function Collapsible({
+  title,
+  children,
+  defaultOpen = false,
+  badge,
+  icon,
+  actions,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  badge?: React.ReactNode;
+  icon?: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex flex-1 items-center justify-between rounded-xl px-2 py-1 text-left transition hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/70"
+        >
+          <span className="flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-black/80 text-white">
+              {icon ?? (
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path d="M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                  <path d="M12 8v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+                </svg>
+              )}
+            </span>
+            <span className="text-[13px] font-semibold text-gray-900">{title}</span>
+            {badge ? (
+              <span className="ml-1 inline-flex items-center rounded-full bg-black/80 px-2 py-[2px] text-[11px] font-medium text-white">
+                {badge}
+              </span>
+            ) : null}
+          </span>
+          <span className={`ml-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/85 text-white transition-transform ${open ? "rotate-180" : ""}`}>
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </button>
+        {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
+      </div>
+      {open ? <div className="border-t border-black/5 px-3 pb-3 pt-2">{children}</div> : null}
+    </div>
+  );
+}
+
 /* ===================== Pagina ===================== */
 export default function GroupEventModulePage() {
  const router = useRouter();
@@ -403,13 +459,24 @@ export default function GroupEventModulePage() {
  const isLg = useIsLg();
 
  const desiredLang =
- (sp.get("lang") ||
- (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
+  (sp.get("lang") ||
+  (typeof navigator !== "undefined" ? navigator.language?.slice(0, 2) : "it") ||
  "it").toLowerCase();
 
  const [gid, setGid] = useState<string | null>(null);
  const [eidParam, setEidParam] = useState<string | null>(null);
  const group_event_id = gid;
+
+ const geUrl = useCallback(
+   (targetGid: string, eid?: string | null) => {
+     const base = `/module/group_event?gid=${targetGid}`;
+     const extras: string[] = [];
+     if (eid) extras.push(`eid=${eid}`);
+     if (gid && gid !== targetGid) extras.push(`from=${gid}`);
+     return extras.length ? `${base}&${extras.join("&")}` : base;
+   },
+   [gid]
+ );
 
  const [err, setErr] = useState<string | null>(null);
  const [landingHref, setLandingHref] = useState<string | null>(null);
@@ -461,14 +528,15 @@ export default function GroupEventModulePage() {
  const [loading, setLoading] = useState(true);
  const [isPlaying, setIsPlaying] = useState(false);
 
- const [overlayOpen, setOverlayOpen] = useState(false);
- const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
- const [overlayMedia, setOverlayMedia] = useState<MediaItem | null>(null);
- const [overlayAutoplay, setOverlayAutoplay] = useState<boolean>(false);
- const [concurrentOther, setConcurrentOther] = useState<Array<{ evId: string; geId: string; geTitle?: string | null; evTitle: string; startYear?: number }>>([]);
+const [overlayOpen, setOverlayOpen] = useState(false);
+const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
+const [overlayMedia, setOverlayMedia] = useState<MediaItem | null>(null);
+const [overlayAutoplay, setOverlayAutoplay] = useState<boolean>(false);
+const [concurrentOther, setConcurrentOther] = useState<Array<{ evId: string; geId: string; geTitle?: string | null; evTitle: string; startYear?: number }>>([]);
+ const [relatedFrom, setRelatedFrom] = useState<CorrelatedJourney | null>(null);
 
- // Correlazioni: cache per event_id
- const [corrByEvent, setCorrByEvent] = useState<Record<string, CorrelatedJourney[]>>({});
+// Correlazioni: cache per event_id
+const [corrByEvent, setCorrByEvent] = useState<Record<string, CorrelatedJourney[]>>({});
 
  const openOverlay = useCallback((m: MediaItem, opts?: { autoplay?: boolean }) => {
  setOverlayMedia(m);
@@ -486,9 +554,17 @@ export default function GroupEventModulePage() {
 
  /* ===== Mappa ===== */
  const mapRef = useRef<MapLibreMap | null>(null);
- const markersRef = useRef<MapLibreMarker[]>([]);
- const [mapReady, setMapReady] = useState(false);
- const [mapLoaded, setMapLoaded] = useState(false);
+const markersRef = useRef<MapLibreMarker[]>([]);
+const [mapReady, setMapReady] = useState(false);
+const [mapLoaded, setMapLoaded] = useState(false);
+ const [mapVersion, setMapVersion] = useState(0);
+
+// Reset cache/markers quando cambio journey
+useEffect(() => {
+  setCorrByEvent({});
+  markersRef.current = [];
+  setMapVersion((v) => v + 1);
+}, [gid]);
 
  function getVisibleMapContainer(): HTMLElement | null {
  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-map="gehj"]'));
@@ -502,54 +578,84 @@ export default function GroupEventModulePage() {
  return null;
  }
 
- useEffect(() => {
- if (typeof window === "undefined" || mapRef.current) return;
+useEffect(() => {
+ if (typeof window === "undefined") return;
 
  let cancelled = false;
- let attempts = 120;
 
- const tick = () => {
- if (cancelled || mapRef.current) return;
- const container = getVisibleMapContainer();
- if (!container) {
- if (attempts-- > 0) return setTimeout(tick, 50);
- return;
+ // Cleanup eventuale mappa precedente
+ if (mapRef.current) {
+   try { mapRef.current.remove(); } catch {}
+   mapRef.current = null;
  }
-
- const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
- const style = apiKey
- ? `https://api.maptiler.com/maps/hybrid/style.json?key=${apiKey}`
- : OSM_STYLE;
-
- try {
- const map = new maplibregl.Map({
- container,
- style,
- center: [9.19, 45.46],
- zoom: 4,
- cooperativeGestures: true,
- } as any);
- map.addControl(new maplibregl.NavigationControl(), "top-right");
- mapRef.current = map as any;
- setMapReady(true);
-
- map.on("load", () => {
- setMapLoaded(true);
- try { map.resize(); } catch {}
- setTimeout(() => { try { map.resize(); } catch {} }, 120);
+ document.querySelectorAll<HTMLElement>('[data-map="gehj"]').forEach((el) => {
+   if (el.hasChildNodes()) {
+     try { el.innerHTML = ""; } catch {}
+   }
  });
+ setMapReady(false);
+ setMapLoaded(false);
 
- const ro = new ResizeObserver(() => { try { map.resize(); } catch {} });
- ro.observe(container);
- window.addEventListener("resize", () => { try { map.resize(); } catch {} });
- window.addEventListener("orientationchange", () => { try { map.resize(); } catch {} });
- document.addEventListener("visibilitychange", () => { try { map.resize(); } catch {} });
- } catch (e) { console.error("[GE] Map init error:", e); }
+ let attempts = 240;
+ const tick = () => {
+   if (cancelled || mapRef.current) return;
+   const container = getVisibleMapContainer();
+   if (!container) {
+     if (attempts-- > 0) return setTimeout(tick, 50);
+     return;
+   }
+
+   const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+   const style = apiKey
+     ? `https://api.maptiler.com/maps/hybrid/style.json?key=${apiKey}`
+     : OSM_STYLE;
+
+   try {
+     const map = new maplibregl.Map({
+       container,
+       style,
+       center: [9.19, 45.46],
+       zoom: 4,
+       cooperativeGestures: true,
+     } as any);
+     map.addControl(new maplibregl.NavigationControl(), "top-right");
+     mapRef.current = map as any;
+     setMapReady(true);
+
+     map.on("load", () => {
+       setMapLoaded(true);
+       try { map.resize(); } catch {}
+       setTimeout(() => { try { map.resize(); } catch {} }, 120);
+     });
+
+     const ro = new ResizeObserver(() => { try { map.resize(); } catch {} });
+     ro.observe(container);
+     const onWinResize = () => { try { map.resize(); } catch {} };
+     window.addEventListener("resize", onWinResize);
+     window.addEventListener("orientationchange", onWinResize);
+     document.addEventListener("visibilitychange", onWinResize);
+
+     // Cleanup listeners on teardown
+     const cleanup = () => {
+       try { ro.disconnect(); } catch {}
+       window.removeEventListener("resize", onWinResize);
+       window.removeEventListener("orientationchange", onWinResize);
+       document.removeEventListener("visibilitychange", onWinResize);
+     };
+     (map as any)._gehjCleanup = cleanup;
+   } catch (e) { console.error("[GE] Map init error:", e); }
  };
 
  tick();
- return () => { cancelled = true; };
- }, []);
+ return () => {
+   cancelled = true;
+   if (mapRef.current) {
+     try { (mapRef.current as any)._gehjCleanup?.(); } catch {}
+     try { mapRef.current.remove(); } catch {}
+     mapRef.current = null;
+   }
+ };
+}, [mapVersion]);
 
  /* ===== Fetch ===== */
  useEffect(() => {
@@ -713,6 +819,36 @@ export default function GroupEventModulePage() {
  const [isFav, setIsFav] = useState<boolean>(false);
  const [savingFav, setSavingFav] = useState<boolean>(false);
 
+ // Journey sorgente (from param) usato per mostrare un link di ritorno
+ useEffect(() => {
+   const raw = sp.get("from") as any;
+   const val = typeof raw === "function" ? sp.get("from")?.trim() : sp.get("from");
+   const from = val?.trim();
+   if (!from || !UUID_RE.test(from) || from === gid) {
+     setRelatedFrom(null);
+     return;
+   }
+   let cancelled = false;
+   (async () => {
+     try {
+       const { data } = await supabase
+         .from("group_events")
+         .select("id, slug, group_event_translations!left(title, lang)")
+         .eq("id", from)
+         .limit(1)
+         .maybeSingle();
+       if (cancelled) return;
+       const title = (data as any)?.group_event_translations?.[0]?.title ?? data?.slug ?? null;
+       setRelatedFrom({ id: from, slug: data?.slug ?? null, title });
+     } catch {
+       if (!cancelled) setRelatedFrom({ id: from, slug: null, title: "Journey correlato" });
+     }
+   })();
+   return () => {
+     cancelled = true;
+   };
+ }, [sp, gid, supabase]);
+
  useEffect(() => {
  (async () => {
  if (!gid) return;
@@ -762,9 +898,9 @@ export default function GroupEventModulePage() {
  }
 
  /* ===== Marker rendering ===== */
- useEffect(() => {
- const map = mapRef.current;
- if (!map || !mapReady) return;
+useEffect(() => {
+const map = mapRef.current;
+if (!map || !mapReady || !gid) return;
 
  (markersRef.current || []).forEach((m) => m.remove());
  markersRef.current = [];
@@ -867,7 +1003,7 @@ export default function GroupEventModulePage() {
  map.flyTo({ center: [ev.longitude, ev.latitude], zoom: Math.max(map.getZoom(), 6), speed: 0.8 });
  } catch {}
  }
- }, [selectedIndex, rows]);
+ }, [selectedIndex, rows, gid, mapReady]);
 
  /* ===== Refs per banda eventi ===== */
  const bandRef = useRef<HTMLDivElement | null>(null);
@@ -920,7 +1056,8 @@ export default function GroupEventModulePage() {
  const data = timelineData;
  if (!data) return null;
 
- const ticks = buildTimelineTicks(data.min, data.max, 12);
+ const tickTarget = isLg ? 12 : 6;
+ const ticks = buildTimelineTicks(data.min, data.max, tickTarget);
  const tickYears = [data.min, ...ticks, data.max];
  const diamondSize = 12;
  // Minor ticks: per-event start years, dedup + thinning to avoid clutter
@@ -987,8 +1124,8 @@ export default function GroupEventModulePage() {
  </div>
 
  {/* Etichette sotto la barra (alternate su due righe) */}
- <div className="relative mt-1 h-8 w-full">
- <span className="absolute left-0 top-0 -translate-x-0 text-[10px] text-slate-700">
+ <div className="relative mt-1 h-10 w-full">
+ <span className="absolute left-0 top-0 -translate-x-0 text-[10px] text-slate-700 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm">
  {formatTimelineYearLabel(data.min)}
  </span>
  {(() => {
@@ -998,7 +1135,7 @@ export default function GroupEventModulePage() {
  key: `ilbl-${i}`,
  }));
  const kept: { year: number; pos: number; key: string }[] = [];
- const minGap = Math.max(8, 100 / Math.max(2, inner.length + 1));
+ const minGap = Math.max(isLg ? 8 : 16, 100 / Math.max(2, inner.length + 1));
  let last = -Infinity;
  inner.forEach((c) => {
  if (c.pos - last >= minGap) { kept.push(c); last = c.pos; }
@@ -1008,8 +1145,8 @@ export default function GroupEventModulePage() {
  {kept.map((c, idx) => (
  <span
  key={c.key}
- className="absolute text-[10px] text-slate-600 -translate-x-1/2 whitespace-nowrap"
- style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? '0px' : '14px' }}
+ className="absolute text-[10px] text-slate-700 -translate-x-1/2 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm"
+ style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? '0px' : '16px' }}
  >
  {formatTimelineYearLabel(c.year)}
  </span>
@@ -1018,8 +1155,8 @@ export default function GroupEventModulePage() {
  );
  })()}
  <span
- className="absolute right-0 text-[10px] text-slate-700"
- style={{ top: '14px' }}
+ className="absolute right-0 text-[10px] text-slate-700 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm"
+ style={{ top: '16px' }}
  >
  {formatTimelineYearLabel(data.max)}
  </span>
@@ -1065,42 +1202,29 @@ export default function GroupEventModulePage() {
  const minAbs = Math.min(Math.abs(minSigned), Math.abs(maxSigned));
  const maxAbs = Math.max(Math.abs(minSigned), Math.abs(maxSigned));
 
- let q = supabase
+ const { data, error } = await supabase
  .from("v_journey")
- .select("id, group_event_id, title, journey_title, year_from, year_to, exact_date, era")
+ .select("id, group_event_id, title, journey_title, year_from, year_to, exact_date, era, latitude, longitude, image_url")
  .neq("group_event_id", gid)
  .eq("era", era)
- .limit(120);
-
- // Overlap: tre casi sugli anni positivi in stessa era
- const filters: string[] = [
- `and(year_from.lte.${maxAbs},year_to.gte.${minAbs})`,
- `and(year_from.gte.${minAbs},year_from.lte.${maxAbs})`,
- `and(year_to.gte.${minAbs},year_to.lte.${maxAbs})`,
- ];
- if (era === "AD") {
- const minDate = `${minAbs}-01-01`;
- const maxDate = `${maxAbs}-12-31`;
- filters.push(`and(exact_date.gte.${minDate},exact_date.lte.${maxDate})`);
- }
- // @ts-ignore: supabase or expects comma-joined conditions
- q = (q as any).or(filters.join(","));
- const { data, error } = await q;
+ .limit(400);
  if (error) { setConcurrentOther([]); return; }
  const items = (data || []).map((r: any) => {
  const yy: EventVM = {
  id: String(r.id), title: String(r.title ?? ""), description: "", wiki_url: null, video_url: null, order_key: 0,
- latitude: null, longitude: null, era: r.era ?? null, year_from: r.year_from ?? null, year_to: r.year_to ?? null, exact_date: r.exact_date ?? null, location: null, image_url: null,
+ latitude: r.latitude ?? null, longitude: r.longitude ?? null, era: r.era ?? null, year_from: r.year_from ?? null, year_to: r.year_to ?? null, exact_date: r.exact_date ?? null, location: null, image_url: r.image_url ?? null,
  } as any;
  const spn = buildTimelineSpan(yy);
- return { evId: String(r.id), geId: String(r.group_event_id), geTitle: r.journey_title ?? null, evTitle: String(r.title ?? "Event"), startYear: spn?.start, ev: { title: String(r.title ?? "Event") } } as any;
- }).filter((x) => x.geId && x.evId);
+ return { evId: String(r.id), geId: String(r.group_event_id), geTitle: r.journey_title ?? null, evTitle: String(r.title ?? "Event"), span: spn, startYear: spn?.start, ev: yy } as any;
+}).filter((x) => x.geId && x.evId && x.span);
+ // filtro client-side su span reale
  const center = (s.min + s.max) / 2;
- items.sort((a, b) => (Math.abs((a.startYear ?? 0) - center) - Math.abs((b.startYear ?? 0) - center)));
- setConcurrentOther(items.slice(0, 20));
+ const overlapping = items.filter((it) => spansOverlap(s, it.span as any, 0));
+ overlapping.sort((a, b) => (Math.abs((a.startYear ?? 0) - center) - Math.abs((b.startYear ?? 0) - center)));
+ setConcurrentOther(overlapping.slice(0, 20));
  } catch { setConcurrentOther([]); }
  })();
- }, [rows, selectedIndex, gid, supabase]);
+}, [rows, selectedIndex, gid, supabase]);
 
  if (loading) {
  return (
@@ -1126,10 +1250,17 @@ export default function GroupEventModulePage() {
  );
  }
 
- const selectedEvent = rows[selectedIndex];
- const related = selectedEvent ? corrByEvent[selectedEvent.id] ?? [] : [];
+const selectedEvent = rows[selectedIndex];
+const related = (() => {
+ const sel = rows[selectedIndex];
+ const base = sel ? corrByEvent[sel.id] ?? [] : [];
+ if (relatedFrom && !base.some((r) => r.id === relatedFrom.id)) {
+   return [relatedFrom, ...base];
+ }
+ return base;
+})();
 
- const mapTextureStyle: CSSProperties = {
+const mapTextureStyle: CSSProperties = {
  backgroundImage: "url(/bg/login-map.jpg)",
  backgroundSize: "cover",
  backgroundPosition: "center",
@@ -1229,7 +1360,7 @@ export default function GroupEventModulePage() {
  return (
  <button
  key={`${c.geId}:${c.evId}`}
- onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+ onClick={() => router.push(geUrl(c.geId, c.evId))}
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
  title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
  >
@@ -1292,7 +1423,7 @@ export default function GroupEventModulePage() {
  return (
  <button
  key={`${c.geId}:${c.evId}`}
- onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+ onClick={() => router.push(geUrl(c.geId, c.evId))}
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12.5px] text-slate-900 hover:bg-white shadow-sm"
  title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
  >
@@ -1313,7 +1444,7 @@ export default function GroupEventModulePage() {
  {related.map((r) => (
  <button
  key={r.id}
- onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
+ onClick={() => router.push(geUrl(r.id))}
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
  title={r.title ?? r.slug ?? "Open journey"}
  >
@@ -1333,26 +1464,61 @@ export default function GroupEventModulePage() {
  </div>
 
  {/* [2] Media del Journey (ristretto) */}
- <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
- <div className="flex-1 flex items-center justify-center">
- {journeyMedia?.length ? (
- <div className="w-full max-w-[260px]">
- <MediaBox
- items={journeyMedia}
- firstPreview={journeyMediaFirst || undefined}
- onOpenOverlay={openOverlay}
- hideHeader
- height={isLg ? "xs" : "sm"}
- compact
- />
- </div>
+ {isLg ? (
+   <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
+     <div className="flex-1 flex items-center justify-center">
+       {journeyMedia?.length ? (
+         <div className="w-full max-w-[260px]">
+           <MediaBox
+             items={journeyMedia}
+             firstPreview={journeyMediaFirst || undefined}
+             onOpenOverlay={openOverlay}
+             hideHeader
+             height={isLg ? "xs" : "sm"}
+             compact
+           />
+         </div>
+       ) : (
+         <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+           Nessun media del journey
+         </div>
+       )}
+     </div>
+   </div>
  ) : (
- <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
- Nessun media del journey
- </div>
+   <Collapsible
+     title="Media del journey"
+     badge={journeyMedia?.length ? journeyMedia.length : undefined}
+     defaultOpen={false}
+     icon={(
+       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+         <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+         <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+       </svg>
+     )}
+   >
+     <div className="h-auto rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
+       <div className="flex-1 flex items-center justify-center">
+         {journeyMedia?.length ? (
+           <div className="w-full max-w-[260px]">
+             <MediaBox
+               items={journeyMedia}
+               firstPreview={journeyMediaFirst || undefined}
+               onOpenOverlay={openOverlay}
+               hideHeader
+               height="sm"
+               compact
+             />
+           </div>
+         ) : (
+           <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+             Nessun media del journey
+           </div>
+         )}
+       </div>
+     </div>
+   </Collapsible>
  )}
- </div>
- </div>
 
       {/* [3] Timeline */}
       <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
@@ -1423,135 +1589,166 @@ export default function GroupEventModulePage() {
  <section className="bg-white/70 backdrop-blur" style={mapTextureStyle}>
  <div className="px-4 py-2">
  <div className="mx-auto w-full max-w-[820px]">
- <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col">
- <div className="flex items-center justify-end gap-1.5 px-3 py-2 border-b border-black/10">
-  <button
-  onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-  className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-  title="Previous">
-    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
-  <button
-  onClick={() => setIsPlaying((p) => !p)}
-  className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-  title={isPlaying ? "Pause" : "Play"}
-  >
-    {isPlaying ? (
-      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>
-    ) : (
-      <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col gap-2">
+  <Collapsible
+    title="Media evento"
+    defaultOpen={false}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     )}
-  </button>
-  <button
-  onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-  className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-  title="Next">
-    <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-  </button>
- </div>
+    actions={(
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+          title="Previous"
+          aria-label="Evento precedente"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button
+          onClick={() => setIsPlaying((p) => !p)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+          title={isPlaying ? "Pause" : "Play"}
+          aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+        >
+          {isPlaying ? (
+            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          )}
+        </button>
+        <button
+          onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+          title="Next"
+          aria-label="Evento successivo"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </div>
+    )}
+  >
+    <MediaBox
+      items={selectedEvent?.event_media ?? []}
+      firstPreview={selectedEvent?.event_media_first || undefined}
+      onOpenOverlay={openOverlay}
+      compact
+      height="sm"
+    />
+  </Collapsible>
 
- <div className="px-3 pt-2">
- <MediaBox
- items={selectedEvent?.event_media ?? []}
- firstPreview={selectedEvent?.event_media_first || undefined}
- onOpenOverlay={openOverlay}
- compact
- height="sm"
- />
- </div>
+  <Collapsible
+    title="Approfondimenti"
+    badge={related?.length ? related.length : undefined}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M6.5 7h11a1.5 1.5 0 0 1 1.4 2.1l-3.2 8a1.5 1.5 0 0 1-1.4.9h-11a1.5 1.5 0 0 1-1.4-2.1l3.2-8a1.5 1.5 0 0 1 1.4-.9Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path d="M9 10h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    )}
+  >
+    {related?.length ? (
+      <div className="space-y-1.5 max-h-[32svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+        {related.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => router.push(geUrl(r.id))}
+            className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
+            title={r.title ?? r.slug ?? "Open journey"}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" className="mr-2">
+              <path d="M4 12h5l2-3 2 6 2-3h5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {r.title ?? r.slug ?? "Journey"}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <div className="text-[12.5px] text-gray-600">Nessun collegamento disponibile.</div>
+    )}
+  </Collapsible>
 
- {/* location removed (mobile block) */}
+  <Collapsible
+    title="Eventi contemporanei"
+    badge={concurrentOther?.length ? concurrentOther.length : undefined}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M5 12h4l2-3 2 6 2-3h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="12" cy="6" r="1.8" fill="currentColor" />
+      </svg>
+    )}
+  >
+    {concurrentOther && concurrentOther.length ? (
+      <div className="space-y-1.5 max-h-[28svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+        {concurrentOther.map((c) => {
+          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+          return (
+            <button
+              key={`${c.geId}:${c.evId}`}
+              onClick={() => router.push(geUrl(c.geId, c.evId))}
+              className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
+              title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
+            >
+              {label ? `${label} · ` : ""}{c.evTitle}
+            </button>
+          );
+        })}
+      </div>
+    ) : (
+      <div className="text-[12.5px] text-gray-600">Nessun evento concomitante.</div>
+    )}
+  </Collapsible>
 
- <div className="px-3 pt-1">
- {/* Eventi contemporanei (MOBILE) */}
- <div className="hidden mb-2">
- <div className="text-[12px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
- {concurrentOther && concurrentOther.length ? (
- <div className="h-[150px] overflow-y-auto pr-1 space-y-1.5">
- {concurrentOther.map((c) => {
- const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
- return (
- <button
- key={`${c.geId}:${c.evId}`}
- onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
- className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
- title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
- >
- {label ? `${label} · ` : ""}{c.evTitle}
- </button>
- );
- })}
- </div>
- ) : (
- <div className="text-[12px] text-gray-500">Nessun evento concomitante.</div>
- )}
- </div>
-
- {/* Related journeys (MOBILE) */}
- {related?.length ? (
- <div className="mb-2">
- <div className="text-[12px] font-semibold text-gray-800 mb-1">Related Journeys</div>
- <div className="h-[150px] overflow-y-auto pr-1 space-y-1.5">
- {related.map((r) => (
- <button
- key={r.id}
- onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
- className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
- title={r.title ?? r.slug ?? "Open journey"}
- >
- ?? {r.title ?? r.slug ?? "Journey"}
- </button>
- ))}
- </div>
- </div>
- ) : null}
- {(!related || related.length === 0) ? (
- <div className="mb-2">
- <div className="text-[12px] font-semibold text-gray-800 mb-1">Related Journeys</div>
- <div className="text-[12px] text-gray-500">Nessun collegamento.</div>
- </div>
- ) : null}
- </div>
-
- <div className="px-3 pb-3">
- <div
- className="max-h-[35svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
- style={{ scrollbarWidth: "thin" }}
- >
- {selectedEvent?.description || "No description available."}
- </div>
-
- <div className="pt-2 flex items-center gap-3">
- {selectedEvent?.wiki_url ? (
- <a
- href={selectedEvent.wiki_url}
- target="_blank"
- rel="noreferrer"
- className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
- >
- Wikipedia ?
- </a>
- ) : null}
- {selectedEvent?.video_url ? (
- <a
- href={selectedEvent.video_url}
- target="_blank"
- rel="noreferrer"
- className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
- title="Guarda il video dell'evento"
- >
- ? Guarda il video
- </a>
- ) : null}
- </div>
- </div>
+  <Collapsible
+    title="Descrizione"
+    defaultOpen={false}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M6 5.5h12M6 10h8M6 14.5h5M6 19h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    )}
+  >
+    <div
+      className="max-h-[36svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
+      style={{ scrollbarWidth: "thin" }}
+    >
+      {selectedEvent?.description || "No description available."}
+    </div>
+    <div className="pt-2 flex items-center gap-3">
+      {selectedEvent?.wiki_url ? (
+        <a
+          href={selectedEvent.wiki_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+        >
+          Wikipedia ?
+        </a>
+      ) : null}
+      {selectedEvent?.video_url ? (
+        <a
+          href={selectedEvent.video_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+          title="Guarda il video dell'evento"
+        >
+          ? Guarda il video
+        </a>
+      ) : null}
+    </div>
+  </Collapsible>
  </div>
  </div>
  </div>
  </section>
 
  <section className="relative h-[40svh] min-h-[300px] border-t border-black/10">
- <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+ <div data-map="gehj" key={`map-mobile-${gid ?? "unknown"}`} className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
  {!mapLoaded && (
  <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
  Inizializzazione mappa…
@@ -1595,7 +1792,7 @@ export default function GroupEventModulePage() {
               return (
                 <button
                   key={`${c.geId}:${c.evId}`}
-                  onClick={() => router.push(`/module/group_event?gid=${c.geId}&eid=${c.evId}`)}
+                  onClick={() => router.push(geUrl(c.geId, c.evId))}
                   className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-900 hover:bg-slate-50 shadow-sm"
                   title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
                 >
@@ -1619,7 +1816,7 @@ export default function GroupEventModulePage() {
             {related.map((r) => (
               <button
                 key={r.id}
-                onClick={() => router.push(`/module/group_event?gid=${r.id}`)}
+                onClick={() => router.push(geUrl(r.id))}
                 className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
                 title={r.title ?? r.slug ?? "Open journey"}
               >
@@ -1695,7 +1892,7 @@ export default function GroupEventModulePage() {
 
     {/* Colonna 3: Mappa */}
     <section className="relative h-[60svh] min-h-[480px]">
-      <div data-map="gehj" className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+ <div data-map="gehj" key={`map-desktop-${gid ?? "unknown"}`} className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
       {!mapLoaded && (
         <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
           Inizializzazione mappa.

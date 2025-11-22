@@ -552,6 +552,38 @@ async function updateRow(table: string, match: any, patch: any) {
   return true;
 }
 
+async function findOrCreateMediaAsset({
+  url,
+  kind,
+  sourceUrl,
+}: {
+  url: string;
+  kind?: MediaKind | null;
+  sourceUrl?: string | null;
+}) {
+  const { data, error } = await sb()
+    .from(T.media)
+    .select("id")
+    .eq("storage_bucket", "public")
+    .eq("storage_path", url)
+    .maybeSingle();
+  if (error && error.code !== "PGRST116") {
+    throw new Error(`media select: ${error.message}`);
+  }
+  if (data?.id) {
+    return data;
+  }
+  return insertRow(T.media, {
+    storage_bucket: "public",
+    storage_path: url,
+    public_url: url,
+    source_url: sourceUrl ?? url,
+    media_type: toMediaAssetType(kind),
+    status: "ready",
+    created_at: ts(),
+  });
+}
+
 async function upsertGroupEventTranslations(
   group_event_id: string,
   translations?: GroupEventTranslationPayload[] | null,
@@ -668,35 +700,33 @@ export async function saveJourney(payload: SaveJourneyPayload) {
           .eq("entity_type", "group_event")
           .eq("group_event_id", payload.group_event_id)
           .eq("role", "gallery");
-      for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
-        const m = galleryOnlyMedia[mIdx];
-        const resolvedUrl = m.public_url ?? m.source_url ?? null;
-        if (!resolvedUrl) {
-          continue;
-        }
-        const asset = await insertRow(T.media, {
-          storage_bucket: "public",
-          storage_path: resolvedUrl,
-          public_url: resolvedUrl,
-          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
-          media_type: toMediaAssetType(m.kind),
-          status: "ready",
-          created_at: ts(),
-        });
-          created.media_ids.push(asset.id);
-          const att = await insertRow(T.attach, {
-            media_id: asset.id,
-            entity_type: "group_event" as EntityType,
-            group_event_id: payload.group_event_id,
-            role: m.role ?? "gallery",
-            sort_order: m.sort_order ?? mIdx,
-            is_primary: !!m.is_primary,
-            title: m.title ?? null,
-            caption: m.caption ?? null,
-            alt_text: m.alt_text ?? null,
-            created_at: ts(),
+        for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
+          const m = galleryOnlyMedia[mIdx];
+          const resolvedUrl = m.public_url ?? m.source_url ?? null;
+          if (!resolvedUrl) {
+            continue;
+          }
+          const asset = await findOrCreateMediaAsset({
+            url: resolvedUrl,
+            kind: m.kind,
+            sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
           });
-          created.ge_attach_ids.push(att.id);
+          if (asset?.id) {
+            created.media_ids.push(asset.id);
+            const att = await insertRow(T.attach, {
+              media_id: asset.id,
+              entity_type: "group_event" as EntityType,
+              group_event_id: payload.group_event_id,
+              role: m.role ?? "gallery",
+              sort_order: m.sort_order ?? mIdx,
+              is_primary: !!m.is_primary,
+              title: m.title ?? null,
+              caption: m.caption ?? null,
+              alt_text: m.alt_text ?? null,
+              created_at: ts(),
+            });
+            created.ge_attach_ids.push(att.id);
+          }
         }
       }
       return { ok: true, group_event_id: payload.group_event_id };
@@ -721,51 +751,47 @@ export async function saveJourney(payload: SaveJourneyPayload) {
 
     // 1c) COVER in media_assets + media_attachments
     if (payload.group_event.cover_url) {
-      const cov = await insertRow(T.media, {
-        storage_bucket: "public",
-        storage_path: payload.group_event.cover_url,
-        public_url: payload.group_event.cover_url,
-        source_url: payload.group_event.cover_url,
-        media_type: "image" as MediaAssetType,
-        status: "ready",
-        created_at: ts(),
+      const cov = await findOrCreateMediaAsset({
+        url: payload.group_event.cover_url,
+        kind: "image",
+        sourceUrl: payload.group_event.cover_url,
       });
-      created.media_ids.push(cov.id);
-      const att = await insertRow(T.attach, {
-        media_id: cov.id,
-        entity_type: "group_event" as EntityType,
-        group_event_id,
-        role: "cover" as MediaRole,
-        sort_order: 0,
-        is_primary: true,
-        created_at: ts(),
-      });
-      created.ge_attach_ids.push(att.id);
-      await updateRow(T.group_events, { id: group_event_id }, { cover_media_id: cov.id, updated_at: ts() });
+      if (cov?.id) {
+        created.media_ids.push(cov.id);
+        const att = await insertRow(T.attach, {
+          media_id: cov.id,
+          entity_type: "group_event" as EntityType,
+          group_event_id,
+          role: "cover" as MediaRole,
+          sort_order: 0,
+          is_primary: true,
+          created_at: ts(),
+        });
+        created.ge_attach_ids.push(att.id);
+        await updateRow(T.group_events, { id: group_event_id }, { cover_media_id: cov.id, updated_at: ts() });
+      }
     }
 
     // 1d) VIDEO allegato al group_event (se presente)
     if (payload.video_media_url) {
-      const v = await insertRow(T.media, {
-        storage_bucket: "public",
-        storage_path: payload.video_media_url,
-        public_url: payload.video_media_url,
-        source_url: payload.video_media_url,
-        media_type: "video" as MediaAssetType,
-        status: "ready",
-        created_at: ts(),
+      const v = await findOrCreateMediaAsset({
+        url: payload.video_media_url,
+        kind: "video",
+        sourceUrl: payload.video_media_url,
       });
-      created.media_ids.push(v.id);
-      const att = await insertRow(T.attach, {
-        media_id: v.id,
-        entity_type: "group_event" as EntityType,
-        group_event_id,
-        role: "attachment" as MediaRole,
-        sort_order: 1,
-        is_primary: false,
-        created_at: ts(),
-      });
-      created.ge_attach_ids.push(att.id);
+      if (v?.id) {
+        created.media_ids.push(v.id);
+        const att = await insertRow(T.attach, {
+          media_id: v.id,
+          entity_type: "group_event" as EntityType,
+          group_event_id,
+          role: "attachment" as MediaRole,
+          sort_order: 1,
+          is_primary: false,
+          created_at: ts(),
+        });
+        created.ge_attach_ids.push(att.id);
+      }
     }
 
     if (galleryOnlyMedia.length) {
@@ -782,29 +808,27 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         if (!resolvedUrl) {
           continue;
         }
-        const asset = await insertRow(T.media, {
-          storage_bucket: "public",
-          storage_path: resolvedUrl,
-          public_url: resolvedUrl,
-          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
-          media_type: toMediaAssetType(m.kind),
-          status: "ready",
-          created_at: ts(),
+        const asset = await findOrCreateMediaAsset({
+          url: resolvedUrl,
+          kind: m.kind,
+          sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
         });
+        if (asset?.id) {
           created.media_ids.push(asset.id);
           const att = await insertRow(T.attach, {
-          media_id: asset.id,
-          entity_type: "group_event" as EntityType,
-          group_event_id,
-          role: m.role ?? "gallery",
-          sort_order: m.sort_order ?? mIdx,
-          is_primary: !!m.is_primary,
-          title: m.title ?? null,
-          caption: m.caption ?? null,
-          alt_text: m.alt_text ?? null,
-          created_at: ts(),
-        });
-        created.ge_attach_ids.push(att.id);
+            media_id: asset.id,
+            entity_type: "group_event" as EntityType,
+            group_event_id,
+            role: m.role ?? "gallery",
+            sort_order: m.sort_order ?? mIdx,
+            is_primary: !!m.is_primary,
+            title: m.title ?? null,
+            caption: m.caption ?? null,
+            alt_text: m.alt_text ?? null,
+            created_at: ts(),
+          });
+          created.ge_attach_ids.push(att.id);
+        }
       }
     }
 
