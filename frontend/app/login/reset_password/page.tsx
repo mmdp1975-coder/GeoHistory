@@ -93,12 +93,34 @@ function ResetPasswordContent() {
         const { value: code, kind } = codeInfo;
         let errMsg: string | null = null;
 
-        if (kind === "token_hash" || kind === "code") {
-          // Treat ?code as token_hash for recovery to avoid PKCE code_verifier requirements
+        if (kind === "token_hash") {
           const { error } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
           if (!cancelled) {
             if (error) errMsg = error.message || "Invalid or expired link.";
             else setReady(true);
+          }
+        } else if (kind === "code") {
+          // PKCE flow: first try exchange; if code_verifier is missing, fallback to verifyOtp with email+token
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!cancelled) {
+            if (error) {
+              if (emailFromLink) {
+                const { error: otpError } = await supabase.auth.verifyOtp({
+                  email: emailFromLink,
+                  token: code,
+                  type: "recovery",
+                });
+                if (otpError) errMsg = otpError.message || error.message || "Invalid or expired link.";
+                else setReady(true);
+              } else {
+                setNeedsEmail(true);
+                setErr("Enter your email to finish resetting your password.");
+                setChecking(false);
+                return;
+              }
+            } else {
+              setReady(true);
+            }
           }
         } else if (kind === "token") {
           const emailForToken = emailFromLink || undefined;
@@ -154,7 +176,7 @@ function ResetPasswordContent() {
       const { value: code, kind } = codeInfo;
       const email = emailInput || getParamInsensitive("email") || undefined;
 
-      if (kind === "token_hash" || kind === "code") {
+      if (kind === "token_hash") {
         const { error } = await supabaseRef.current.auth.verifyOtp({ token_hash: code, type: "recovery" });
         if (error) throw error;
       } else if (kind === "token") {
@@ -164,6 +186,21 @@ function ResetPasswordContent() {
         }
         const { error } = await supabaseRef.current.auth.verifyOtp({ email: emailForToken, token: code, type: "recovery" });
         if (error) throw error;
+      } else if (kind === "code") {
+        // First try PKCE exchange, then fallback to token+email
+        const { error } = await supabaseRef.current.auth.exchangeCodeForSession(code);
+        if (error) {
+          const emailForToken = email || emailInput;
+          if (!emailForToken) {
+            throw new Error("Enter your email to finish resetting your password.");
+          }
+          const { error: otpError } = await supabaseRef.current.auth.verifyOtp({
+            email: emailForToken,
+            token: code,
+            type: "recovery",
+          });
+          if (otpError) throw otpError;
+        }
       } else {
         throw new Error("Reset link not valid.");
       }
