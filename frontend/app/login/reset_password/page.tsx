@@ -53,6 +53,22 @@ function ResetPasswordContent() {
     setSupabaseReady(true);
   }, []);
 
+  async function attemptRecovery(code: string, supabase: SupabaseClient, email?: string) {
+    const attempts: Record<string, string>[] = [];
+    if (email) attempts.push({ email, token_hash: code, type: "recovery" });
+    attempts.push({ token_hash: code, type: "recovery" });
+    if (email) attempts.push({ email, token: code, type: "recovery" } as any);
+    attempts.push({ token: code, type: "recovery" } as any);
+
+    let lastErr: any = null;
+    for (const payload of attempts) {
+      const { error } = await supabase.auth.verifyOtp(payload as any);
+      if (!error) return { ok: true as const };
+      lastErr = error;
+    }
+    return { ok: false as const, error: lastErr as any };
+  }
+
   useEffect(() => {
     if (!supabaseReady || !supabaseRef.current) return;
     const supabase = supabaseRef.current;
@@ -74,18 +90,21 @@ function ResetPasswordContent() {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!cancelled) {
           if (error) {
-            // Fallback: tenta verifyOtp (token_hash + type) per link aperto su device diverso
-            const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
-            if (otpError) {
-              // Alcuni link recovery non forniscono hash: riprova col campo token
-              const { error: otpTokenError } = await supabase.auth.verifyOtp({ token: code, type: "recovery" } as any);
-              if (otpTokenError) {
-                setErr(otpTokenError.message || otpError.message || error.message || "Invalid or expired link.");
-              } else {
-                setReady(true);
-              }
-            } else {
+            // Fallback: tenta verifyOtp (token_hash/token) per link aperto su device diverso
+            const recovery = await attemptRecovery(code, supabase, emailFromLink);
+            if (recovery.ok) {
               setReady(true);
+            } else {
+              if (!emailFromLink) {
+                setNeedsEmail(true);
+                setErr("Enter your email to finish resetting your password.");
+              } else {
+                setErr(
+                  recovery.error?.message ||
+                    error.message ||
+                    "Invalid or expired link."
+                );
+              }
             }
           } else {
             setReady(true);
@@ -124,14 +143,17 @@ function ResetPasswordContent() {
       searchParams?.get("token") ||
       searchParams?.get("token_hash");
     if (!code || loading || checking || !supabaseRef.current) return;
+    if (!emailInput && !searchParams?.get("email")) {
+      setNeedsEmail(true);
+      setErr("Enter your email to finish resetting your password.");
+      return;
+    }
     setErr(null);
     setLoading(true);
     try {
-      const { error } = await supabaseRef.current.auth.verifyOtp({ token_hash: code, type: "recovery" });
-      if (error) {
-        const { error: otpTokenError } = await supabaseRef.current.auth.verifyOtp({ token: code, type: "recovery" } as any);
-        if (otpTokenError) throw otpTokenError;
-      }
+      const email = emailInput || searchParams?.get("email") || undefined;
+      const res = await attemptRecovery(code, supabaseRef.current, email);
+      if (!res.ok) throw res.error;
       setReady(true);
       setNeedsEmail(false);
     } catch (e: any) {
