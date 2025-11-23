@@ -74,18 +74,12 @@ function ResetPasswordContent() {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!cancelled) {
           if (error) {
-            // Fallback per link aperto su device diverso (code verifier mancante)
-            if (emailFromLink) {
-              const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
-              if (otpError) {
-                setErr(otpError.message || error.message || "Invalid or expired link.");
-              } else {
-                setReady(true);
-              }
+            // Fallback: tenta verifyOtp (token_hash + type) per link aperto su device diverso
+            const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
+            if (otpError) {
+              setErr(otpError.message || error.message || "Invalid or expired link.");
             } else {
-              // Se manca l'email, chiediamola per completare verifyOtp
-              setNeedsEmail(true);
-              setErr("Enter your email to finish resetting your password.");
+              setReady(true);
             }
           } else {
             setReady(true);
