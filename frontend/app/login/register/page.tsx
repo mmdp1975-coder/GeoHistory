@@ -146,7 +146,7 @@ export default function RegisterPage() {
     return null;
   }
 
-  /* ---------- Submit con upsert profilo (language_code) ---------- */
+  /* ---------- Submit SENZA upsert su profiles ---------- */
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (loading || inFlight.current) return;
@@ -166,7 +166,6 @@ export default function RegisterPage() {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
       const username = email.trim().toLowerCase();
 
-      // 1) SignUp con metadata (incluso language)
       const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
@@ -177,51 +176,51 @@ export default function RegisterPage() {
             full_name: fullName || null,
             persona_id: personaId || null,
             username,
-            language: language || "en", // nei metadata utente
+            language: language || "en",
           },
           emailRedirectTo,
         },
       });
-      if (error) throw error;
 
-      const newUserId = signUpData?.user?.id ?? null;
-
-      // 2) Upsert diretto sul profilo: usa language_code (colonna vera)
-      if (newUserId) {
-        const profilePayload = {
-          id: newUserId,
-          persona_id: personaId || null,
-          language_code: language || "en", // 👈 CAMBIATO da language a language_code
-          // opzionali se esistono in schema:
-          // first_name: firstName.trim() || null,
-          // last_name: lastName.trim() || null,
-          // full_name: fullName || null,
-        };
-
-        const { error: upsertErr } = await supabase
-          .from("profiles")
-          .upsert(profilePayload, { onConflict: "id" });
-        if (upsertErr) {
-          throw new Error(`Profile upsert failed: ${upsertErr.message}`);
-        }
-      } else {
-        console.warn("[register] signUp missing user id");
+      if (error) {
+        throw error;
       }
 
+      const userAny: any = signUpData?.user ?? null;
+      const identities: any[] | undefined = Array.isArray(userAny?.identities)
+        ? userAny.identities
+        : undefined;
+
+      // Caso "utente già registrato" su Supabase:
+      // user esiste, error = null, identities = []
+      if (identities && identities.length === 0) {
+        setError(
+          'An account with this email already exists. Please log in or use "Forgot password" to recover access.'
+        );
+        setSuccess(false);
+        return;
+      }
+
+      // Nessun controllo su profiles qui; solo conferma signup
       setSuccess(true);
     } catch (err: any) {
-      const message: string = err?.message ?? "Registration failed.";
-      let friendly = message;
-      if (/Signups not allowed/i.test(message)) {
+      const rawMessage: string = err?.message ?? "Registration failed.";
+
+      let friendly: string;
+      if (/Signups not allowed/i.test(rawMessage)) {
         friendly = "Registrations are disabled in Supabase Auth settings.";
-      } else if (/redirect/i.test(message)) {
+      } else if (/redirect/i.test(rawMessage)) {
         friendly = "Invalid redirect URL. Add it in Supabase Auth settings.";
-      } else if (/rate|too many/i.test(message)) {
+      } else if (/rate|too many/i.test(rawMessage)) {
         friendly = "Too many requests. Try again later.";
-      } else if (/Profile upsert failed/i.test(message)) {
-        friendly = "Profile creation failed. Please retry.";
+      } else if (/already.*registered/i.test(rawMessage) || /user.*exists/i.test(rawMessage)) {
+        friendly =
+          'An account with this email already exists. Please log in or use "Forgot password" to recover access.';
+      } else {
+        friendly = "Registration failed.";
       }
-      setError(`${friendly} (detail: ${message})`);
+
+      setError(`${friendly} (detail: ${rawMessage})`);
     } finally {
       setLoading(false);
       setTimeout(() => {
