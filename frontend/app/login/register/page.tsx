@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import styles from "../auth.module.css";
 
-import type { SupabaseClient, Session } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import * as ClientModule from "../../../lib/supabaseBrowserClient";
 
@@ -27,6 +27,7 @@ function getSupabase(): SupabaseClient {
   }
   return createClient(url, key);
 }
+
 const supabase = getSupabase();
 
 /* ---------- Tipi e util ---------- */
@@ -80,7 +81,7 @@ export default function RegisterPage() {
   const [personaId, setPersonaId] = useState<string>("");
   const [accepted, setAccepted] = useState(false);
 
-  // ✅ language con default "en"
+  // language con default "en"
   const [language, setLanguage] = useState("en");
 
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -102,8 +103,10 @@ export default function RegisterPage() {
           .from("personas")
           .select("id, code, name_it, name_en")
           .order("code", { ascending: true });
+
         if (!alive) return;
         if (error) throw error;
+
         const filteredPersonas = ((data || []) as Persona[]).filter((persona) => {
           const code = (persona.code || "").trim().toUpperCase();
           return code !== "ADMIN" && code !== "MOD" && code !== "MODERATOR";
@@ -122,7 +125,7 @@ export default function RegisterPage() {
   /* ---------- Redirect email post signup ---------- */
   const emailRedirectTo = useMemo(() => {
     if (typeof window === "undefined") return undefined;
-    // Dopo la conferma email, rientra nella login
+    // dopo conferma email torna alla login
     return `${window.location.origin}/login`;
   }, []);
 
@@ -143,7 +146,7 @@ export default function RegisterPage() {
     return null;
   }
 
-  /* ---------- Submit con upsert profilo (language certo) ---------- */
+  /* ---------- Submit con upsert profilo (language_code) ---------- */
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (loading || inFlight.current) return;
@@ -174,7 +177,7 @@ export default function RegisterPage() {
             full_name: fullName || null,
             persona_id: personaId || null,
             username,
-            language: language || "en", // ✅ lingua anche in user metadata
+            language: language || "en", // nei metadata utente
           },
           emailRedirectTo,
         },
@@ -183,14 +186,13 @@ export default function RegisterPage() {
 
       const newUserId = signUpData?.user?.id ?? null;
 
-      // 2) Upsert diretto sul profilo: lingua scritta DAVVERO
-      //    Assumo policy RLS che permette all'utente loggato di inserire/aggiornare il proprio profilo (id = user.id)
+      // 2) Upsert diretto sul profilo: usa language_code (colonna vera)
       if (newUserId) {
         const profilePayload = {
           id: newUserId,
           persona_id: personaId || null,
-          language: language || "en", // ✅ lingua in tabella profiles
-          // opzionali: se il tuo schema li prevede
+          language_code: language || "en", // 👈 CAMBIATO da language a language_code
+          // opzionali se esistono in schema:
           // first_name: firstName.trim() || null,
           // last_name: lastName.trim() || null,
           // full_name: fullName || null,
@@ -198,7 +200,7 @@ export default function RegisterPage() {
 
         const { error: upsertErr } = await supabase
           .from("profiles")
-          .upsert(profilePayload, { onConflict: "id" }); // evita duplicati, aggiorna se esiste
+          .upsert(profilePayload, { onConflict: "id" });
         if (upsertErr) {
           throw new Error(`Profile upsert failed: ${upsertErr.message}`);
         }
@@ -291,7 +293,7 @@ export default function RegisterPage() {
                 onChange={(event) => setPersonaId(event.target.value)}
                 required={personas.length > 0}
               >
-                <option value="">Select persona...</option>
+                <option value="">Select persona.</option>
                 {personas.map((persona) => (
                   <option key={persona.id} value={persona.id}>
                     {personaLabel(persona, locale)}
@@ -301,7 +303,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* ✅ Language selector */}
+          {/* Language selector */}
           <div className={styles.field}>
             <div className={styles.label}>Language</div>
             <div className={styles.inputWrap}>
@@ -353,7 +355,14 @@ export default function RegisterPage() {
                 className={styles.eyeBtn}
                 onClick={() => setShowPwd((prev) => !prev)}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   {showPwd ? (
                     <>
                       <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-5 0-9.27-3.11-10.94-8" />
@@ -397,7 +406,14 @@ export default function RegisterPage() {
                 className={styles.eyeBtn}
                 onClick={() => setShowPwd2((prev) => !prev)}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   {showPwd2 ? (
                     <>
                       <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-5 0-9.27-3.11-10.94-8" />
@@ -415,7 +431,15 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13, color: "#374151" }}>
+          <label
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+              fontSize: 13,
+              color: "#374151",
+            }}
+          >
             <input
               type="checkbox"
               checked={accepted}
@@ -423,8 +447,14 @@ export default function RegisterPage() {
             />
             <span>
               I accept the{" "}
-              <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">Terms of Service</a> and the{" "}
-              <a className={styles.a} href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
+              <a className={styles.a} href="/terms" target="_blank" rel="noreferrer">
+                Terms of Service
+              </a>{" "}
+              and the{" "}
+              <a className={styles.a} href="/privacy" target="_blank" rel="noreferrer">
+                Privacy Policy
+              </a>
+              .
             </span>
           </label>
 
@@ -441,8 +471,12 @@ export default function RegisterPage() {
                 {loading ? "Creating..." : "Create account"}
               </button>
               <div className={styles.links}>
-                <Link className={styles.a} href="/login">Back to login</Link>
-                <Link className={styles.a} href="/login/forgot">Forgot password</Link>
+                <Link className={styles.a} href="/login">
+                  Back to login
+                </Link>
+                <Link className={styles.a} href="/login/forgot">
+                  Forgot password
+                </Link>
               </div>
             </div>
           </div>
