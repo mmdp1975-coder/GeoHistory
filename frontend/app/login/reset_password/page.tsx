@@ -75,6 +75,11 @@ function ResetPasswordContent() {
     return null;
   }
 
+  const describeErr = (source: string, e: any, fallback: string) => {
+    const msg = e?.message || fallback;
+    return `${msg} [${source}]`;
+  };
+
   useEffect(() => {
     if (!supabaseReady || !supabaseRef.current) return;
     const supabase = supabaseRef.current;
@@ -96,7 +101,7 @@ function ResetPasswordContent() {
         if (kind === "token_hash") {
           const { error } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
           if (!cancelled) {
-            if (error) errMsg = error.message || "Invalid or expired link.";
+            if (error) errMsg = describeErr("token_hash", error, "Invalid or expired link.");
             else setReady(true);
           }
         } else if (kind === "code") {
@@ -110,7 +115,7 @@ function ResetPasswordContent() {
                   token: code,
                   type: "recovery",
                 });
-                if (otpError) errMsg = otpError.message || error.message || "Invalid or expired link.";
+                if (otpError) errMsg = describeErr("pkce-fallback", otpError, error.message || "Invalid or expired link.");
                 else setReady(true);
               } else {
                 setNeedsEmail(true);
@@ -132,7 +137,7 @@ function ResetPasswordContent() {
           }
           const { error } = await supabase.auth.verifyOtp({ email: emailForToken, token: code, type: "recovery" });
           if (!cancelled) {
-            if (error) errMsg = error.message || "Invalid or expired link.";
+            if (error) errMsg = describeErr("token+email", error, "Invalid or expired link.");
             else setReady(true);
           }
         }
@@ -208,7 +213,7 @@ function ResetPasswordContent() {
       setReady(true);
       setNeedsEmail(false);
     } catch (e: any) {
-      setErr(e?.message ?? "Unable to verify reset link. Check your email and try again.");
+      setErr(describeErr("manual-verify", e, "Unable to verify reset link. Check your email and try again."));
     } finally {
       setLoading(false);
     }
