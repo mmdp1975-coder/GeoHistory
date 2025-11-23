@@ -66,18 +66,17 @@ function ResetPasswordContent() {
       if (emailFromLink) setEmailInput(emailFromLink);
 
       // 1) Nuovo flusso PKCE (query ?code=)
-      const code = searchParams?.get("code");
+      const code =
+        searchParams?.get("code") ||
+        searchParams?.get("token") ||
+        searchParams?.get("token_hash");
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!cancelled) {
           if (error) {
             // Fallback per link aperto su device diverso (code verifier mancante)
             if (emailFromLink) {
-              const { error: otpError } = await supabase.auth.verifyOtp({
-                email: emailFromLink,
-                token_hash: code,
-                type: "recovery",
-              });
+              const { error: otpError } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
               if (otpError) {
                 setErr(otpError.message || error.message || "Invalid or expired link.");
               } else {
@@ -120,16 +119,15 @@ function ResetPasswordContent() {
   }, [searchParams, supabaseReady]);
 
   async function handleVerifyWithEmail() {
-    const code = searchParams?.get("code");
-    if (!code || !emailInput || loading || checking || !supabaseRef.current) return;
+    const code =
+      searchParams?.get("code") ||
+      searchParams?.get("token") ||
+      searchParams?.get("token_hash");
+    if (!code || loading || checking || !supabaseRef.current) return;
     setErr(null);
     setLoading(true);
     try {
-      const { error } = await supabaseRef.current.auth.verifyOtp({
-        email: emailInput,
-        token_hash: code,
-        type: "recovery",
-      });
+      const { error } = await supabaseRef.current.auth.verifyOtp({ token_hash: code, type: "recovery" });
       if (error) throw error;
       setReady(true);
       setNeedsEmail(false);
