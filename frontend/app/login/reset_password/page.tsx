@@ -55,8 +55,9 @@ function ResetPasswordContent() {
 
   async function attemptRecovery(code: string, supabase: SupabaseClient, email?: string) {
     const attempts: Record<string, string>[] = [];
-    if (email) attempts.push({ email, token_hash: code, type: "recovery" });
+    // token_hash flow does NOT require email
     attempts.push({ token_hash: code, type: "recovery" });
+    // token flow prefers email if available
     if (email) attempts.push({ email, token: code, type: "recovery" } as any);
     attempts.push({ token: code, type: "recovery" } as any);
 
