@@ -53,21 +53,14 @@ function ResetPasswordContent() {
     setSupabaseReady(true);
   }, []);
 
-  async function attemptRecovery(code: string, supabase: SupabaseClient, email?: string) {
-    const attempts: Record<string, string>[] = [];
-    // token_hash flow does NOT require email
-    attempts.push({ token_hash: code, type: "recovery" });
-    // token flow prefers email if available
-    if (email) attempts.push({ email, token: code, type: "recovery" } as any);
-    attempts.push({ token: code, type: "recovery" } as any);
-
-    let lastErr: any = null;
-    for (const payload of attempts) {
-      const { error } = await supabase.auth.verifyOtp(payload as any);
-      if (!error) return { ok: true as const };
-      lastErr = error;
-    }
-    return { ok: false as const, error: lastErr as any };
+  function getResetCode() {
+    const code = searchParams?.get("code");
+    const tokenHash = searchParams?.get("token_hash");
+    const token = searchParams?.get("token");
+    if (tokenHash) return { value: tokenHash, kind: "token_hash" as const };
+    if (token) return { value: token, kind: "token" as const };
+    if (code) return { value: code, kind: "code" as const };
+    return null;
   }
 
   useEffect(() => {
@@ -83,33 +76,40 @@ function ResetPasswordContent() {
       if (emailFromLink) setEmailInput(emailFromLink);
 
       // 1) Nuovo flusso PKCE (query ?code=)
-      const code =
-        searchParams?.get("code") ||
-        searchParams?.get("token") ||
-        searchParams?.get("token_hash");
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!cancelled) {
-          if (error) {
-            // Fallback: tenta verifyOtp (token_hash/token) per link aperto su device diverso
-            const recovery = await attemptRecovery(code, supabase, emailFromLink);
-            if (recovery.ok) {
-              setReady(true);
-            } else {
-              if (!emailFromLink) {
-                setNeedsEmail(true);
-                setErr("Enter your email to finish resetting your password.");
-              } else {
-                setErr(
-                  recovery.error?.message ||
-                    error.message ||
-                    "Invalid or expired link."
-                );
-              }
-            }
-          } else {
-            setReady(true);
+      const codeInfo = getResetCode();
+      if (codeInfo) {
+        const { value: code, kind } = codeInfo;
+        let errMsg: string | null = null;
+
+        if (kind === "code") {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!cancelled) {
+            if (error) errMsg = error.message || "Invalid or expired link.";
+            else setReady(true);
           }
+        } else if (kind === "token_hash") {
+          const { error } = await supabase.auth.verifyOtp({ token_hash: code, type: "recovery" });
+          if (!cancelled) {
+            if (error) errMsg = error.message || "Invalid or expired link.";
+            else setReady(true);
+          }
+        } else if (kind === "token") {
+          const emailForToken = emailFromLink || undefined;
+          if (!emailForToken) {
+            setNeedsEmail(true);
+            setErr("Enter your email to finish resetting your password.");
+            setChecking(false);
+            return;
+          }
+          const { error } = await supabase.auth.verifyOtp({ email: emailForToken, token: code, type: "recovery" });
+          if (!cancelled) {
+            if (error) errMsg = error.message || "Invalid or expired link.";
+            else setReady(true);
+          }
+        }
+
+        if (!cancelled) {
+          if (errMsg) setErr(errMsg);
           setChecking(false);
         }
         return;
@@ -139,22 +139,31 @@ function ResetPasswordContent() {
   }, [searchParams, supabaseReady]);
 
   async function handleVerifyWithEmail() {
-    const code =
-      searchParams?.get("code") ||
-      searchParams?.get("token") ||
-      searchParams?.get("token_hash");
-    if (!code || loading || checking || !supabaseRef.current) return;
-    if (!emailInput && !searchParams?.get("email")) {
-      setNeedsEmail(true);
-      setErr("Enter your email to finish resetting your password.");
-      return;
-    }
+    const codeInfo = getResetCode();
+    if (!codeInfo || loading || checking || !supabaseRef.current) return;
     setErr(null);
     setLoading(true);
     try {
+      const { value: code, kind } = codeInfo;
       const email = emailInput || searchParams?.get("email") || undefined;
-      const res = await attemptRecovery(code, supabaseRef.current, email);
-      if (!res.ok) throw res.error;
+
+      if (kind === "token_hash") {
+        const { error } = await supabaseRef.current.auth.verifyOtp({ token_hash: code, type: "recovery" });
+        if (error) throw error;
+      } else if (kind === "token") {
+        const emailForToken = email || emailInput;
+        if (!emailForToken) {
+          throw new Error("Enter your email to finish resetting your password.");
+        }
+        const { error } = await supabaseRef.current.auth.verifyOtp({ email: emailForToken, token: code, type: "recovery" });
+        if (error) throw error;
+      } else if (kind === "code") {
+        const { error } = await supabaseRef.current.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+      } else {
+        throw new Error("Reset link not valid.");
+      }
+
       setReady(true);
       setNeedsEmail(false);
     } catch (e: any) {
