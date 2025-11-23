@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import styles from "../auth.module.css";
 
@@ -22,6 +22,8 @@ function getSupabase(): SupabaseClient {
   return createClient(url, key);
 }
 
+export const dynamic = "force-dynamic";
+
 function getHashTokens() {
   if (typeof window === "undefined") return null;
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -31,7 +33,7 @@ function getHashTokens() {
   return { access_token, refresh_token };
 }
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const [supabaseReady, setSupabaseReady] = useState(false);
   const [password, setPassword] = useState("");
@@ -272,5 +274,13 @@ export default function ResetPasswordPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className={styles.page}><div className={styles.card}><div className={styles.alert}>Loading...</div></div></div>}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
