@@ -53,6 +53,18 @@ function ResetPasswordContent() {
     setSupabaseReady(true);
   }, []);
 
+  function getParamInsensitive(...keys: string[]) {
+    const map = new Map<string, string>();
+    searchParams?.forEach((value, key) => {
+      map.set(key.toLowerCase(), value);
+    });
+    for (const key of keys) {
+      const val = map.get(key.toLowerCase());
+      if (val) return val;
+    }
+    return undefined;
+  }
+
   function getResetCode() {
     const code = searchParams?.get("code");
     const tokenHash = searchParams?.get("token_hash");
@@ -72,7 +84,7 @@ function ResetPasswordContent() {
       setChecking(true);
       setNeedsEmail(false);
 
-      const emailFromLink = searchParams?.get("email") || undefined;
+      const emailFromLink = getParamInsensitive("email") || undefined;
       if (emailFromLink) setEmailInput(emailFromLink);
 
       // 1) Nuovo flusso PKCE (query ?code=)
@@ -140,7 +152,7 @@ function ResetPasswordContent() {
     setLoading(true);
     try {
       const { value: code, kind } = codeInfo;
-      const email = emailInput || searchParams?.get("email") || undefined;
+      const email = emailInput || getParamInsensitive("email") || undefined;
 
       if (kind === "token_hash" || kind === "code") {
         const { error } = await supabaseRef.current.auth.verifyOtp({ token_hash: code, type: "recovery" });
