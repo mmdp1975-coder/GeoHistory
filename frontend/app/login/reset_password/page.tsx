@@ -151,7 +151,7 @@ function ResetPasswordContent() {
       <div className={styles.veil} />
       <div className={styles.card}>
         <h1 className={`${styles.title} ${styles.titleAligned}`}>
-          Choose a new password (v3)
+          Choose a new password
         </h1>
 
         {checking && !err && (

@@ -169,37 +169,6 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSocial(provider: "google" | "apple" | "azure") {
-    if (loading || inFlight.current || cooldown > 0) return;
-    setError(null);
-    setInfo(null);
-    setLoading(true);
-    inFlight.current = true;
-    try {
-      const { error, data } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/module/landing`
-              : undefined,
-        },
-      });
-      if (error) throw error;
-
-      // Alcuni provider aprono nuova tab; comunque forziamo la UI a “uscire”
-      if (data?.url && typeof window !== "undefined") {
-        window.location.href = data.url;
-      }
-    } catch (err: any) {
-      setError(err?.message ?? "Social sign-in failed.");
-      setLoading(false);
-      setTimeout(() => {
-        inFlight.current = false;
-      }, 300);
-    }
-  }
-
   const submitDisabled = loading || cooldown > 0;
 
   return (
@@ -281,7 +250,14 @@ export default function LoginPage() {
                     onClick={() => setShowPwd((prev) => !prev)}
                     disabled={submitDisabled}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       {showPwd ? (
                         <>
                           <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-5 0-9.27-3.11-10.94-8" />
@@ -305,7 +281,9 @@ export default function LoginPage() {
                   {cooldown > 0 && <span style={{ marginLeft: 8 }}>({cooldown}s)</span>}
                 </div>
               )}
-              {info && !error && <div className={`${styles.alert} ${styles.alertInfo}`}>{info}</div>}
+              {info && !error && (
+                <div className={`${styles.alert} ${styles.alertInfo}`}>{info}</div>
+              )}
 
               <div className={styles.field}>
                 <div className={styles.actions}>
@@ -318,40 +296,16 @@ export default function LoginPage() {
                   </button>
 
                   <div className={styles.links}>
-                    <Link className={styles.a} href="/login/forgot">Forgot password</Link>
-                    <Link className={styles.a} href="/login/register">Create an account</Link>
+                    <Link className={styles.a} href="/login/forgot">
+                      Forgot password
+                    </Link>
+                    <Link className={styles.a} href="/login/register">
+                      Create an account
+                    </Link>
                   </div>
                 </div>
               </div>
             </form>
-
-            <div className={styles.divider}>or continue with</div>
-            <div className={styles.social}>
-              <button
-                aria-label="Google"
-                className={styles.iconBtn}
-                onClick={() => handleSocial("google")}
-                disabled={submitDisabled}
-              >
-                <Image src="/icons/google.svg" alt="" width={20} height={20} />
-              </button>
-              <button
-                aria-label="Apple"
-                className={styles.iconBtn}
-                onClick={() => handleSocial("apple")}
-                disabled={submitDisabled}
-              >
-                <Image src="/icons/apple.svg" alt="" width={20} height={20} />
-              </button>
-              <button
-                aria-label="Microsoft"
-                className={styles.iconBtn}
-                onClick={() => handleSocial("azure")}
-                disabled={submitDisabled}
-              >
-                <Image src="/icons/microsoft.svg" alt="" width={20} height={20} />
-              </button>
-            </div>
           </div>
         )}
       </div>
@@ -407,11 +361,25 @@ export default function LoginPage() {
           >
             <span className={styles.loginToggleIcon} aria-hidden="true">
               {formOpen ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M6 6l12 12M18 6 6 18" />
                 </svg>
               ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M12 12c1.7 0 3-1.34 3-3s-1.3-3-3-3-3 1.34-3 3 1.3 3 3 3Z" />
                   <path d="M6 20v-1a5.9 5.9 0 0 1 6-6 5.9 5.9 0 0 1 6 6v1" />
                 </svg>

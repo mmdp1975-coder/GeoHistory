@@ -1,10 +1,9 @@
-// frontend/app/module/settings/page.tsx
 "use client";
 
 /**
  * Settings — usa l’hook centralizzato useCurrentUser()
  * - Niente più auth.getUser/joins duplicati: l’hook fornisce userId, personaCode, isAdminOrMod, profili base
- * - Qui recuperiamo solo ciò che serve in più (language_code) e l’elenco personas
+ * - Qui recuperiamo solo ciò che serve in più (language_code, is_admin) e l’elenco personas
  * - Logica di salvataggio invariata (POST /api/profile/update)
  */
 
@@ -24,6 +23,7 @@ type ProfileRow = {
   id: string;
   language_code: string | null; // 'it' | 'en' | null
   persona_id: string | null;
+  is_admin: boolean | null;
 };
 
 const LANGS = [
@@ -88,12 +88,12 @@ export default function SettingsPage() {
           return;
         }
 
-        // 1) profilo (qui prendiamo anche language_code, che l’hook non porta)
+        // 1) profilo (qui prendiamo anche language_code e is_admin)
         let prof: ProfileRow | null = null;
         {
           const { data: profRow, error: perr } = await supabase
             .from("profiles")
-            .select("id, language_code, persona_id")
+            .select("id, language_code, persona_id, is_admin")
             .eq("id", userId)
             .maybeSingle();
 
@@ -152,8 +152,11 @@ export default function SettingsPage() {
     return m;
   }, [personas]);
 
-  // privilegiato?
+  // privilegiato per la gestione persona (persona ADMIN/MOD o isAdminOrMod dall’hook)
   const isPrivileged = isAdminOrMod || isPrivilegedCode(personaCode);
+
+  // flag admin basato su profiles.is_admin (per il bottone DB_Manager)
+  const isAdminProfile = !!profile?.is_admin;
 
   // opzioni select persona (i non privilegiati non vedono ruoli ADMIN/MOD)
   const filteredPersonas: Persona[] = useMemo(() => {
@@ -188,6 +191,7 @@ export default function SettingsPage() {
       const payload = {
         language_code: profile.language_code || null,
         persona_id: personaIdToSave,
+        // ⚠️ is_admin NON viene modificato da questa pagina
       };
 
       const resp = await fetch("/api/profile/update", {
@@ -259,6 +263,19 @@ export default function SettingsPage() {
       <div className="mx-auto max-w-5xl px-4 py-8">
         <div className="rounded-2xl bg-white shadow p-6">
           <h2 className="text-base font-semibold mb-6">Profile preferences</h2>
+
+          {/* 🔥 BOTTONI ADMIN (solo se profiles.is_admin = true) */}
+          {isAdminProfile && (
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => router.push("/module/DB_Manager")}
+                className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
+              >
+                Open DB Manager
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSave} className="space-y-6">
             {/* Lingua */}

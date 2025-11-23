@@ -146,7 +146,7 @@ export default function RegisterPage() {
     return null;
   }
 
-  /* ---------- Submit SENZA upsert su profiles ---------- */
+  /* ---------- Submit (con update su profiles) ---------- */
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (loading || inFlight.current) return;
@@ -201,7 +201,32 @@ export default function RegisterPage() {
         return;
       }
 
-      // Nessun controllo su profiles qui; solo conferma signup
+      const newUserId: string | undefined = userAny?.id;
+      if (newUserId) {
+        // aggiorniamo il profilo esistente con persona + lingua
+        const { error: profileErr } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: newUserId,
+              persona_id: personaId || null,
+              language_code: language || "en",
+            },
+            { onConflict: "id" }
+          );
+
+        if (profileErr) {
+          console.error("[register] profile upsert error", profileErr);
+          setError(
+            `Registration completed but profile update failed. You can still log in, then edit your profile. (detail: ${profileErr.message})`
+          );
+          setSuccess(false);
+          return;
+        }
+      } else {
+        console.warn("[register] signUp missing user id, cannot update profiles");
+      }
+
       setSuccess(true);
     } catch (err: any) {
       const rawMessage: string = err?.message ?? "Registration failed.";
