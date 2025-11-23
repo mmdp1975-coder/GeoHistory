@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "../auth.module.css";
 
 /* Supabase con fallback sicuro */
@@ -22,27 +22,39 @@ function getSupabase(): SupabaseClient {
   if (!url || !key) throw new Error("Supabase not initialized");
   return createClient(url, key);
 }
-const supabase = getSupabase();
-
 export default function ForgotPage() {
+  const [supabaseReady, setSupabaseReady] = useState(false);
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const inFlight = useRef(false);
+  const supabaseRef = useRef<SupabaseClient | null>(null);
+
+  // Initialize Supabase client only on the browser to avoid SSR hydration issues
+  useEffect(() => {
+    supabaseRef.current = getSupabase();
+    setSupabaseReady(true);
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading || inFlight.current) return;
+    if (loading || inFlight.current || !supabaseRef.current) return;
 
     setErr(null);
     setLoading(true);
     inFlight.current = true;
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo:
-          typeof window !== "undefined" ? `${location.origin}/reset-password` : undefined,
+      const siteUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (typeof window !== "undefined" ? window.location.origin : undefined);
+      const redirectTo = siteUrl
+        ? `${siteUrl.replace(/\/$/, "")}/login/reset_password?email=${encodeURIComponent(email)}`
+        : undefined;
+
+      const { error } = await supabaseRef.current.auth.resetPasswordForEmail(email, {
+        redirectTo,
       });
       if (error) throw error;
       setSent(true);
@@ -96,8 +108,8 @@ export default function ForgotPage() {
 
           <div className={styles.field}>
             <div className={styles.actions}>
-              <button className={styles.btnPrimary} disabled={loading} type="submit">
-                {loading ? "Sending…" : "Send reset link"}
+              <button className={styles.btnPrimary} disabled={loading || !supabaseReady} type="submit">
+                {loading ? "Sending..." : "Send reset link"}
               </button>
               <div className={styles.links}>
                 <Link className={styles.a} href="/login">Back to login</Link>
