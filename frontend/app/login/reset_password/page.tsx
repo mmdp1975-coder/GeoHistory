@@ -6,7 +6,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import styles from "../auth.module.css";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient, EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import * as ClientModule from "../../../lib/supabaseBrowserClient";
 
@@ -44,24 +44,30 @@ function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const inFlight = useRef(false);
 
-  // STEP 1: exchange the PKCE code for a session
+  // STEP 1: verify the token_hash and create a session
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
       try {
-        const code = searchParams.get("code");
+        const token_hash = searchParams.get("token_hash");
+        const typeParam = searchParams.get("type") as EmailOtpType | null;
 
-        if (!code) {
+        if (!token_hash || !typeParam) {
           if (!cancelled) {
-            setErr("This password reset link is invalid or has expired. Please request a new one.");
+            setErr(
+              "This password reset link is invalid or has expired. Please request a new one."
+            );
             setChecking(false);
           }
           return;
         }
 
         const supabase = supabaseRef.current!;
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        const { error } = await supabase.auth.verifyOtp({
+          type: typeParam,
+          token_hash,
+        });
 
         if (cancelled) return;
 
@@ -79,7 +85,9 @@ function ResetPasswordContent() {
         setChecking(false);
       } catch (e: any) {
         if (!cancelled) {
-          setErr(e?.message ?? "Unable to verify reset link. Please request a new one.");
+          setErr(
+            e?.message ?? "Unable to verify reset link. Please request a new one."
+          );
           setChecking(false);
         }
       }
@@ -142,8 +150,9 @@ function ResetPasswordContent() {
       <div className={styles.bg} />
       <div className={styles.veil} />
       <div className={styles.card}>
-        {/* NOTA: aggiungo "(v2)" nel titolo per controllare il deploy */}
-        <h1 className={`${styles.title} ${styles.titleAligned}`}>Choose a new password (v2)</h1>
+        <h1 className={`${styles.title} ${styles.titleAligned}`}>
+          Choose a new password (v3)
+        </h1>
 
         {checking && !err && (
           <div className={styles.alert}>Verifying your reset link...</div>
