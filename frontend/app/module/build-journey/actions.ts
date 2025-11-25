@@ -80,6 +80,11 @@ const T = {
   ev_types: "event_types",
 } as const;
 
+const normalizeTypeId = (val: any) => {
+  if (val == null) return null;
+  return String(val).trim() || null;
+};
+
 function sb() {
   return supabaseAdmin;
 }
@@ -837,6 +842,7 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       const ev = payload.events[i];
 
       // 2a) events_list
+      const firstType = Array.isArray(ev.type_codes) ? normalizeTypeId(ev.type_codes[0]) : null;
       const evRow = await insertRow(T.events, {
         era: ev.era ?? null,
         year_from: ev.year_from ?? null,
@@ -851,8 +857,8 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         source_event_id: ev.source_event_id ?? null,
         image_url: ev.image_url ?? null,
         images: ev.images_json ?? null,
+        event_types_id: firstType ?? null,
         created_at: ts(),
-        updated_at: ts(),
       });
       const event_id = evRow.id as string;
       created.event_ids.push(event_id);
@@ -963,6 +969,7 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
       // 1) upsert event
       let event_id = item.event_id;
       const base = item.event || {};
+      const firstType = Array.isArray(item.type_codes) ? normalizeTypeId(item.type_codes[0]) : null;
       if (event_id) {
         await updateRow(T.events, { id: event_id }, {
           era: base.era ?? null,
@@ -978,7 +985,7 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
           source_event_id: base.source_event_id ?? null,
           image_url: base.image_url ?? null,
           images: base.images_json ?? null,
-          updated_at: now,
+          event_types_id: firstType ?? null,
         });
       } else {
         const evRow = await insertRow(T.events, {
@@ -995,8 +1002,8 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
           source_event_id: base.source_event_id ?? null,
           image_url: base.image_url ?? null,
           images: base.images_json ?? null,
+          event_types_id: firstType ?? null,
           created_at: now,
-          updated_at: now,
         });
         event_id = evRow.id;
       }

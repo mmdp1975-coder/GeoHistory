@@ -561,12 +561,12 @@ export default function GlobeCanvas({
       <div
         className="border-t border-neutral-200 bg-white/90 text-xs sm:text-sm"
         style={{
-          padding: "4px 10px 8px 10px",
+          padding: "6px 8px 10px 8px",
           position: "relative",
           zIndex: 5,
         }}
       >
-        <div className="grid gap-x-6 gap-y-2 grid-cols-1 sm:grid-cols-2">
+        <div className="grid gap-x-4 gap-y-2 grid-cols-1 sm:grid-cols-2">
           <div className="min-w-0">
             <div className="whitespace-nowrap">
               Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span>
@@ -574,7 +574,7 @@ export default function GlobeCanvas({
             <div className="whitespace-nowrap">
               Lon: <span className="break-words">{picked ? picked.lon.toFixed(4) : "-"}</span>
             </div>
-            <div className="flex items-center gap-3 mt-2">
+            <div className="flex items-center gap-3 mt-2 max-w-[220px]">
               <span className="whitespace-nowrap">City radius (km):</span>
               <input
                 className="min-w-0 flex-1"

@@ -149,6 +149,7 @@ type JourneyEventEditor = {
     source_event_id: string | null;
     image_url: string | null;
     images_json: any | null;
+    event_types_id?: string | null;
   };
   translation: {
     id?: string;
@@ -396,14 +397,14 @@ export default function BuildJourneyPage() {
 
   const loadEventTypes = useCallback(async () => {
     try {
-      const { data: typeRows } = await supabase.from("event_types").select("id,code,label,name");
+      const { data: typeRows } = await supabase.from("event_types").select("id");
       if (typeRows) {
         const codes = Array.from(
           new Map(
             typeRows
               .map((row: any) => {
                 const id = row?.id ? String(row.id).trim() : "";
-                const label = row?.label || row?.code || row?.name || id;
+                const label = id;
                 return id ? [id, label] : null;
               })
               .filter((entry): entry is [string, string] => Boolean(entry)),
@@ -601,7 +602,9 @@ export default function BuildJourneyPage() {
       try {
         const { data: evData, error: evError } = await supabase
           .from("event_group_event")
-          .select("event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images,event_types_id)")
+          .select(
+            "event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images,event_types_id, event_types!fk_event_types (id))",
+          )
           .eq("group_event_id", journeyId)
           .order("created_at", { ascending: true });
         if (evError) throw evError;
@@ -686,20 +689,29 @@ export default function BuildJourneyPage() {
           });
         }
 
+        const typeOptionsFromEvents: { id: string; label: string }[] = [];
         const mapped: JourneyEventEditor[] = rows.map((row) => {
           const ev = row.events_list || {};
+          const joinedTypeRaw = ev.event_types;
+          const joinedType = Array.isArray(joinedTypeRaw) ? joinedTypeRaw[0] : joinedTypeRaw;
           const eventId = row.event_id || ev.id;
           const tr = translationsMap[eventId]?.primary || {
             ...createEmptyEventTranslation(DEFAULT_LANGUAGE),
           };
           const trAll = translationsMap[eventId]?.all || [createEmptyEventTranslation(DEFAULT_LANGUAGE)];
           const media = mediaMap[eventId] || [];
-          const rawTypes = ev.event_types_id;
+          const rawTypes = joinedType?.id ?? ev.event_types_id;
           const type_codes = Array.isArray(rawTypes)
             ? rawTypes.map((t: any) => String(t).trim()).filter(Boolean)
             : rawTypes
             ? [String(rawTypes).trim()]
             : [];
+          if (joinedType?.id) {
+            const id = String(joinedType.id).trim();
+            if (id) {
+              typeOptionsFromEvents.push({ id, label: id });
+            }
+          }
           return {
             tempId: eventId || buildTempMediaId(),
             event_id: eventId,
@@ -720,6 +732,7 @@ export default function BuildJourneyPage() {
               source_event_id: ev.source_event_id ?? null,
               image_url: ev.image_url ?? null,
               images_json: ev.images ?? null,
+              event_types_id: rawTypes ?? null,
             },
             translation: tr,
             translations_all: trAll,
@@ -732,6 +745,11 @@ export default function BuildJourneyPage() {
         // ensure available type list includes any from the fetched events
         setAvailableEventTypes((prev) => {
           const next = new Map(prev.map((t) => [t.id, t.label]));
+          typeOptionsFromEvents.forEach((opt) => {
+            if (!next.has(opt.id)) {
+              next.set(opt.id, opt.label);
+            }
+          });
           mapped.forEach((ev) =>
             ev.type_codes.forEach((t) => {
               if (!next.has(t)) {
@@ -1664,18 +1682,25 @@ export default function BuildJourneyPage() {
                                 setEventsSaving(true);
                                 setEventsSaveError(null);
                                 setEventsSaveOk(null);
-                                const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => ({
-                                  event_id: ev.event_id,
-                                  added_by_user_ref: ev.added_by_user_ref ?? null,
-                                  event: { ...ev.event },
-                                  translation: { ...ev.translation },
-                                  translations: ev.translations_all,
-                                  type_codes: ev.type_codes,
-                                  correlations: ev.correlations.filter((c) => c.group_event_id),
-                                  media: ev.media
-                                    .map((m, mIdx) => ({
-                                      public_url: m.public_url?.trim() || undefined,
-                                      source_url: m.source_url?.trim() || undefined,
+                                const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => {
+                                  const typeCodes =
+                                    ev.type_codes && ev.type_codes.length
+                                      ? ev.type_codes
+                                      : ev.event.event_types_id
+                                      ? [ev.event.event_types_id]
+                                      : [];
+                                  return {
+                                    event_id: ev.event_id,
+                                    added_by_user_ref: ev.added_by_user_ref ?? null,
+                                    event: { ...ev.event },
+                                    translation: { ...ev.translation },
+                                    translations: ev.translations_all,
+                                    type_codes: typeCodes,
+                                    correlations: ev.correlations.filter((c) => c.group_event_id),
+                                    media: ev.media
+                                      .map((m, mIdx) => ({
+                                        public_url: m.public_url?.trim() || undefined,
+                                        source_url: m.source_url?.trim() || undefined,
                                       title: m.title?.trim() || undefined,
                                       caption: m.caption?.trim() || undefined,
                                       alt_text: m.alt_text?.trim() || undefined,
@@ -1685,7 +1710,8 @@ export default function BuildJourneyPage() {
                                       kind: m.kind,
                                     }))
                                     .filter((m) => m.public_url || m.source_url),
-                                }));
+                                  };
+                                });
                                 try {
                                   const res = await saveJourneyEvents({
                                     group_event_id: selectedJourneyId,

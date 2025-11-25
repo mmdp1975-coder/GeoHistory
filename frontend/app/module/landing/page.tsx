@@ -226,7 +226,7 @@ export default function LandingPage(): JSX.Element {
           <div className="px-5 pb-5 pt-3 relative">
             {/* declasso lo stack del contenitore interno del canvas */}
             <div className="p-3 relative z-0">
-              <div style={{ width: '100%', height: GLOBE_H }}>
+              <div style={{ width: '100%' }}>
                 <GlobeCanvas
                   height={GLOBE_H}
                   radius={1.4}
