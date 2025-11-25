@@ -20,6 +20,18 @@ type Visibility = "private" | "public";
 
 const DEFAULT_LANGUAGE = "it";
 const DEFAULT_MAP_CENTER: [number, number] = [12.4964, 41.9028];
+const inferContinentFromCoords = (lat?: number | null, lng?: number | null): string | null => {
+  if (lat == null || lng == null) return null;
+  if (lat < -60) return "Antarctica";
+  if (lat >= -35 && lat <= 35 && lng >= -20 && lng <= 55) return "Africa";
+  if (lat >= 35 && lng >= -30 && lng <= 60) return "Europe";
+  if (lat >= -10 && lng > 60 && lng <= 180) return "Asia";
+  if (lat >= -55 && lat < -10 && lng > 110 && lng <= 180) return "Oceania";
+  if (lat >= -60 && lng >= -120 && lng <= -30) return "South America";
+  if (lat >= 5 && lng < -30 && lng >= -180) return "North America";
+  return null;
+};
+
 type JourneySummary = {
   id: string;
   title: string | null;
@@ -312,7 +324,9 @@ export default function BuildJourneyPage() {
   const [journeySort, setJourneySort] = useState<JourneySortValue>("approved_desc");
   const [journeyRatingMap, setJourneyRatingMap] = useState<Record<string, JourneyRating>>({});
   const [activeTab, setActiveTab] = useState<"group" | "translations" | "media" | "events">("group");
+  const [availableEventTypes, setAvailableEventTypes] = useState<{ id: string; label: string }[]>([]);
   const [journeyEvents, setJourneyEvents] = useState<JourneyEventEditor[]>([]);
+  const [selectedEventTempId, setSelectedEventTempId] = useState<string | null>(null);
   const [deletedEventIds, setDeletedEventIds] = useState<string[]>([]);
   const [eventsSaving, setEventsSaving] = useState(false);
   const [eventsSaveError, setEventsSaveError] = useState<string | null>(null);
@@ -331,6 +345,29 @@ export default function BuildJourneyPage() {
     }
     return journeys.filter((journey) => journeyVisibilityMap[journey.id] === journeyFilter);
   }, [journeyFilter, journeyVisibilityMap, journeys]);
+  const sortedEvents = useMemo(() => {
+    const toSortValue = (ev: JourneyEventEditor): number => {
+      if (ev.event.year_from != null) return ev.event.year_from;
+      if (ev.event.exact_date) {
+        const parsed = new Date(ev.event.exact_date);
+        if (!isNaN(parsed.getTime())) return parsed.getTime();
+      }
+      if (ev.event.year_to != null) return ev.event.year_to;
+      return Number.POSITIVE_INFINITY;
+    };
+    return [...journeyEvents]
+      .map((ev, idx) => ({ ev, idx }))
+      .sort((a, b) => {
+        const diff = toSortValue(a.ev) - toSortValue(b.ev);
+        if (isFinite(diff) && diff !== 0) return diff;
+        return a.idx - b.idx;
+      })
+      .map((entry) => entry.ev);
+  }, [journeyEvents]);
+  const selectedEvent = useMemo(
+    () => journeyEvents.find((ev) => ev.tempId === selectedEventTempId) ?? null,
+    [journeyEvents, selectedEventTempId],
+  );
 
   const resetForm = useCallback(() => {
     setGe({ ...EMPTY_GROUP_EVENT, owner_profile_id: profile?.id || "" });
@@ -347,6 +384,7 @@ export default function BuildJourneyPage() {
     setDeletedEventIds([]);
     setEventsSaveError(null);
     setEventsSaveOk(null);
+    setSelectedEventTempId(null);
   }, [profile?.id]);
 
   const handleNewJourney = () => {
@@ -355,6 +393,28 @@ export default function BuildJourneyPage() {
     setSaveError(null);
     setSaveOk(null);
   };
+
+  const loadEventTypes = useCallback(async () => {
+    try {
+      const { data: typeRows } = await supabase.from("event_types").select("id,code,label,name");
+      if (typeRows) {
+        const codes = Array.from(
+          new Map(
+            typeRows
+              .map((row: any) => {
+                const id = row?.id ? String(row.id).trim() : "";
+                const label = row?.label || row?.code || row?.name || id;
+                return id ? [id, label] : null;
+              })
+              .filter((entry): entry is [string, string] => Boolean(entry)),
+          ).entries(),
+        ).map(([id, label]) => ({ id, label }));
+        setAvailableEventTypes(codes);
+      }
+    } catch {
+      // ignore errors
+    }
+  }, [supabase]);
 
   const loadJourneys = useCallback(async () => {
     if (!profile?.id) {
@@ -541,7 +601,7 @@ export default function BuildJourneyPage() {
       try {
         const { data: evData, error: evError } = await supabase
           .from("event_group_event")
-          .select("event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images)")
+          .select("event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images,event_types_id)")
           .eq("group_event_id", journeyId)
           .order("created_at", { ascending: true });
         if (evError) throw evError;
@@ -576,21 +636,6 @@ export default function BuildJourneyPage() {
               if (trObj.lang === DEFAULT_LANGUAGE) {
                 existing.primary = trObj;
               }
-            }
-          });
-        }
-
-        const typeMap: Record<string, string[]> = {};
-        if (eventIds.length) {
-          const { data: typeRows } = await supabase
-            .from("event_type_map")
-            .select("event_id, type_code")
-            .in("event_id", eventIds);
-          (typeRows ?? []).forEach((row: any) => {
-            if (!row?.event_id || !row?.type_code) return;
-            typeMap[row.event_id] = typeMap[row.event_id] || [];
-            if (!typeMap[row.event_id].includes(row.type_code)) {
-              typeMap[row.event_id].push(row.type_code);
             }
           });
         }
@@ -649,6 +694,12 @@ export default function BuildJourneyPage() {
           };
           const trAll = translationsMap[eventId]?.all || [createEmptyEventTranslation(DEFAULT_LANGUAGE)];
           const media = mediaMap[eventId] || [];
+          const rawTypes = ev.event_types_id;
+          const type_codes = Array.isArray(rawTypes)
+            ? rawTypes.map((t: any) => String(t).trim()).filter(Boolean)
+            : rawTypes
+            ? [String(rawTypes).trim()]
+            : [];
           return {
             tempId: eventId || buildTempMediaId(),
             event_id: eventId,
@@ -672,12 +723,24 @@ export default function BuildJourneyPage() {
             },
             translation: tr,
             translations_all: trAll,
-            type_codes: typeMap[eventId] ?? [],
+            type_codes,
             media,
             correlations: corrMap[eventId] ?? [],
           };
         });
         setJourneyEvents(mapped);
+        // ensure available type list includes any from the fetched events
+        setAvailableEventTypes((prev) => {
+          const next = new Map(prev.map((t) => [t.id, t.label]));
+          mapped.forEach((ev) =>
+            ev.type_codes.forEach((t) => {
+              if (!next.has(t)) {
+                next.set(t, t);
+              }
+            }),
+          );
+          return Array.from(next.entries()).map(([id, label]) => ({ id, label }));
+        });
         setEventTabMap((prev) => {
           const next = { ...prev };
           mapped.forEach((ev) => {
@@ -715,6 +778,12 @@ export default function BuildJourneyPage() {
   useEffect(() => {
     loadJourneys();
   }, [loadJourneys]);
+
+  useEffect(() => {
+    if (!availableEventTypes.length) {
+      void loadEventTypes();
+    }
+  }, [availableEventTypes.length, loadEventTypes]);
 
   useEffect(() => {
     if (profile?.id) {
@@ -878,6 +947,39 @@ export default function BuildJourneyPage() {
     [],
   );
 
+  const formatEventDateLabel = useCallback((ev: JourneyEventEditor) => {
+    if (ev.event.exact_date) return ev.event.exact_date;
+    if (ev.event.year_from && ev.event.year_to) return `${ev.event.year_from}-${ev.event.year_to}`;
+    if (ev.event.year_from) return `${ev.event.year_from}`;
+    if (ev.event.year_to) return `${ev.event.year_to}`;
+    return "Data n/d";
+  }, []);
+
+  const handleRemoveEvent = useCallback(
+    (target: JourneyEventEditor) => {
+      let nextSelectedId: string | null = null;
+      setJourneyEvents((prev) => {
+        const next = prev.filter((item) => item.tempId !== target.tempId);
+        nextSelectedId = next[0]?.tempId ?? null;
+        return next;
+      });
+      setEventTabMap((prev) => {
+        const next = { ...prev };
+        delete next[target.tempId];
+        return next;
+      });
+      const eventId = target.event_id;
+      if (eventId) {
+        setDeletedEventIds((prev) => (prev.includes(eventId) ? prev : [...prev, eventId]));
+      }
+      setSelectedEventTempId((prev) => {
+        if (prev && prev !== target.tempId) return prev;
+        return nextSelectedId;
+      });
+    },
+    [setJourneyEvents, setEventTabMap, setDeletedEventIds, setSelectedEventTempId],
+  );
+
   const selectJourney = useCallback((journeyId: string) => {
     setSelectedJourneyId(journeyId);
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
@@ -895,6 +997,18 @@ export default function BuildJourneyPage() {
       resetForm();
     }
   }, [selectedJourneyId, loadJourneyDetails, resetForm]);
+
+  useEffect(() => {
+    if (!journeyEvents.length) {
+      if (selectedEventTempId !== null) {
+        setSelectedEventTempId(null);
+      }
+      return;
+    }
+    if (!selectedEventTempId || !journeyEvents.some((ev) => ev.tempId === selectedEventTempId)) {
+      setSelectedEventTempId(sortedEvents[0]?.tempId ?? journeyEvents[0].tempId);
+    }
+  }, [journeyEvents, sortedEvents, selectedEventTempId]);
 
   const canSaveMetadata =
     (ge.slug ?? "").trim().length > 0 && (ge.code ?? "").trim().length > 0;
@@ -1321,7 +1435,7 @@ export default function BuildJourneyPage() {
         )}
 
         {activeTab === "translations" && (
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6 space-y-4">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6 space-y-4 min-h-[80vh]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Lingue disponibili</p>
@@ -1402,6 +1516,7 @@ export default function BuildJourneyPage() {
                 value={translation.description}
                 onChange={(value) => updateTranslationField("description", value)}
                 placeholder="Descrizione estesa"
+                className="min-h-[320px]"
               />
               <Input
                 label="Video URL"
@@ -1428,39 +1543,82 @@ export default function BuildJourneyPage() {
 
         {activeTab === "events" && (
           <div className="rounded-2xl border border-neutral-200 bg-white p-4 mt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Eventi correlati</p>
-                <p className="text-sm text-neutral-500">
-                  Gestisci gli eventi collegati: dati base, traduzioni, tipi, correlazioni e media.
-                </p>
+            <div className="mt-2 grid grid-cols-[320px_minmax(0,_1fr)] items-start gap-4">
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3 max-h-[60vh] overflow-y-auto space-y-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-neutral-700">Eventi</p>
+                  <button
+                    type="button"
+                    className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
+                    onClick={() => {
+                      const newEvent = createEmptyEventEditor();
+                      setJourneyEvents((prev) => [...prev, newEvent]);
+                      setEventTabMap((prev) => ({ ...prev, [newEvent.tempId]: "details" }));
+                      setSelectedEventTempId(newEvent.tempId);
+                    }}
+                  >
+                    + Aggiungi evento
+                  </button>
+                </div>
+                {relatedEventsLoading ? (
+                  <p className="text-sm text-neutral-500">Caricamento eventi.</p>
+                ) : relatedEventsError ? (
+                  <p className="text-sm text-red-600">{relatedEventsError}</p>
+                ) : journeyEvents.length === 0 ? (
+                  <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
+                ) : (
+                  sortedEvents.map((ev, idx) => {
+                    const isActive = ev.tempId === selectedEventTempId;
+                    return (
+                      <button
+                        key={ev.tempId}
+                        type="button"
+                        className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                          isActive
+                            ? "border-sky-400 bg-white shadow-sm"
+                            : "border-transparent bg-white/70 hover:border-neutral-200"
+                        }`}
+                        onClick={() => setSelectedEventTempId(ev.tempId)}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-neutral-900">
+                              {ev.translation.title || "(Nuovo evento)"}
+                            </p>
+                            <p className="text-xs text-neutral-500">{formatEventDateLabel(ev)}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="rounded-full bg-neutral-100 px-2 py-1 text-[11px] font-semibold text-neutral-500">
+                              #{idx + 1}
+                            </span>
+                            <button
+                              type="button"
+                              className="text-[11px] font-semibold text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveEvent(ev);
+                              }}
+                            >
+                              Elimina
+                            </button>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
-              <button
-                type="button"
-                className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
-                onClick={() => {
-                  const newEvent = createEmptyEventEditor();
-                  setJourneyEvents((prev) => [...prev, newEvent]);
-                  setEventTabMap((prev) => ({ ...prev, [newEvent.tempId]: "details" }));
-                }}
-              >
-                + Aggiungi evento
-              </button>
-            </div>
-            <div className="mt-4 space-y-3">
-              {relatedEventsLoading ? (
-                <p className="text-sm text-neutral-500">Caricamento eventi…</p>
-              ) : relatedEventsError ? (
-                <p className="text-sm text-red-600">{relatedEventsError}</p>
-              ) : journeyEvents.length === 0 ? (
-                <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
-              ) : (
-                journeyEvents.map((ev, idx) => {
-                  const dateLabel =
-                    ev.event.exact_date ||
-                    (ev.event.year_from && ev.event.year_to
-                      ? `${ev.event.year_from}-${ev.event.year_to}`
-                      : ev.event.year_from || ev.event.year_to || "Data n/d");
+              <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-3 max-h-[80vh] overflow-y-auto">
+                {relatedEventsLoading ? (
+                  <p className="text-sm text-neutral-500">Caricamento eventi…</p>
+                ) : relatedEventsError ? (
+                  <p className="text-sm text-red-600">{relatedEventsError}</p>
+                ) : journeyEvents.length === 0 ? (
+                  <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
+                ) : (
+                  sortedEvents.map((ev, idx) => {
+                    if (ev.tempId !== selectedEventTempId) return null;
+                    const dateLabel = formatEventDateLabel(ev);
                   const eventTabs: { value: EventTab; label: string }[] = [
                     { value: "details", label: "Dettagli" },
                     { value: "translations", label: "Traduzioni" },
@@ -1469,38 +1627,13 @@ export default function BuildJourneyPage() {
                   ];
                   const activeEventTab = eventTabMap[ev.tempId] || "details";
                   return (
-                    <div key={ev.tempId} className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-semibold text-neutral-900">
-                            {ev.translation.title || "(Nuovo evento)"}
-                          </p>
-                          <p className="text-xs text-neutral-500">{dateLabel}</p>
-                        </div>
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600"
-                          onClick={() => {
-                            setJourneyEvents((prev) => prev.filter((e) => e.tempId !== ev.tempId));
-                            setEventTabMap((prev) => {
-                              const next = { ...prev };
-                              delete next[ev.tempId];
-                              return next;
-                            });
-                            if (ev.event_id) {
-                              setDeletedEventIds((prev) => (prev.includes(ev.event_id!) ? prev : [...prev, ev.event_id!]));
-                            }
-                          }}
-                        >
-                          Elimina
-                        </button>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {eventTabs.map((tab) => {
-                          const isActive = tab.value === activeEventTab;
-                          return (
-                            <button
-                              key={tab.value}
+                    <div key={ev.tempId} className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {eventTabs.map((tab) => {
+                            const isActive = tab.value === activeEventTab;
+                            return (
+                              <button
+                                key={tab.value}
                               type="button"
                               onClick={() =>
                                 setEventTabMap((prev) => ({
@@ -1511,260 +1644,275 @@ export default function BuildJourneyPage() {
                               className={`relative px-3 py-2 text-sm font-semibold transition ${
                                 isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
                               }`}
+                              >
+                                {tab.label}
+                                <span
+                                  className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                                    isActive ? "bg-sky-600" : "bg-transparent"
+                                  }`}
+                                />
+                              </button>
+                            );
+                          })}
+                          <div className="ml-auto flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
+                              disabled={!selectedJourneyId || eventsSaving}
+                              onClick={async () => {
+                                if (!selectedJourneyId) return;
+                                setEventsSaving(true);
+                                setEventsSaveError(null);
+                                setEventsSaveOk(null);
+                                const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => ({
+                                  event_id: ev.event_id,
+                                  added_by_user_ref: ev.added_by_user_ref ?? null,
+                                  event: { ...ev.event },
+                                  translation: { ...ev.translation },
+                                  translations: ev.translations_all,
+                                  type_codes: ev.type_codes,
+                                  correlations: ev.correlations.filter((c) => c.group_event_id),
+                                  media: ev.media
+                                    .map((m, mIdx) => ({
+                                      public_url: m.public_url?.trim() || undefined,
+                                      source_url: m.source_url?.trim() || undefined,
+                                      title: m.title?.trim() || undefined,
+                                      caption: m.caption?.trim() || undefined,
+                                      alt_text: m.alt_text?.trim() || undefined,
+                                      role: m.role ?? "gallery",
+                                      sort_order: m.sort_order ?? mIdx,
+                                      is_primary: m.is_primary,
+                                      kind: m.kind,
+                                    }))
+                                    .filter((m) => m.public_url || m.source_url),
+                                }));
+                                try {
+                                  const res = await saveJourneyEvents({
+                                    group_event_id: selectedJourneyId,
+                                    events: eventsPayload,
+                                    delete_event_ids: deletedEventIds,
+                                  });
+                                  setEventsSaveOk(res.event_ids?.join(", "));
+                                  setDeletedEventIds([]);
+                                  await loadJourneyDetails(selectedJourneyId);
+                                } catch (err: any) {
+                                  setEventsSaveError(err?.message || "Errore salvataggio eventi.");
+                                } finally {
+                                  setEventsSaving(false);
+                                }
+                              }}
                             >
-                              {tab.label}
-                              <span
-                                className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                                  isActive ? "bg-sky-600" : "bg-transparent"
-                                }`}
-                              />
+                              {eventsSaving ? "Salvataggio..." : "Salva eventi"}
                             </button>
-                          );
-                        })}
-                      </div>
-                      <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "details" ? "" : "hidden"}`}>
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">events_list</p>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <div>
-                            <p className="text-[11px] text-neutral-500">ID</p>
-                            <p className="text-sm text-neutral-800">{ev.event_id || "---"}</p>
+                            <button
+                              type="button"
+                              className="text-xs font-semibold text-red-600"
+                              onClick={() => handleRemoveEvent(ev)}
+                            >
+                              Elimina
+                            </button>
                           </div>
-                          <div>
-                            <p className="text-[11px] text-neutral-500">Created at</p>
-                            <p className="text-sm text-neutral-800">{ev.event.created_at || "---"}</p>
+                        </div>
+                        <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "details" ? "" : "hidden"}`}>
+                          <div className="grid gap-3 md:grid-cols-4">
+                            <Select
+                              label="Era"
+                              value={ev.event.era || "AD"}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, event: { ...item.event, era: (value as any) || "AD" } }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              options={[
+                                { value: "AD", label: "AD" },
+                                { value: "BC", label: "BC" },
+                              ]}
+                            />
+                            <Input
+                              label="Anno da"
+                              value={ev.event.year_from?.toString() ?? ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, event: { ...item.event, year_from: value ? Number(value) : null } }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              type="number"
+                            />
+                            <Input
+                              label="Anno a"
+                              value={ev.event.year_to?.toString() ?? ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, event: { ...item.event, year_to: value ? Number(value) : null } }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              type="number"
+                            />
+                            <Input
+                              label="Data esatta"
+                              value={ev.event.exact_date || ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, event: { ...item.event, exact_date: value || null } }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              type="date"
+                            />
                           </div>
-                          <Select
-                            label="Era"
-                            value={ev.event.era || "AD"}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, era: (value as any) || "AD" } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            options={[
-                              { value: "AD", label: "AD" },
-                              { value: "BC", label: "BC" },
-                            ]}
-                          />
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <Input
-                            label="Anno da"
-                            value={ev.event.year_from?.toString() ?? ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, year_from: value ? Number(value) : null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            type="number"
-                          />
-                          <Input
-                            label="Anno a"
-                            value={ev.event.year_to?.toString() ?? ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, year_to: value ? Number(value) : null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            type="number"
-                          />
-                          <Input
-                            label="Data esatta"
-                            value={ev.event.exact_date || ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, exact_date: value || null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            type="date"
-                          />
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <Input
-                            label="Latitudine"
-                            value={ev.event.latitude?.toString() ?? ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, latitude: value ? Number(value) : null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            type="number"
-                          />
-                          <Input
-                            label="Longitudine"
-                            value={ev.event.longitude?.toString() ?? ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, longitude: value ? Number(value) : null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                            type="number"
-                          />
-                          <Input
-                            label="Continent"
-                            value={ev.event.continent || ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, continent: value || null } }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="rounded-xl border border-neutral-200 bg-white p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Mappa</p>
-                            <p className="text-[11px] text-neutral-500">Clicca per compilare lat/long</p>
+                        <div className="grid gap-3 md:grid-cols-[1.1fr_1fr]">
+                          <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                            <MapPicker
+                              lat={ev.event.latitude ?? null}
+                              lng={ev.event.longitude ?? null}
+                              onChange={({ lat, lng }) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) => {
+                                    if (item.tempId !== ev.tempId) return item;
+                                    const continentGuess = inferContinentFromCoords(lat, lng);
+                                    const hint = `Lat ${lat.toFixed(3)}, Lon ${lng.toFixed(3)}`;
+                                    return {
+                                      ...item,
+                                      event: {
+                                        ...item.event,
+                                        latitude: lat,
+                                        longitude: lng,
+                                        continent: continentGuess ?? item.event.continent ?? hint,
+                                        country: item.event.country ?? "",
+                                        location: item.event.location ?? "",
+                                      },
+                                    };
+                                  }),
+                                )
+                              }
+                            />
                           </div>
-                          <MapPicker
-                            lat={ev.event.latitude ?? null}
-                            lng={ev.event.longitude ?? null}
-                            onChange={({ lat, lng }) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, event: { ...item.event, latitude: lat, longitude: lng } }
-                                    : item,
-                                ),
-                              )
-                            }
-                          />
+                          <div className="space-y-3">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <Input
+                                label="Latitudine"
+                                className="sm:max-w-[180px]"
+                                value={ev.event.latitude?.toString() ?? ""}
+                                onChange={(value) =>
+                                  setJourneyEvents((prev) =>
+                                    prev.map((item) =>
+                                      item.tempId === ev.tempId
+                                        ? { ...item, event: { ...item.event, latitude: value ? Number(value) : null } }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                type="number"
+                              />
+                              <Input
+                                label="Longitudine"
+                                className="sm:max-w-[180px]"
+                                value={ev.event.longitude?.toString() ?? ""}
+                                onChange={(value) =>
+                                  setJourneyEvents((prev) =>
+                                    prev.map((item) =>
+                                      item.tempId === ev.tempId
+                                        ? { ...item, event: { ...item.event, longitude: value ? Number(value) : null } }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                type="number"
+                              />
+                            </div>
+                            <Input
+                              label="Continent"
+                              value={ev.event.continent || ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, event: { ...item.event, continent: value || null } }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            <Input
+                              label="Paese"
+                              value={ev.event.country || ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId ? { ...item, event: { ...item.event, country: value || null } } : item,
+                                  ),
+                                )
+                              }
+                            />
+                            <Input
+                              label="Luogo"
+                              value={ev.event.location || ""}
+                              onChange={(value) =>
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId ? { ...item, event: { ...item.event, location: value || null } } : item,
+                                  ),
+                                )
+                              }
+                            />
+                          </div>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-2">
-                          <Input
-                            label="Paese"
-                            value={ev.event.country || ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId ? { ...item, event: { ...item.event, country: value || null } } : item,
-                                ),
-                              )
-                            }
-                          />
-                          <Input
-                            label="Luogo"
-                            value={ev.event.location || ""}
-                            onChange={(value) =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId ? { ...item, event: { ...item.event, location: value || null } } : item,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                        <Textarea
-                          label="Geom"
-                          value={ev.event.geom || ""}
-                          onChange={(value) =>
-                            setJourneyEvents((prev) =>
-                              prev.map((item) =>
-                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, geom: value || null } } : item,
-                              ),
-                            )
-                          }
-                        />
-                        <Input
-                          label="Image URL"
-                          value={ev.event.image_url || ""}
-                          onChange={(value) =>
-                            setJourneyEvents((prev) =>
-                              prev.map((item) =>
-                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, image_url: value || null } } : item,
-                              ),
-                            )
-                          }
-                        />
-                        <Textarea
-                          label="Images (JSON)"
-                          value={
-                            typeof ev.event.images_json === "string"
-                              ? ev.event.images_json
-                              : JSON.stringify(ev.event.images_json ?? "", null, 2)
-                          }
-                          onChange={(value) =>
-                            setJourneyEvents((prev) =>
-                              prev.map((item) =>
-                                item.tempId === ev.tempId ? { ...item, event: { ...item.event, images_json: value || null } } : item,
-                              ),
-                            )
-                          }
-                        />
-                        <Input
-                          label="Source event ID"
-                          value={ev.event.source_event_id || ""}
-                          onChange={(value) =>
-                            setJourneyEvents((prev) =>
-                              prev.map((item) =>
-                                item.tempId === ev.tempId
-                                  ? { ...item, event: { ...item.event, source_event_id: value || null } }
-                                  : item,
-                              ),
-                            )
-                          }
-                        />
                       </div>
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "translations" ? "" : "hidden"}`}>
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <Select
-                            label="Lingua"
-                            value={ev.activeLang}
-                            onChange={(value) => {
-                              const nextLang = (value || DEFAULT_LANGUAGE).trim() || DEFAULT_LANGUAGE;
-                              const existing = ev.translations_all.find((tr) => tr.lang === nextLang);
-                              setJourneyEvents((prev) =>
-                                prev.map((item) => {
-                                  if (item.tempId !== ev.tempId) return item;
-                                  const nextTranslation = existing || createEmptyEventTranslation(nextLang);
-                                  const hasLang = item.translations_all.some((tr) => tr.lang === nextLang);
-                                  return {
-                                    ...item,
-                                    activeLang: nextLang,
-                                    translation: { ...nextTranslation },
-                                    translations_all: hasLang
-                                      ? item.translations_all
-                                      : [...item.translations_all, nextTranslation],
-                                  };
-                                }),
-                              );
-                            }}
-                            options={Array.from(
+                        <div className="space-y-2">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Lingua</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Array.from(
                               new Set([ev.activeLang, ...ev.translations_all.map((t) => t.lang || DEFAULT_LANGUAGE)]),
-                            ).map((lang) => ({ value: lang, label: lang }))}
-                          />
-                          <div>
-                            <p className="text-[11px] text-neutral-500">Translation ID</p>
-                            <p className="text-sm text-neutral-800">{ev.translation.id || "---"}</p>
+                            ).map((lang) => {
+                              const isActive = lang === ev.activeLang;
+                              return (
+                                <button
+                                  key={`${ev.tempId}-${lang}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const nextLang = (lang || DEFAULT_LANGUAGE).trim() || DEFAULT_LANGUAGE;
+                                    const existing = ev.translations_all.find((tr) => tr.lang === nextLang);
+                                    setJourneyEvents((prev) =>
+                                      prev.map((item) => {
+                                        if (item.tempId !== ev.tempId) return item;
+        const nextTranslation = existing || createEmptyEventTranslation(nextLang);
+        const hasLang = item.translations_all.some((tr) => tr.lang === nextLang);
+        return {
+          ...item,
+          activeLang: nextLang,
+          translation: { ...nextTranslation },
+          translations_all: hasLang ? item.translations_all : [...item.translations_all, nextTranslation],
+        };
+                                      }),
+                                    );
+                                  }}
+                                  className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+                                    isActive
+                                      ? "bg-sky-600 text-white shadow-sm"
+                                      : "bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-300"
+                                  }`}
+                                >
+                                  {lang}
+                                </button>
+                              );
+                            })}
                           </div>
-                          <div />
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <Input
@@ -1778,24 +1926,6 @@ export default function BuildJourneyPage() {
                                   const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
                                     ? item.translations_all.map((tr) =>
                                         tr.lang === item.activeLang ? { ...tr, title: value } : tr,
-                                      )
-                                    : [...item.translations_all, nextTranslation];
-                                  return { ...item, translation: nextTranslation, translations_all: updatedAll };
-                                }),
-                              );
-                            }}
-                          />
-                          <Input
-                            label="Video URL"
-                            value={ev.translation.video_url}
-                            onChange={(value) => {
-                              setJourneyEvents((prev) =>
-                                prev.map((item) => {
-                                  if (item.tempId !== ev.tempId) return item;
-                                  const nextTranslation = { ...item.translation, video_url: value, lang: item.activeLang };
-                                  const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
-                                    ? item.translations_all.map((tr) =>
-                                        tr.lang === item.activeLang ? { ...tr, video_url: value } : tr,
                                       )
                                     : [...item.translations_all, nextTranslation];
                                   return { ...item, translation: nextTranslation, translations_all: updatedAll };
@@ -1822,39 +1952,6 @@ export default function BuildJourneyPage() {
                             }}
                           />
                         </div>
-                        <div className="rounded-lg border border-dashed border-neutral-200 bg-white p-3">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Traduzioni esistenti</p>
-                          {ev.translations_all.length === 0 ? (
-                            <p className="text-xs text-neutral-500 mt-1">Nessuna traduzione salvata.</p>
-                          ) : (
-                            <div className="mt-2 space-y-2">
-                              {ev.translations_all.map((tr) => (
-                                <div key={`${ev.tempId}-${tr.lang}`} className="rounded-md border border-neutral-100 bg-neutral-50 px-3 py-2">
-                                  <p className="text-xs font-semibold text-neutral-700">{tr.lang}</p>
-                                  <p className="text-xs text-neutral-600">{tr.title || "(senza titolo)"} {tr.id ? `- ${tr.id}` : ""}</p>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <Textarea
-                          label="Descrizione breve"
-                          value={ev.translation.description_short}
-                          onChange={(value) => {
-                            setJourneyEvents((prev) =>
-                              prev.map((item) => {
-                                if (item.tempId !== ev.tempId) return item;
-                                const nextTranslation = { ...item.translation, description_short: value, lang: item.activeLang };
-                                const updatedAll = item.translations_all.some((tr) => tr.lang === item.activeLang)
-                                  ? item.translations_all.map((tr) =>
-                                      tr.lang === item.activeLang ? { ...tr, description_short: value } : tr,
-                                    )
-                                  : [...item.translations_all, nextTranslation];
-                                return { ...item, translation: nextTranslation, translations_all: updatedAll };
-                              }),
-                            );
-                          }}
-                        />
                         <Textarea
                           label="Descrizione"
                           value={ev.translation.description}
@@ -1876,20 +1973,27 @@ export default function BuildJourneyPage() {
                       </div>
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "relations" ? "" : "hidden"}`}>
                         <div className="space-y-2">
-                          <Input
-                            label="Tipi (separa con virgola)"
-                            value={ev.type_codes.join(", ")}
-                            onChange={(value) => {
-                              const codes = value
-                                .split(",")
-                              .map((v) => v.trim())
-                              .filter(Boolean);
-                            setJourneyEvents((prev) =>
-                              prev.map((item) => (item.tempId === ev.tempId ? { ...item, type_codes: codes } : item)),
-                            );
-                          }}
-                        />
-                      </div>
+                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Tipo evento</p>
+                          <select
+                            className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70"
+                            value={ev.type_codes[0] || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId ? { ...item, type_codes: value ? [value] : [] } : item,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="">Seleziona tipo</option>
+                            {availableEventTypes.map((opt) => (
+                              <option key={`${ev.tempId}-opt-${opt.id}`} value={opt.id}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <div className="space-y-2">
                         <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Correlazioni (event_group_event_correlated)</p>
                         {(ev.correlations.length === 0 ? [{ group_event_id: "", correlation_type: "related" }] : ev.correlations).map(
@@ -2121,66 +2225,7 @@ export default function BuildJourneyPage() {
                 })
               )}
             </div>
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-xs text-neutral-500">
-                {eventsSaveOk ? `Eventi salvati (${eventsSaveOk})` : eventsSaveError ? (
-                  <span className="text-red-600">{eventsSaveError}</span>
-                ) : (
-                  "Modifica eventi e salva per applicare le variazioni."
-                )}
-              </div>
-              <button
-                type="button"
-                className={`rounded-full px-4 py-2 text-xs font-semibold ${
-                  selectedJourneyId && !eventsSaving ? "bg-neutral-900 text-white" : "bg-neutral-300 text-neutral-600"
-                }`}
-                disabled={!selectedJourneyId || eventsSaving}
-                onClick={async () => {
-                  if (!selectedJourneyId) return;
-                  setEventsSaving(true);
-                  setEventsSaveError(null);
-                  setEventsSaveOk(null);
-                  const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => ({
-                    event_id: ev.event_id,
-                    added_by_user_ref: ev.added_by_user_ref ?? null,
-                    event: { ...ev.event },
-                    translation: { ...ev.translation },
-                    translations: ev.translations_all,
-                    type_codes: ev.type_codes,
-                    correlations: ev.correlations.filter((c) => c.group_event_id),
-                    media: ev.media
-                      .map((m, mIdx) => ({
-                        public_url: m.public_url?.trim() || undefined,
-                        source_url: m.source_url?.trim() || undefined,
-                        title: m.title?.trim() || undefined,
-                        caption: m.caption?.trim() || undefined,
-                        alt_text: m.alt_text?.trim() || undefined,
-                        role: m.role ?? "gallery",
-                        sort_order: m.sort_order ?? mIdx,
-                        is_primary: m.is_primary,
-                        kind: m.kind,
-                      }))
-                      .filter((m) => m.public_url || m.source_url),
-                  }));
-                  try {
-                    const res = await saveJourneyEvents({
-                      group_event_id: selectedJourneyId,
-                      events: eventsPayload,
-                      delete_event_ids: deletedEventIds,
-                    });
-                    setEventsSaveOk(res.event_ids?.join(", "));
-                    setDeletedEventIds([]);
-                    await loadJourneyDetails(selectedJourneyId);
-                  } catch (err: any) {
-                    setEventsSaveError(err?.message || "Errore salvataggio eventi.");
-                  } finally {
-                    setEventsSaving(false);
-                  }
-                }}
-              >
-                {eventsSaving ? "Salvataggio..." : "Salva eventi"}
-              </button>
-            </div>
+          </div>
           </div>
         )}
       </section>
@@ -2410,9 +2455,40 @@ function MapPicker({
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+      attributionControl: false,
+      style: {
+        version: 8,
+        sources: {
+          esri: {
+            type: "raster",
+            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+            tileSize: 256,
+            attribution: "",
+          },
+          esriLabels: {
+            type: "raster",
+            tiles: [
+              "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+            ],
+            tileSize: 256,
+            attribution: "",
+          },
+        },
+        layers: [
+          {
+            id: "esri",
+            type: "raster",
+            source: "esri",
+          },
+          {
+            id: "esri-labels",
+            type: "raster",
+            source: "esriLabels",
+          },
+        ],
+      },
       center: [lng ?? fallbackCenter[0], lat ?? fallbackCenter[1]],
-      zoom: lat != null && lng != null ? 6 : 3,
+      zoom: lat != null && lng != null ? 1.2 : 0.2,
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.on("click", (e) => {
@@ -2457,3 +2533,4 @@ function MapPicker({
 
   return <div ref={containerRef} className={className ?? "h-64 w-full rounded-xl border border-neutral-200 overflow-hidden"} />;
 }
+
