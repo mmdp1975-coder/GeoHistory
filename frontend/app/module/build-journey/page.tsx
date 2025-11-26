@@ -11,6 +11,8 @@ import {
   type GroupEventMediaEntry,
   type MediaKind,
   type JourneyEventEditPayload,
+  deleteJourneyCascade,
+  requestJourneyApproval,
 } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/lib/useCurrentUser";
@@ -329,7 +331,6 @@ export default function BuildJourneyPage() {
   const [journeyEvents, setJourneyEvents] = useState<JourneyEventEditor[]>([]);
   const [selectedEventTempId, setSelectedEventTempId] = useState<string | null>(null);
   const [deletedEventIds, setDeletedEventIds] = useState<string[]>([]);
-  const [eventsSaving, setEventsSaving] = useState(false);
   const [eventsSaveError, setEventsSaveError] = useState<string | null>(null);
   const [eventsSaveOk, setEventsSaveOk] = useState<string | null>(null);
   const [relatedEvents, setRelatedEvents] = useState<JourneyEventSummary[]>([]);
@@ -338,6 +339,12 @@ export default function BuildJourneyPage() {
   const [eventTabMap, setEventTabMap] = useState<Record<string, EventTab>>({});
   const [mediaFilterKind, setMediaFilterKind] = useState<MediaKind | "all">("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteOk, setDeleteOk] = useState<string | null>(null);
+  const [approvalSaving, setApprovalSaving] = useState(false);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+  const [approvalOk, setApprovalOk] = useState<string | null>(null);
   const correlationJourneyOptions = useMemo(() => {
     const formatLabel = (journey: JourneySummary) => {
       const title = journey.title?.trim() || "(Untitled journey)";
@@ -398,6 +405,48 @@ export default function BuildJourneyPage() {
     [journeyEvents, selectedEventTempId],
   );
 
+  const buildEventsPayload = useCallback(
+    (group_event_id: string): { events: JourneyEventEditPayload[]; delete_event_ids: string[] } => {
+      const events = journeyEvents.map((ev) => {
+        const typeCodes =
+          ev.type_codes && ev.type_codes.length
+            ? ev.type_codes
+            : ev.event.event_types_id
+            ? [ev.event.event_types_id]
+            : [];
+        return {
+          event_id: ev.event_id,
+          added_by_user_ref: ev.added_by_user_ref ?? null,
+          event: { ...ev.event },
+          translation: { ...ev.translation },
+          translations: ev.translations_all,
+          type_codes: typeCodes.map((code) => code?.trim()).filter(Boolean),
+          correlations: ev.correlations
+            .map((c) => ({
+              group_event_id: c.group_event_id?.trim() || "",
+              correlation_type: c.correlation_type || "related",
+            }))
+            .filter((c) => c.group_event_id),
+          media: ev.media
+            .map((m, mIdx) => ({
+              public_url: m.public_url?.trim() || undefined,
+              source_url: m.source_url?.trim() || undefined,
+              title: m.title?.trim() || undefined,
+              caption: m.caption?.trim() || undefined,
+              alt_text: m.alt_text?.trim() || undefined,
+              role: m.role ?? "gallery",
+              sort_order: m.sort_order ?? mIdx,
+              is_primary: m.is_primary,
+              kind: m.kind,
+            }))
+            .filter((m) => m.public_url || m.source_url),
+        };
+      });
+      return { events, delete_event_ids: deletedEventIds };
+    },
+    [deletedEventIds, journeyEvents],
+  );
+
   const resetForm = useCallback(() => {
     setGe({ ...EMPTY_GROUP_EVENT, owner_profile_id: profile?.id || "" });
     setJourneyDetailsError(null);
@@ -414,6 +463,10 @@ export default function BuildJourneyPage() {
     setEventsSaveError(null);
     setEventsSaveOk(null);
     setSelectedEventTempId(null);
+    setDeleteError(null);
+    setDeleteOk(null);
+    setApprovalError(null);
+    setApprovalOk(null);
   }, [profile?.id]);
 
   const handleNewJourney = () => {
@@ -1062,15 +1115,17 @@ export default function BuildJourneyPage() {
   const canSaveJourney = canSaveMetadata;
 
   async function onSave() {
-    setSaving(true);
     setSaveError(null);
     setSaveOk(null);
+    setEventsSaveError(null);
+    setEventsSaveOk(null);
 
     if (!canSaveMetadata) {
       setSaveError("Compila slug e codice per salvare il journey.");
-      setSaving(false);
       return;
     }
+
+    setSaving(true);
 
     const translationsToSave = translations.concat(
       translations.some((row) => row.lang === translation.lang) ? [] : [translation],
@@ -1133,14 +1188,79 @@ export default function BuildJourneyPage() {
 
     try {
       const res = await saveJourney(payload);
-      setSaveOk({ id: res.group_event_id });
-      setSelectedJourneyId(res.group_event_id);
+      const groupId = res.group_event_id;
+      setSelectedJourneyId(groupId);
+
+      let eventsError: any = null;
+      const { events, delete_event_ids } = buildEventsPayload(groupId);
+      if (events.length || delete_event_ids.length) {
+        try {
+          const eventsRes = await saveJourneyEvents({
+            group_event_id: groupId,
+            events,
+            delete_event_ids,
+          });
+          setEventsSaveOk((eventsRes.event_ids?.length ?? 0).toString());
+          setDeletedEventIds([]);
+        } catch (err: any) {
+          eventsError = err;
+          setEventsSaveError(err?.message || "Errore salvataggio eventi.");
+        }
+      }
+
       await loadJourneys();
-      await loadJourneyDetails(res.group_event_id);
+      await loadJourneyDetails(groupId);
+
+      if (!eventsError) {
+        setSaveOk({ id: groupId });
+      } else if (!saveError) {
+        setSaveError(eventsError?.message || "Errore salvataggio eventi.");
+      }
     } catch (err: any) {
-      setSaveError(err?.message || "Errore di salvataggio.");
+      const msg = err?.message || "Errore di salvataggio.";
+      setSaveError(msg);
+      setEventsSaveError((prev) => prev || msg);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onDeleteJourney() {
+    if (!selectedJourneyId) return;
+    if (!window.confirm("Eliminare definitivamente il journey e gli eventi collegati?")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    setDeleteOk(null);
+    try {
+      await deleteJourneyCascade(selectedJourneyId);
+      setDeleteOk("Journey eliminato.");
+      setSelectedJourneyId(null);
+      resetForm();
+      await loadJourneys();
+    } catch (err: any) {
+      setDeleteError(err?.message || "Errore durante l'eliminazione.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function onRequestApproval() {
+    if (!selectedJourneyId) {
+      setApprovalError("Seleziona un journey da inviare in approvazione.");
+      return;
+    }
+    setApprovalSaving(true);
+    setApprovalError(null);
+    setApprovalOk(null);
+    try {
+      const res = await requestJourneyApproval(selectedJourneyId);
+      setApprovalOk(res.requested_approval_at || "Richiesta inviata.");
+      setGe((prev) => ({ ...prev, workflow_state: "submitted", requested_approval_at: res.requested_approval_at || prev.requested_approval_at }));
+      await loadJourneyDetails(selectedJourneyId);
+    } catch (err: any) {
+      setApprovalError(err?.message || "Errore durante la richiesta di approvazione.");
+    } finally {
+      setApprovalSaving(false);
     }
   }
 
@@ -1155,16 +1275,17 @@ export default function BuildJourneyPage() {
 
     return (
       <section className="rounded-3xl border border-neutral-200/80 bg-white/80 backdrop-blur p-6 shadow-xl">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-neutral-100 px-3 py-2">
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-neutral-100 px-3 py-2">
           <button
             type="button"
-            className="rounded-full border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50"
+            className="w-32 rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
             onClick={handleNewJourney}
           >
             New
           </button>
           <button
-            className={`rounded-full px-4 py-2 text-sm font-semibold shadow-md transition ${
+            type="button"
+            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
               canSaveJourney && !saving
                 ? "bg-gradient-to-r from-sky-600 to-sky-500 text-white hover:shadow-lg"
                 : "bg-neutral-200 text-neutral-500"
@@ -1173,6 +1294,30 @@ export default function BuildJourneyPage() {
             onClick={onSave}
           >
             {saving ? "Salvataggio..." : "Save"}
+          </button>
+          <button
+            type="button"
+            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
+              selectedJourneyId && !approvalSaving
+                ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:shadow-lg"
+                : "bg-neutral-200 text-neutral-500"
+            }`}
+            disabled={!selectedJourneyId || approvalSaving}
+            onClick={onRequestApproval}
+          >
+            {approvalSaving ? "Invio..." : "Ask approval"}
+          </button>
+          <button
+            type="button"
+            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
+              selectedJourneyId && !deleting
+                ? "bg-gradient-to-r from-red-600 to-rose-500 text-white hover:shadow-lg"
+                : "bg-neutral-200 text-neutral-500"
+            }`}
+            disabled={!selectedJourneyId || deleting}
+            onClick={onDeleteJourney}
+          >
+            {deleting ? "Elimino..." : "Delete"}
           </button>
         </div>
         <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-100/90 px-2 py-2 shadow-sm">
@@ -1262,17 +1407,12 @@ export default function BuildJourneyPage() {
                         { value: "public", label: "Public" },
                       ]}
                     />
-                    <Select
-                      label="Workflow state"
-                      value={ge.workflow_state || "draft"}
-                      onChange={(value) => setGe((prev) => ({ ...prev, workflow_state: value }))}
-                      options={[
-                        { value: "draft", label: "Draft" },
-                        { value: "submitted", label: "Submitted" },
-                        { value: "refused", label: "Refused" },
-                        { value: "published", label: "Published" },
-                      ]}
-                    />
+                    <div>
+                      <p className="mb-1 text-sm font-medium text-neutral-700">Workflow state</p>
+                      <div className="rounded-xl border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm font-semibold text-neutral-700">
+                        {(ge.workflow_state || "draft").replace(/_/g, " ")}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
@@ -1656,7 +1796,7 @@ export default function BuildJourneyPage() {
               </div>
               <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-3 max-h-[80vh] overflow-y-auto">
                 {relatedEventsLoading ? (
-                  <p className="text-sm text-neutral-500">Caricamento eventi…</p>
+                  <p className="text-sm text-neutral-500">Caricamento eventi.</p>
                 ) : relatedEventsError ? (
                   <p className="text-sm text-red-600">{relatedEventsError}</p>
                 ) : journeyEvents.length === 0 ? (
@@ -1701,68 +1841,6 @@ export default function BuildJourneyPage() {
                             );
                           })}
                           <div className="ml-auto flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
-                              disabled={!selectedJourneyId || eventsSaving}
-                              onClick={async () => {
-                                if (!selectedJourneyId) return;
-                                setEventsSaving(true);
-                                setEventsSaveError(null);
-                                setEventsSaveOk(null);
-                                const eventsPayload: JourneyEventEditPayload[] = journeyEvents.map((ev) => {
-                                  const typeCodes =
-                                    ev.type_codes && ev.type_codes.length
-                                      ? ev.type_codes
-                                      : ev.event.event_types_id
-                                      ? [ev.event.event_types_id]
-                                      : [];
-                                  return {
-                                    event_id: ev.event_id,
-                                    added_by_user_ref: ev.added_by_user_ref ?? null,
-                                    event: { ...ev.event },
-                                    translation: { ...ev.translation },
-                                    translations: ev.translations_all,
-                                    type_codes: typeCodes.map((code) => code?.trim()).filter(Boolean),
-                                    correlations: ev.correlations
-                                      .map((c) => ({
-                                        group_event_id: c.group_event_id?.trim() || "",
-                                        correlation_type: c.correlation_type || "related",
-                                      }))
-                                      .filter((c) => c.group_event_id),
-                                    media: ev.media
-                                      .map((m, mIdx) => ({
-                                        public_url: m.public_url?.trim() || undefined,
-                                        source_url: m.source_url?.trim() || undefined,
-                                      title: m.title?.trim() || undefined,
-                                      caption: m.caption?.trim() || undefined,
-                                      alt_text: m.alt_text?.trim() || undefined,
-                                      role: m.role ?? "gallery",
-                                      sort_order: m.sort_order ?? mIdx,
-                                      is_primary: m.is_primary,
-                                      kind: m.kind,
-                                    }))
-                                    .filter((m) => m.public_url || m.source_url),
-                                  };
-                                });
-                                try {
-                                  const res = await saveJourneyEvents({
-                                    group_event_id: selectedJourneyId,
-                                    events: eventsPayload,
-                                    delete_event_ids: deletedEventIds,
-                                  });
-                                  setEventsSaveOk(res.event_ids?.join(", "));
-                                  setDeletedEventIds([]);
-                                  await loadJourneyDetails(selectedJourneyId);
-                                } catch (err: any) {
-                                  setEventsSaveError(err?.message || "Errore salvataggio eventi.");
-                                } finally {
-                                  setEventsSaving(false);
-                                }
-                              }}
-                            >
-                              {eventsSaving ? "Salvataggio..." : "Salva eventi"}
-                            </button>
                             <button
                               type="button"
                               className="text-xs font-semibold text-red-600"
@@ -2032,32 +2110,23 @@ export default function BuildJourneyPage() {
                       </div>
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "relations" ? "" : "hidden"}`}>
                         <div className="space-y-2">
-                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Tipo evento</p>
-                          <select
-                            className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70"
+                          <Select
+                            label="Tipo evento"
                             value={ev.type_codes[0] || ""}
-                            onChange={(e) => {
-                              const value = e.target.value;
+                            onChange={(value) =>
                               setJourneyEvents((prev) =>
                                 prev.map((item) =>
                                   item.tempId === ev.tempId ? { ...item, type_codes: value ? [value] : [] } : item,
                                 ),
-                              );
-                            }}
-                          >
-                            <option value="">Seleziona tipo</option>
-                            {availableEventTypes.map((opt) => (
-                              <option key={`${ev.tempId}-opt-${opt.id}`} value={opt.id}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
+                              )
+                            }
+                            options={[{ value: "", label: "Seleziona tipo" }, ...availableEventTypes.map((opt) => ({ value: opt.id, label: opt.label }))]}
+                          />
                         </div>
                         <div className="space-y-2">
-                        <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Correlazioni (event_group_event_correlated)</p>
                         {(ev.correlations.length === 0 ? [{ group_event_id: "", correlation_type: "related" }] : ev.correlations).map(
                           (corr, cIdx) => (
-                            <div key={cIdx} className="grid gap-3 md:grid-cols-2">
+                            <div key={cIdx} className="space-y-2">
                               <Select
                                 label="Journey correlato"
                                 value={corr.group_event_id || ""}
@@ -2072,20 +2141,6 @@ export default function BuildJourneyPage() {
                                   )
                                 }
                                 options={correlationJourneyOptions}
-                              />
-                              <Input
-                                label="Correlation type"
-                                value={corr.correlation_type || "related"}
-                                onChange={(value) =>
-                                  setJourneyEvents((prev) =>
-                                    prev.map((item) => {
-                                      if (item.tempId !== ev.tempId) return item;
-                                      const nextCorr = [...item.correlations];
-                                      nextCorr[cIdx] = { ...nextCorr[cIdx], correlation_type: value || "related" };
-                                      return { ...item, correlations: nextCorr };
-                                    }),
-                                  )
-                                }
                               />
                             </div>
                           ),
@@ -2353,7 +2408,7 @@ export default function BuildJourneyPage() {
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6">
           {journeysLoading ? (
-            <p className="text-sm text-neutral-500">Caricamento journeys…</p>
+            <p className="text-sm text-neutral-500">Caricamento journeys.</p>
           ) : journeysError ? (
             <p className="text-sm text-red-600">{journeysError}</p>
           ) : journeys.length === 0 ? (
@@ -2409,13 +2464,19 @@ export default function BuildJourneyPage() {
         <div className="mb-2" />
         <div className="space-y-4">
           {selectedJourneyId && loadingJourneyDetails && (
-            <p className="text-sm text-neutral-500">Caricamento campi del journey selezionato…</p>
+            <p className="text-sm text-neutral-500">Caricamento campi del journey selezionato.</p>
           )}
           {journeyDetailsError && <p className="text-sm text-red-600">{journeyDetailsError}</p>}
           {renderGroupEventPage()}
         </div>
         {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
-        {saveOk && <p className="mt-2 text-sm text-green-700">?o" Creato! ID: {saveOk.id}</p>}
+        {saveOk && <p className="mt-2 text-sm text-green-700">Creato! ID: {saveOk.id}</p>}
+        {eventsSaveError && <p className="mt-1 text-sm text-red-600">{eventsSaveError}</p>}
+        {eventsSaveOk && <p className="mt-1 text-sm text-green-700">Eventi salvati: {eventsSaveOk}</p>}
+        {approvalError && <p className="mt-1 text-sm text-red-600">{approvalError}</p>}
+        {approvalOk && <p className="mt-1 text-sm text-green-700">{approvalOk}</p>}
+        {deleteError && <p className="mt-1 text-sm text-red-600">{deleteError}</p>}
+        {deleteOk && <p className="mt-1 text-sm text-green-700">{deleteOk}</p>}
       </main>
     </div>
   );

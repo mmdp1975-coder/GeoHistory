@@ -867,10 +867,6 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       await insertRow(T.ev_ge, {
         event_id,
         group_event_id,
-        role: "primary",
-        title: null,
-        caption: null,
-        alt_text: null,
         added_by_user_ref: ev.added_by_user_ref ?? null,
         created_at: ts(),
       });
@@ -896,7 +892,6 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         await insertRow(T.ev_type_map, {
           event_id,
           type_code: code,
-          created_at: ts(),
         });
       }
 
@@ -1034,8 +1029,6 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
             description: tr.description ?? null,
             wikipedia_url: tr.wikipedia_url ?? null,
             video_url: tr.video_url ?? null,
-            created_at: now,
-            updated_at: now,
           }))
           .filter((tr) => tr.lang);
         if (payloads.length) {
@@ -1052,17 +1045,15 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
                 event_id,
                 lang: tr.lang,
                 title: tr.title ?? null,
-                description_short: tr.description_short ?? null,
-                description: tr.description ?? null,
-                wikipedia_url: tr.wikipedia_url ?? null,
-                video_url: tr.video_url ?? null,
-                created_at: now,
-                updated_at: now,
-              },
-            ],
-            { onConflict: "event_id,lang" },
-          )
-          .select();
+            description_short: tr.description_short ?? null,
+            description: tr.description ?? null,
+            wikipedia_url: tr.wikipedia_url ?? null,
+            video_url: tr.video_url ?? null,
+          },
+        ],
+        { onConflict: "event_id,lang" },
+      )
+      .select();
         if (trError) throw new Error(`event_translations upsert: ${trError.message}`);
       }
 
@@ -1072,7 +1063,6 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
         await insertRow(T.ev_type_map, {
           event_id,
           type_code: code,
-          created_at: now,
         });
       }
 
@@ -1120,10 +1110,6 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
       await insertRow(T.ev_ge, {
         event_id,
         group_event_id: payload.group_event_id,
-        role: "primary",
-        title: null,
-        caption: null,
-        alt_text: null,
         added_by_user_ref: item.added_by_user_ref ?? null,
         created_at: now,
       });
@@ -1160,5 +1146,51 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
     return { ok: true, event_ids: processedEventIds };
   } catch (err: any) {
     throw new Error(`saveJourneyEvents failed: ${err.message}`);
+  }
+}
+
+export async function deleteJourneyCascade(group_event_id: string) {
+  if (!group_event_id) throw new Error("group_event_id mancante.");
+  try {
+    const { data: evLinks, error: linksError } = await sb()
+      .from(T.ev_ge)
+      .select("event_id")
+      .eq("group_event_id", group_event_id);
+    if (linksError) throw linksError;
+    const eventIds = (evLinks ?? []).map((row) => row.event_id).filter(Boolean);
+
+    if (eventIds.length) {
+      await sb().from(T.ev_corr).delete().in("event_id", eventIds);
+      await sb().from(T.attach).delete().eq("entity_type", "event").in("event_id", eventIds);
+      await sb().from(T.ev_type_map).delete().in("event_id", eventIds);
+      await sb().from(T.ev_trans).delete().in("event_id", eventIds);
+      await sb().from(T.ev_ge).delete().in("event_id", eventIds);
+      await sb().from(T.events).delete().in("id", eventIds);
+    }
+
+    await sb().from(T.ev_corr).delete().eq("group_event_id", group_event_id);
+    await sb().from(T.attach).delete().eq("entity_type", "group_event").eq("group_event_id", group_event_id);
+    await sb().from(T.ge_trans).delete().eq("group_event_id", group_event_id);
+    await sb().from(T.group_events).delete().eq("id", group_event_id);
+    revalidatePath("/module/build-journey");
+    return { ok: true };
+  } catch (err: any) {
+    throw new Error(`deleteJourney failed: ${err.message}`);
+  }
+}
+
+export async function requestJourneyApproval(group_event_id: string) {
+  if (!group_event_id) throw new Error("group_event_id mancante.");
+  try {
+    const now = ts();
+    const { error } = await sb()
+      .from(T.group_events)
+      .update({ workflow_state: "submitted", requested_approval_at: now })
+      .eq("id", group_event_id);
+    if (error) throw error;
+    revalidatePath("/module/build-journey");
+    return { ok: true, requested_approval_at: now };
+  } catch (err: any) {
+    throw new Error(`requestJourneyApproval failed: ${err.message}`);
   }
 }
