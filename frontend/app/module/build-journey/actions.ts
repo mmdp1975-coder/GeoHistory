@@ -969,7 +969,11 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
       // 1) upsert event
       let event_id = item.event_id;
       const base = item.event || {};
-      const firstType = Array.isArray(item.type_codes) ? normalizeTypeId(item.type_codes[0]) : null;
+      const typeCodes =
+        Array.isArray(item.type_codes) && item.type_codes.length
+          ? item.type_codes.map((code) => normalizeTypeId(code)).filter(Boolean)
+          : [];
+      const firstType = typeCodes[0] ?? normalizeTypeId((base as any).event_types_id);
       if (event_id) {
         await updateRow(T.events, { id: event_id }, {
           era: base.era ?? null,
@@ -1064,7 +1068,7 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
 
       // 3) replace type_map
       await sb().from(T.ev_type_map).delete().eq("event_id", event_id);
-      for (const code of item.type_codes ?? []) {
+      for (const code of typeCodes) {
         await insertRow(T.ev_type_map, {
           event_id,
           type_code: code,
@@ -1126,8 +1130,13 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
 
       // 6) correlations
       await sb().from(T.ev_corr).delete().eq("event_id", event_id);
-      for (const corr of item.correlations ?? []) {
-        if (!corr.group_event_id) continue;
+      const sanitizedCorrs = (item.correlations ?? [])
+        .map((corr) => ({
+          group_event_id: normalizeTypeId(corr.group_event_id),
+          correlation_type: corr.correlation_type ?? "related",
+        }))
+        .filter((corr) => !!corr.group_event_id);
+      for (const corr of sanitizedCorrs) {
         await insertRow(T.ev_corr, {
           event_id,
           group_event_id: corr.group_event_id,

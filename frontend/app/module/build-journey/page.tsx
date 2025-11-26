@@ -338,6 +338,34 @@ export default function BuildJourneyPage() {
   const [eventTabMap, setEventTabMap] = useState<Record<string, EventTab>>({});
   const [mediaFilterKind, setMediaFilterKind] = useState<MediaKind | "all">("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const correlationJourneyOptions = useMemo(() => {
+    const formatLabel = (journey: JourneySummary) => {
+      const title = journey.title?.trim() || "(Untitled journey)";
+      const years =
+        journey.yearFrom != null || journey.yearTo != null
+          ? `${journey.yearFrom ?? "?"}-${journey.yearTo ?? "?"}`
+          : null;
+      return years ? `${title} (${years})` : title;
+    };
+    const baseOptions = journeys.map((journey) => ({
+      value: journey.id,
+      label: formatLabel(journey),
+    }));
+    const known = new Set(baseOptions.map((opt) => opt.value));
+    const orphanIds = new Set<string>();
+    journeyEvents.forEach((ev) =>
+      ev.correlations.forEach((corr) => {
+        if (corr.group_event_id && !known.has(corr.group_event_id)) {
+          orphanIds.add(corr.group_event_id);
+        }
+      }),
+    );
+    const fallbackOptions = Array.from(orphanIds).map((id) => ({
+      value: id,
+      label: `${id} (non in elenco)`,
+    }));
+    return [{ value: "", label: "Seleziona journey" }, ...baseOptions, ...fallbackOptions];
+  }, [journeys, journeyEvents]);
 
   const selectedJourney = useMemo(() => journeys.find((j) => j.id === selectedJourneyId) ?? null, [journeys, selectedJourneyId]);
   const filteredJourneys = useMemo(() => {
@@ -1695,8 +1723,13 @@ export default function BuildJourneyPage() {
                                     event: { ...ev.event },
                                     translation: { ...ev.translation },
                                     translations: ev.translations_all,
-                                    type_codes: typeCodes,
-                                    correlations: ev.correlations.filter((c) => c.group_event_id),
+                                    type_codes: typeCodes.map((code) => code?.trim()).filter(Boolean),
+                                    correlations: ev.correlations
+                                      .map((c) => ({
+                                        group_event_id: c.group_event_id?.trim() || "",
+                                        correlation_type: c.correlation_type || "related",
+                                      }))
+                                      .filter((c) => c.group_event_id),
                                     media: ev.media
                                       .map((m, mIdx) => ({
                                         public_url: m.public_url?.trim() || undefined,
@@ -2025,9 +2058,9 @@ export default function BuildJourneyPage() {
                         {(ev.correlations.length === 0 ? [{ group_event_id: "", correlation_type: "related" }] : ev.correlations).map(
                           (corr, cIdx) => (
                             <div key={cIdx} className="grid gap-3 md:grid-cols-2">
-                              <Input
-                                label="Group event ID"
-                                value={corr.group_event_id}
+                              <Select
+                                label="Journey correlato"
+                                value={corr.group_event_id || ""}
                                 onChange={(value) =>
                                   setJourneyEvents((prev) =>
                                     prev.map((item) => {
@@ -2038,6 +2071,7 @@ export default function BuildJourneyPage() {
                                     }),
                                   )
                                 }
+                                options={correlationJourneyOptions}
                               />
                               <Input
                                 label="Correlation type"
