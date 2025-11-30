@@ -659,6 +659,14 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       payload.group_event.slug ||
       payload.group_event.code ||
       "journey";
+  const isNewJourney = !payload.group_event_id;
+  const resolvedWorkflowState = (() => {
+    if (!isNewJourney) return payload.group_event.workflow_state ?? null;
+    if (payload.group_event.workflow_state) return payload.group_event.workflow_state;
+    // Private journeys are auto-published for the owner; others stay draft until approval flow.
+    if (payload.group_event.visibility === "private") return "published";
+    return "draft";
+  })();
   const groupEventPayload = {
     visibility: payload.group_event.visibility,
     allow_fan: payload.group_event.allow_fan ?? false,
@@ -668,7 +676,7 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       owner_profile_id: payload.group_event.owner_profile_id ?? null,
       code: payload.group_event.code ?? null,
       slug: payload.group_event.slug ?? null,
-      workflow_state: payload.group_event.workflow_state ?? null,
+      workflow_state: resolvedWorkflowState,
       requested_approval_at: payload.group_event.requested_approval_at ?? null,
       approved_at: payload.group_event.approved_at ?? null,
       approved_by_profile_id: payload.group_event.approved_by_profile_id ?? null,
