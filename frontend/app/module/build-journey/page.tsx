@@ -375,7 +375,6 @@ export default function BuildJourneyPage() {
   const [eventTabMap, setEventTabMap] = useState<Record<string, EventTab>>({});
   const [mediaFilterKind, setMediaFilterKind] = useState<MediaKind | "all">("all");
   const [mapOverlayEventId, setMapOverlayEventId] = useState<string | null>(null);
-  const [mapRefreshToken, setMapRefreshToken] = useState<number>(0);
   const [geocodeLoading, setGeocodeLoading] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -648,8 +647,6 @@ export default function BuildJourneyPage() {
           };
         }),
       );
-      setMapRefreshToken((prev) => prev + 1);
-
           setGeocodeLoading((prev) => ({ ...prev, [tempId]: true }));
           reverseGeocode(lat, lng)
             .then((geo) => {
@@ -667,7 +664,6 @@ export default function BuildJourneyPage() {
                   };
                 }),
               );
-              setMapRefreshToken((prev) => prev + 1);
             })
             .catch(() => {
           // ignore geocode failures, keep manual edit
@@ -1327,6 +1323,11 @@ export default function BuildJourneyPage() {
       return;
     }
 
+    if (!selectedJourneyId && journeyEvents.length === 0) {
+      setSaveError(tUI(langCode, "build.messages.events_required"));
+      return;
+    }
+
     setSaving(true);
 
     const translationsToSave = translations.concat(
@@ -1888,7 +1889,7 @@ export default function BuildJourneyPage() {
         )}
 
         {activeTab === "group" && journeySubTab === "translations" && (
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6 space-y-4 min-h-[80vh]">
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6 space-y-4 min-h-[50vh]">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-2">
               <div className="flex flex-wrap items-center gap-2">
                 {translations.length === 0 ? (
@@ -1951,7 +1952,7 @@ export default function BuildJourneyPage() {
                 value={translation.description}
                 onChange={(value) => updateTranslationField("description", value)}
                 placeholder={tUI(langCode, "build.translations.description.placeholder")}
-                className="min-h-[320px]"
+                className="min-h-[200px]"
               />
             </div>
           </div>
@@ -2046,17 +2047,39 @@ export default function BuildJourneyPage() {
                           <button
                             type="button"
                             className="text-xs font-semibold text-sky-700"
-                            onClick={() =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, media: [...item.media, createEmptyGroupEventMediaItem()] }
-                                    : item,
-                                ),
-                              )
-                            }
+                            onClick={() => {
+                              if (activeEventTab === "translations") {
+                                const existing = new Set(ev.translations_all.map((tr) => tr.lang));
+                                const nextLang =
+                                  languageOptions.map((opt) => opt.value).find((lng) => !existing.has(lng)) || null;
+                                if (!nextLang) {
+                                  return;
+                                }
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) => {
+                                    if (item.tempId !== ev.tempId) return item;
+                                    const nextTranslation = createEmptyEventTranslation(nextLang);
+                                    return {
+                                      ...item,
+                                      activeLang: nextLang,
+                                      translation: { ...nextTranslation },
+                                      translations_all: [...item.translations_all, nextTranslation],
+                                    };
+                                  }),
+                                );
+                              } else {
+                                setJourneyEvents((prev) =>
+                                  prev.map((item) =>
+                                    item.tempId === ev.tempId
+                                      ? { ...item, media: [...item.media, createEmptyGroupEventMediaItem()] }
+                                      : item,
+                                  ),
+                                );
+                              }
+                            }}
                           >
-                            + {tUI(langCode, "build.media.add")}
+                            +{" "}
+                            {activeEventTab === "translations" ? "Traduzioni" : tUI(langCode, "build.media.add")}
                           </button>
                         </div>
                         <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "details" ? "" : "hidden"}`}>
@@ -2133,7 +2156,7 @@ export default function BuildJourneyPage() {
                                 <span aria-hidden="true">⤢</span>
                               </button>
                               <MapPicker
-                                key={`${ev.tempId}-${mapRefreshToken}`}
+                                key={ev.tempId}
                                 lat={ev.event.latitude ?? null}
                                 lng={ev.event.longitude ?? null}
                                 onChange={({ lat, lng }) => handleMapSelection(ev.tempId, lat, lng)}
@@ -2503,13 +2526,12 @@ export default function BuildJourneyPage() {
                       aria-label={tUI(langCode, "build.events.map.close")}
                       onClick={() => {
                         setMapOverlayEventId(null);
-                        setMapRefreshToken((prev) => prev + 1);
                       }}
                     >
                       <span aria-hidden="true">⤡</span>
                     </button>
                     <MapPicker
-                      key={`${mapOverlayEventId}-${mapRefreshToken}`}
+                      key={mapOverlayEventId}
                       lat={ev.event.latitude ?? null}
                       lng={ev.event.longitude ?? null}
                       initialZoom={0.25}
@@ -2596,9 +2618,7 @@ export default function BuildJourneyPage() {
             </button>
           </div>
           <p className="text-xs text-neutral-500">
-            {filteredJourneys.length === journeys.length
-              ? `${journeys.length} ${tUI(langCode, "build.sidebar.saved")}`
-              : `${filteredJourneys.length} ${tUI(langCode, "build.sidebar.of")} ${journeys.length} ${tUI(langCode, "build.sidebar.saved_filtered")}`}
+            {`${filteredJourneys.length} Journeys`}
           </p>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6">
@@ -2640,7 +2660,7 @@ export default function BuildJourneyPage() {
           {checking
             ? tUI(langCode, "build.sidebar.checking")
             : profile
-            ? `${tUI(langCode, "build.sidebar.profile")} ${profile.id}`
+            ? ""
             : profileError
             ? profileError
             : tUI(langCode, "build.sidebar.login")}
@@ -2662,7 +2682,6 @@ export default function BuildJourneyPage() {
           {renderGroupEventPage()}
         </div>
         {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
-        {saveOk && <p className="mt-2 text-sm text-green-700">{`${tUI(langCode, "build.messages.save_ok")} ID: ${saveOk.id}`}</p>}
         {eventsSaveError && <p className="mt-1 text-sm text-red-600">{eventsSaveError}</p>}
         {eventsSaveOk && <p className="mt-1 text-sm text-green-700">{`${tUI(langCode, "build.messages.events_saved_prefix")} ${eventsSaveOk}`}</p>}
         {approvalError && <p className="mt-1 text-sm text-red-600">{approvalError}</p>}
@@ -2869,7 +2888,8 @@ function MapPicker({
       mapRef.current = null;
       markerRef.current = null;
     };
-  }, [lat, lng, onChange, fallbackCenter]);
+  // Mount map only once; marker updates are handled in the lat/lng effect below.
+  }, [initialZoom]);
 
   // Keep marker in sync when coordinates change from inputs.
   useEffect(() => {

@@ -285,6 +285,7 @@ const en: UIDictionary = {
   "build.messages.delete_ok": "Journey deleted.",
   "build.messages.save_ok": "Created!",
   "build.messages.events_saved_prefix": "Events saved:",
+  "build.messages.events_required": "Add at least one event before creating a journey.",
   "build.messages.no_profile": "Profile not available",
 };
 
@@ -570,6 +571,7 @@ const it: UIDictionary = {
   "build.messages.delete_ok": "Journey eliminato.",
   "build.messages.save_ok": "Creato!",
   "build.messages.events_saved_prefix": "Eventi salvati:",
+  "build.messages.events_required": "Aggiungi almeno un evento prima di creare il journey.",
   "build.messages.no_profile": "Profilo non disponibile",
 };
 
