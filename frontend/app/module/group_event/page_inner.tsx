@@ -179,6 +179,24 @@ const OSM_STYLE: any = {
 
 type OverlayMode = "overlay" | "full";
 
+function getYouTubePreview(url?: string | null) {
+  if (!url) return null;
+  try {
+    const normalized = url.startsWith("http") ? url : `https://${url}`;
+    const u = new URL(normalized);
+    const host = u.hostname.replace(/^www\./, "");
+    if (!host.includes("youtube.com") && host !== "youtu.be") return null;
+    const searchId = u.searchParams.get("v");
+    if (searchId) return `https://img.youtube.com/vi/${searchId}/hqdefault.jpg`;
+    const pathParts = u.pathname.split("/").filter(Boolean);
+    const candidate = pathParts.pop();
+    if (candidate && candidate !== "watch") return `https://img.youtube.com/vi/${candidate}/hqdefault.jpg`;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 /* ===================== Player Overlay (2 livelli, autoplay mobile) ===================== */
 function MediaOverlay({
  open,
@@ -218,8 +236,8 @@ function MediaOverlay({
 
  const base =
  mode === "full"
- ? "fixed inset-0 z-[1000] flex items-center justify-center bg-black/80"
- : "fixed right-4 bottom-4 z-[900]";
+ ? "fixed inset-0 z-[5000] flex items-center justify-center bg-black/80"
+ : "fixed right-4 bottom-4 z-[4000]";
 
  const box =
  mode === "full"
@@ -240,17 +258,33 @@ function MediaOverlay({
  <div className="absolute top-2 right-2 z-[5] flex items-center gap-2">
  <button
  onClick={onToggleMode}
- className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
+ className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-800 shadow hover:bg-white"
  title={mode === "full" ? "Riduci finestra" : "Schermo intero"}
+ aria-label={mode === "full" ? "Riduci finestra" : "Schermo intero"}
  >
- {mode === "full" ? "?" : "?"}
+ {mode === "full" ? (
+ <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+ <path d="M10 14v4h-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ <path d="M14 10V6h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ <path d="M10 14 6 18M14 10l4-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ ) : (
+ <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+ <path d="M14 10h4v4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ <path d="M10 14H6v-4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ <path d="m14 10 4-4M10 14 6 18" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ )}
  </button>
  <button
  onClick={onClose}
- className="inline-flex items-center justify-center rounded-lg bg-white/90 px-2 py-1 text-xs text-gray-800 shadow hover:bg-white"
+ className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/90 text-gray-800 shadow hover:bg-white"
  title="Chiudi"
+ aria-label="Chiudi"
  >
- ?
+ <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+ <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
  </button>
  </div>
 
@@ -333,6 +367,7 @@ function MediaBox({
 
  const curr = items[index];
  const isVideo = curr?.type === "video";
+ const videoPreview = curr?.preview || (isVideo ? getYouTubePreview(curr?.url) : null);
 
  const goPrev = () => setIndex((i) => (i - 1 + items.length) % items.length);
  const goNext = () => setIndex((i) => (i + 1) % items.length);
@@ -353,17 +388,25 @@ function MediaBox({
 
  <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}>
  {isVideo ? (
- <div className="relative w-full h-full bg-black/80 flex items-center justify-center">
- {curr.preview ? (
- <img src={curr.preview} alt="video preview" className="absolute inset-0 w-full h-full object-cover opacity-60" />
- ) : null}
-        <button
-          onClick={() => onOpenOverlay(curr, { autoplay: true })}
-          className="relative inline-flex items-center justify-center rounded-full bg-white/90 px-3 py-1.5 text-sm font-medium text-gray-900 shadow hover:bg-white"
-          title="Riproduci video"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+ <div className="relative h-full w-full overflow-hidden bg-slate-900">
+ {videoPreview ? (
+ <img src={videoPreview} alt="video preview" className="absolute inset-0 h-full w-full object-cover brightness-[0.9]" />
+ ) : (
+ <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-black" aria-hidden="true" />
+ )}
+ <div className="absolute inset-0 bg-black/35" aria-hidden="true" />
+ <div className="absolute inset-0 flex items-center justify-center">
+ <button
+ onClick={() => onOpenOverlay(curr, { autoplay: true })}
+ className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-blue-600 shadow-lg ring-1 ring-black/10 transition hover:bg-white hover:shadow-xl"
+ title="Riproduci video"
+ aria-label="Riproduci video"
+ >
+ <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+ <path d="M9 7.5 17 12l-8 4.5Z" fill="currentColor" />
+ </svg>
+ </button>
+ </div>
  </div>
  ) : (
  <button onClick={() => onOpenOverlay(curr)} className="block w-full h-full" title="Apri immagine">
@@ -705,25 +748,36 @@ useEffect(() => {
  const { data: vjRows, error: vjErr } = await supabase
  .from("v_journey")
  .select(
- `event_id, group_event_id, description, lang, title, video_url, wikipedia_url,
- continent, country, era, exact_date, id, image_url, latitude, longitude, year_from, year_to,
+ `event_id, group_event_id, description, lang, title, wikipedia_url,
+ continent, country, era, exact_date, id, latitude, longitude, year_from, year_to,
  journey_title, journey_media, journey_media_first, event_media, event_media_first`
  )
  .eq("group_event_id", gid);
  if (vjErr) throw vjErr;
 
  const vms: EventVM[] = (vjRows ?? []).map((r: any) => {
+ const eventId = r.event_id ?? r.id;
  const location = r.city ?? r.region ?? r.country ?? r.continent ?? null;
+ const eventMedia: MediaItem[] = Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [];
+ const firstVideo =
+   (r as any)?.video_url ||
+   eventMedia.find((m) => (m?.type === "video" || m?.mime?.startsWith?.("video/")) && (m?.url || m?.preview))?.url ||
+   null;
+ const fallbackImage =
+   r.event_media_first ||
+   eventMedia.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.preview ||
+   eventMedia.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.url ||
+   null;
  const core: EventCore = {
- id: String(r.id),
- latitude: typeof r.latitude === "number" ? r.latitude : null,
- longitude: typeof r.longitude === "number" ? r.longitude : null,
- era: r.era ?? null,
- year_from: r.year_from ?? null,
- year_to: r.year_to ?? null,
+ id: String(eventId ?? r.id ?? ""),
+  latitude: typeof r.latitude === "number" ? r.latitude : null,
+  longitude: typeof r.longitude === "number" ? r.longitude : null,
+  era: r.era ?? null,
+  year_from: r.year_from ?? null,
+  year_to: r.year_to ?? null,
  exact_date: r.exact_date ?? null,
  location,
- image_url: r.image_url ?? null,
+ image_url: fallbackImage,
  };
  // Build base event VM
  const ev: EventVM = {
@@ -731,16 +785,16 @@ useEffect(() => {
  title: (r.title ?? location ?? "Untitled").toString(),
  description: (r.description ?? "").toString(),
  wiki_url: r.wikipedia_url ? String(r.wikipedia_url) : null,
- video_url: r.video_url ? String(r.video_url) : null,
+ video_url: firstVideo ? String(firstVideo) : null,
  order_key: chronoOrderKey(core),
- event_media: Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [],
+ event_media: eventMedia,
  event_media_first: r.event_media_first ?? null,
  };
  // Fallback: if no structured media but a video_url exists, create a single video media item
  if ((!ev.event_media || ev.event_media.length === 0) && ev.video_url) {
  ev.event_media = [
  {
- media_id: `video:${r.event_id ?? r.id}`,
+ media_id: `video:${eventId ?? r.id}`,
  type: "video",
  url: String(ev.video_url),
  preview: r.image_url ?? null,
@@ -753,7 +807,7 @@ useEffect(() => {
  if ((!ev.event_media || ev.event_media.length === 0) && core.image_url) {
  ev.event_media = [
  {
- media_id: `image:${r.event_id ?? r.id}`,
+ media_id: `image:${eventId ?? r.id}`,
  type: "image",
  url: String(core.image_url),
  preview: String(core.image_url),
@@ -793,67 +847,69 @@ useEffect(() => {
 
  // Carica correlazioni per l'evento selezionato (lazy, senza viste)
  useEffect(() => {
-const ev = rows[selectedIndex];
-if (!ev?.id) return;
-if (corrByEvent[ev.id]) return; // cache
-(async () => {
-try {
+ const ev = rows[selectedIndex];
+ if (!ev?.id) return;
+ if (corrByEvent[ev.id]) return; // cache
+ (async () => {
+ try {
+  console.debug("[GE] fetch correlated journeys", { evId: ev.id });
   const { data, error } = await supabase
   .from("event_group_event_correlated")
-  .select("group_event_id, group_events!inner(id, slug, visibility, approved_at), group_event_translations!left(title, lang)")
-  .eq("event_id", ev.id)
-  .eq("group_events.visibility", "public")
-  .not("group_events.approved_at", "is", null);
-if (error) throw error;
+  .select("group_event_id, group_events!inner(id, slug, visibility, approved_at, group_event_translations!left(title, lang))")
+  .eq("event_id", ev.id);
+ if (error) throw error;
 
- // Se non c'è traduzione nella lingua, prendi una qualsiasi
- let rowsCorr: any[] = data ?? [];
- if (!rowsCorr.length) {
- const { data: anyLang } = await supabase
- .from("event_group_event_correlated")
-.select("group_event_id, group_events!inner(id, slug, visibility, approved_at), group_event_translations!left(title, lang)")
+  // Se non c'è traduzione nella lingua, prendi una qualsiasi
+  let rowsCorr: any[] = data ?? [];
+  if (!rowsCorr.length) {
+  const { data: anyLang } = await supabase
+  .from("event_group_event_correlated")
+.select("group_event_id, group_events!inner(id, slug, visibility, approved_at, group_event_translations!left(title, lang))")
 .eq("event_id", ev.id)
-.eq("group_events.visibility", "public")
-.not("group_events.approved_at", "is", null)
 .limit(5);
- rowsCorr = anyLang ?? [];
- }
+  rowsCorr = anyLang ?? [];
+  }
 
  const items: CorrelatedJourney[] = rowsCorr
-  // sicurezza: accetta solo journey pubblici e approvati
-  .filter((r: any) => r.group_events?.visibility === "public" && !!r.group_events?.approved_at)
+  // tieni solo righe con journey valido (evita null)
+  .filter((r: any) => !!(r.group_events?.id || r.group_event_id))
   .map((r: any) => {
-    const translationsRaw = Array.isArray(r.group_event_translations)
-      ? r.group_event_translations
-      : r.group_event_translations
-      ? [r.group_event_translations]
+    if (process?.env?.NODE_ENV === "development") {
+      console.debug("[GE] corr row", r);
+    }
+    const translationsRaw = Array.isArray(r.group_events?.group_event_translations)
+      ? r.group_events.group_event_translations
+      : r.group_events?.group_event_translations
+      ? [r.group_events.group_event_translations]
       : [];
-    const translations = translationsRaw.map((t: any) => ({
-      lang: (t?.lang || "").toLowerCase(),
-      title: t?.title ?? null,
-    }));
-    const norm = (v: string | null | undefined) => (v || "").toLowerCase();
-    const order = [norm(resolvedLang), "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
-    let title: string | null = null;
-    for (const target of order) {
-      const found = translations.find((t: any) => t.lang === target);
-      if (found?.title) { title = found.title; break; }
-    }
-    if (!title) {
-      const first = translations.find((t: any) => t?.title);
-      title = first?.title ?? null;
-    }
-    return {
-      id: r.group_events?.id ?? r.group_event_id,
-      slug: r.group_events?.slug ?? null,
-      title,
+     const translations = translationsRaw.map((t: any) => ({
+       lang: (t?.lang || "").toLowerCase(),
+       title: t?.title ?? null,
+     }));
+     const norm = (v: string | null | undefined) => (v || "").toLowerCase();
+     const order = [norm(resolvedLang), "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+     let title: string | null = null;
+     for (const target of order) {
+       const found = translations.find((t: any) => t.lang === target);
+       if (found?.title) { title = found.title; break; }
+     }
+     if (!title) {
+       const first = translations.find((t: any) => t?.title);
+       title = first?.title ?? null;
+     }
+     return {
+       id: r.group_events?.id ?? r.group_event_id,
+     slug: r.group_events?.slug ?? null,
+     title,
     };
   });
+  console.debug("[GE] correlated journeys resolved", { evId: ev.id, count: items.length, items });
  setCorrByEvent((prev) => ({ ...prev, [ev.id]: items }));
- } catch (e) {
- // silenzioso: nessuna correlazione
- }
- })();
+  } catch (e) {
+  // silenzioso: nessuna correlazione
+  console.warn("[GE] correlated journeys fetch error", e);
+  }
+  })();
  }, [rows, selectedIndex, resolvedLang, supabase, corrByEvent]);
 
  /* ===== Preferiti ===== */
@@ -1782,7 +1838,7 @@ const mapTextureStyle: CSSProperties = {
   </Collapsible>
 
   <Collapsible
-    title="Eventi contemporanei"
+    title="contemporary events"
     badge={concurrentOther?.length ? concurrentOther.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -1919,7 +1975,7 @@ const mapTextureStyle: CSSProperties = {
       </div>
 
       <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[160px] flex flex-col">
-        <div className="text-[12px] font-semibold text-gray-800">Journey di approfondimento</div>
+        <div className="text-[12px] font-semibold text-gray-800">connected Journey</div>
           {related?.length ? (
             <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
               {related.map((r) => (

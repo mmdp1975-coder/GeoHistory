@@ -1,7 +1,13 @@
 ﻿"use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEventHandler,
+} from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { tUI } from "@/lib/i18n/uiLabels";
 
 const STAR_FILL = "#facc15"; // amber-300
 const STAR_STROKE = "#eab308"; // amber-400
@@ -22,7 +28,9 @@ export default function RatingStars(props: Props) {
   const [avg, setAvg] = useState<number | null>(null);
   const [cnt, setCnt] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const [langCode, setLangCode] = useState<string>("en");
 
+  // Carica stats rating
   async function refreshStats() {
     if (!id) return;
     const { data } = await supabase
@@ -37,7 +45,73 @@ export default function RatingStars(props: Props) {
 
   useEffect(() => {
     refreshStats();
-  }, [id]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Carica lingua (stessa logica di TopBar/Scorecard: profiles.id = user.id)
+  useEffect(() => {
+    let active = true;
+
+    async function loadLanguage() {
+      const browserLang =
+        typeof window !== "undefined" ? window.navigator.language : "en";
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.warn("[RatingStars] auth.getUser error:", userError.message);
+        }
+
+        if (!user) {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("language_code")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.warn(
+            "[RatingStars] Error reading profiles.language_code:",
+            error.message
+          );
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        if (!data || typeof data.language_code !== "string") {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        const dbLang = (data.language_code as string).trim() || browserLang;
+        if (active) setLangCode(dbLang);
+      } catch (err: any) {
+        console.warn(
+          "[RatingStars] Unexpected error loading language:",
+          err?.message
+        );
+        if (active) {
+          const browserLang =
+            typeof window !== "undefined" ? window.navigator.language : "en";
+          setLangCode(browserLang);
+        }
+      }
+    }
+
+    loadLanguage();
+
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   async function rate(n: number) {
     if (readOnly) return;
@@ -45,7 +119,7 @@ export default function RatingStars(props: Props) {
 
     const { data: auth } = await supabase.auth.getUser();
     if (!auth?.user?.id) {
-      alert("Accedi per votare");
+      alert(tUI(langCode, "rating.stars.login_required"));
       return;
     }
     if (saving) return;
@@ -70,30 +144,41 @@ export default function RatingStars(props: Props) {
   return (
     <div className="inline-flex items-center gap-2">
       <div className="flex items-center">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button
-            key={n}
-            onClick={() => rate(n)}
-            title={`Rate ${n}`}
-            disabled={saving || readOnly}
-            className="p-0.5"
-            aria-label={`Rate ${n}`}
-          >
-            <svg
-              width={size}
-              height={size}
-              viewBox="0 0 24 24"
-              fill={n <= stars.full ? STAR_FILL : "none"}
-              stroke={STAR_STROKE}
-              strokeWidth="1.6"
+        {[1, 2, 3, 4, 5].map((n) => {
+          const labelPrefix = tUI(langCode, "rating.stars.rate_prefix");
+          const title = `${labelPrefix} ${n}`;
+
+          const handleClick: MouseEventHandler<HTMLButtonElement> = () => {
+            void rate(n);
+          };
+
+          return (
+            <button
+              key={n}
+              onClick={handleClick}
+              title={title}
+              disabled={saving || readOnly}
+              className="p-0.5"
+              aria-label={title}
+              type="button"
             >
-              <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
-            </svg>
-          </button>
-        ))}
+              <svg
+                width={size}
+                height={size}
+                viewBox="0 0 24 24"
+                fill={n <= stars.full ? STAR_FILL : "none"}
+                stroke={STAR_STROKE}
+                strokeWidth="1.6"
+              >
+                <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
+              </svg>
+            </button>
+          );
+        })}
       </div>
       <div className="text-sm text-slate-600">
-        {avg != null ? avg.toFixed(1) : "-"}{cnt > 0 ? ` (${cnt})` : ""}
+        {avg != null ? avg.toFixed(1) : "-"}
+        {cnt > 0 ? ` (${cnt})` : ""}
       </div>
     </div>
   );

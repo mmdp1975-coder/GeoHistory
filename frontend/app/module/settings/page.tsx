@@ -41,7 +41,8 @@ export default function SettingsPage() {
   const supabase = createClientComponentClient();
 
   // 🔸 Stato auth centralizzato (hook)
-  const { checking, error: authError, userId, persona, personaCode, isAdminOrMod } = useCurrentUser();
+  const { checking, error: authError, userId, persona, personaCode, isAdminOrMod } =
+    useCurrentUser();
 
   // ---- stato UI ----
   const [loading, setLoading] = useState(true);
@@ -206,6 +207,13 @@ export default function SettingsPage() {
       }
 
       setOk("Impostazioni salvate correttamente.");
+
+      // 🔴 QUI LA PARTE IMPORTANTE:
+      // Ricarichiamo completamente la pagina, così la TopBar
+      // rilegge language_code da Supabase e cambia lingua.
+      if (typeof window !== "undefined") {
+        window.location.reload();
+      }
     } catch (err: any) {
       setError(err?.message || "Errore salvataggio");
     } finally {
@@ -241,8 +249,14 @@ export default function SettingsPage() {
   if (authError || !userId) {
     return (
       <div className="p-6">
-        {authError && <div className="mb-4 text-red-600 font-medium">Errore: {authError}</div>}
-        {!userId && <div className="mb-4 text-gray-700">Utente non rilevato.</div>}
+        {authError && (
+          <div className="mb-4 text-red-600 font-medium">
+            Errore: {authError}
+          </div>
+        )}
+        {!userId && (
+          <div className="mb-4 text-gray-700">Utente non rilevato.</div>
+        )}
         <button
           type="button"
           onClick={goHome}
@@ -256,7 +270,9 @@ export default function SettingsPage() {
   }
 
   const selectDisabled = saving || isPrivileged;
-  const selectValue = isPrivileged ? (persona?.id || "") : (profile?.persona_id || "");
+  const selectValue = isPrivileged
+    ? (persona?.id || "")
+    : (profile?.persona_id || "");
 
   return (
     <div className="min-h-[calc(100vh-0px)] w-full bg-gray-50">
@@ -287,7 +303,9 @@ export default function SettingsPage() {
                 onChange={(e) => {
                   setOk(null);
                   setError(null);
-                  setProfile((prev) => (prev ? { ...prev, language_code: e.target.value } : prev));
+                  setProfile((prev) =>
+                    prev ? { ...prev, language_code: e.target.value } : prev
+                  );
                 }}
               >
                 <option value="" disabled>
@@ -299,7 +317,9 @@ export default function SettingsPage() {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-gray-500">Imposta la lingua preferita dell’interfaccia.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Imposta la lingua preferita dell’interfaccia.
+              </p>
             </div>
 
             {/* Persona */}
@@ -312,7 +332,9 @@ export default function SettingsPage() {
                 onChange={(e) => {
                   setOk(null);
                   setError(null);
-                  setProfile((prev) => (prev ? { ...prev, persona_id: e.target.value } : prev));
+                  setProfile((prev) =>
+                    prev ? { ...prev, persona_id: e.target.value } : prev
+                  );
                 }}
               >
                 <option value="">
@@ -357,7 +379,9 @@ export default function SettingsPage() {
             {/* Messaggi */}
             {ok && <div className="text-green-700 text-sm">{ok}</div>}
             {(error || authError) && (
-              <div className="text-red-600 text-sm">{error || authError}</div>
+              <div className="text-red-600 text-sm">
+                {error || authError}
+              </div>
             )}
           </form>
         </div>

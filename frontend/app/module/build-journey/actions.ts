@@ -44,9 +44,7 @@ type EntityType = "group_event" | "event";
 type GroupEventTranslationPayload = {
   lang: string;
   title?: string;
-  short_name?: string;
   description?: string;
-  video_url?: string;
 };
 
 type EventTranslationPayload = {
@@ -399,7 +397,6 @@ export async function analyzeVideoDeep(input: { videoUrl: string; lang?: string 
     prefill: {
         group_event: {
           title,
-          pitch: "",
           description: "",
           cover_url: thumbnail,
           visibility: "private" as Visibility,
@@ -443,7 +440,6 @@ export type SaveJourneyPayload = {
   group_event: {
     cover_url?: string;
     visibility: Visibility;
-    pitch?: string;
     description?: string;
     language?: string;
 
@@ -604,9 +600,7 @@ async function upsertGroupEventTranslations(
         group_event_id,
         lang: translation.lang as string,
         title: translation.title ?? null,
-        short_name: translation.short_name ?? null,
         description: translation.description ?? null,
-        video_url: translation.video_url ?? null,
       })) ?? [];
   if (!payloads.length) {
     return null;
@@ -665,10 +659,9 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       payload.group_event.slug ||
       payload.group_event.code ||
       "journey";
-    const groupEventPayload = {
-      visibility: payload.group_event.visibility,
-      pitch: payload.group_event.pitch ?? null,
-      allow_fan: payload.group_event.allow_fan ?? false,
+  const groupEventPayload = {
+    visibility: payload.group_event.visibility,
+    allow_fan: payload.group_event.allow_fan ?? false,
       allow_stud_high: payload.group_event.allow_stud_high ?? false,
       allow_stud_middle: payload.group_event.allow_stud_middle ?? false,
       allow_stud_primary: payload.group_event.allow_stud_primary ?? false,

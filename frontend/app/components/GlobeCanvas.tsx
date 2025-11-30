@@ -4,6 +4,8 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Html, useTexture } from "@react-three/drei";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { tUI } from "@/lib/i18n/uiLabels";
 
 /* ============================== Helpers ============================== */
 
@@ -292,7 +294,15 @@ function GlobeMesh({
     releaseCapture(e);
     onDragEnd();
 
-    // Intersezione robusta: usa il punto colpito
+    const p = e.point as THREE.Vector3;
+    if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      const { lat, lon } = vector3ToLatLon(p);
+      onPickGlobePoint(lat, lon);
+    }
+  };
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    // fallback per assicurare il pick anche se pointerup non scatta
     const p = e.point as THREE.Vector3;
     if (p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
       const { lat, lon } = vector3ToLatLon(p);
@@ -311,9 +321,15 @@ function GlobeMesh({
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onClick={handleClick}
     >
       <sphereGeometry args={[radius, 128, 128]} />
-      <meshStandardMaterial map={colorMap} roughness={0.85} metalness={0.0} envMapIntensity={0.0} />
+      <meshStandardMaterial
+        map={colorMap}
+        roughness={0.85}
+        metalness={0.0}
+        envMapIntensity={0.0}
+      />
     </mesh>
   );
 }
@@ -335,7 +351,7 @@ export default function GlobeCanvas({
     radiusKm: number;
   }) => void;
   initialRadiusKm?: number;
-  height?: number;       // default 700
+  height?: number; // default 700
   radius?: number;
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
@@ -351,8 +367,79 @@ export default function GlobeCanvas({
   const dataReady = continentsData.length > 0 && countriesData.length > 0;
 
   const [dragging, setDragging] = React.useState(false);
-  const [pointerOver, setPointerOver] = React.useState(false);
   const [hoveringCity, setHoveringCity] = React.useState(false);
+
+  const supabase = React.useMemo(() => createClientComponentClient(), []);
+  const [langCode, setLangCode] = React.useState<string>("en");
+  const onPointSelectRef = React.useRef(onPointSelect);
+  React.useEffect(() => {
+    onPointSelectRef.current = onPointSelect;
+  }, [onPointSelect]);
+
+  // lingua: stessa logica degli altri componenti (profiles.id = user.id)
+  React.useEffect(() => {
+    let active = true;
+
+    async function loadLanguage() {
+      const browserLang =
+        typeof window !== "undefined" ? window.navigator.language : "en";
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError) {
+          console.warn("[GlobeCanvas] auth.getUser error:", userError.message);
+        }
+
+        if (!user) {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("language_code")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.warn(
+            "[GlobeCanvas] Error reading profiles.language_code:",
+            error.message
+          );
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        if (!data || typeof data.language_code !== "string") {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+
+        const dbLang = (data.language_code as string).trim() || browserLang;
+        if (active) setLangCode(dbLang);
+      } catch (err: any) {
+        console.warn(
+          "[GlobeCanvas] Unexpected error loading language:",
+          err?.message
+        );
+        if (active) {
+          const browserLang =
+            typeof window !== "undefined" ? window.navigator.language : "en";
+          setLangCode(browserLang);
+        }
+      }
+    }
+
+    loadLanguage();
+
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   // ✅ Failsafe globale: qualsiasi pointerup/cancel su window chiude il drag
   React.useEffect(() => {
@@ -484,30 +571,41 @@ export default function GlobeCanvas({
   );
 
   const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 250);
+  const markerPosition = React.useMemo(() => {
+    if (!picked) return null;
+    return latLonToVector3(picked.lat, picked.lon, radius + 0.01);
+  }, [picked, radius]);
+  const markerSize = React.useMemo(() => Math.max(0.0025, 0.0035 * radius), [radius]);
 
   React.useEffect(() => {
-    if (!onPointSelect || !picked) return;
-    onPointSelect({
-      lat: picked.lat,
-      lon: picked.lon,
-      continent,
-      country,
-      city: nearestCity,
-      radiusKm,
-    });
-  }, [onPointSelect, picked, continent, country, nearestCity, radiusKm]);
+    if (!picked) return;
+    const cb = onPointSelectRef.current;
+    if (cb) {
+      cb({
+        lat: picked.lat,
+        lon: picked.lon,
+        continent,
+        country,
+        city: nearestCity,
+        radiusKm,
+      });
+    }
+  }, [picked, continent, country, nearestCity, radiusKm]);
 
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
-  // Altezza globo leggermente ridotta per avvicinare il footer senza overlap
   const globeHeight = (typeof height === "number" ? height : 700) - 12;
 
-  // Cursor: pointer su città, grab/grabbing sul globo
   const cursorStyle = React.useMemo(() => {
     if (hoveringCity) return "pointer";
-    if (!pointerOver) return "default";
     return dragging ? "grabbing" : "grab";
-  }, [pointerOver, dragging, hoveringCity]);
+  }, [dragging, hoveringCity]);
+
+  const displayUnknown = (value: string) => {
+    if (!value) return "-";
+    if (value === "Unknown") return tUI(langCode, "globe.unknown");
+    return value;
+  };
 
   return (
     <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur">
@@ -516,32 +614,33 @@ export default function GlobeCanvas({
           width: "100%",
           height: globeHeight,
           cursor: cursorStyle,
+          position: "relative",
+          overflow: "hidden",
         }}
-        onPointerEnter={() => setPointerOver(true)}
-        onPointerLeave={() => setPointerOver(false)}
       >
         <Canvas
-          style={{ width: "100%", height: "100%" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "block",
+          }}
           dpr={[1, 2]}
           camera={{ fov: 40, near: 0.1, far: 1000 }}
           gl={{ antialias: true }}
-          // ✅ Se il rilascio non colpisce oggetti della scena, chiudi eventuale drag/capture
           onPointerMissed={() => {
             setDragging(false);
-            setPointerOver(false);
           }}
-          // ✅ Se esci dal canvas, assicurati di non “bloccare” i click esterni
           onPointerLeave={() => {
             setDragging(false);
-            setPointerOver(false);
           }}
+          onPointerEnter={() => setDragging(false)}
         >
           <ambientLight intensity={1.0} />
           <directionalLight position={[5, 3, 5]} intensity={1.2} />
           <directionalLight position={[-5, -2, -5]} intensity={0.7} />
 
           <Scene
-            radius={1.0}
+            radius={radius}
             onPickGlobePoint={(lat, lon) => {
               updateAttributesFor(lat, lon);
             }}
@@ -553,6 +652,8 @@ export default function GlobeCanvas({
               setCityAsNearest(cityName);
             }}
             setHoveringCity={setHoveringCity}
+            markerPosition={markerPosition}
+            markerSize={markerSize}
           />
         </Canvas>
       </div>
@@ -569,13 +670,21 @@ export default function GlobeCanvas({
         <div className="grid gap-x-4 gap-y-2 grid-cols-1 sm:grid-cols-2">
           <div className="min-w-0">
             <div className="whitespace-nowrap">
-              Lat: <span className="break-words">{picked ? picked.lat.toFixed(4) : "-"}</span>
+              {tUI(langCode, "globe.footer.lat")}{" "}
+              <span className="break-words">
+                {picked ? picked.lat.toFixed(4) : "-"}
+              </span>
             </div>
             <div className="whitespace-nowrap">
-              Lon: <span className="break-words">{picked ? picked.lon.toFixed(4) : "-"}</span>
+              {tUI(langCode, "globe.footer.lon")}{" "}
+              <span className="break-words">
+                {picked ? picked.lon.toFixed(4) : "-"}
+              </span>
             </div>
             <div className="flex items-center gap-3 mt-2 max-w-[220px]">
-              <span className="whitespace-nowrap">City radius (km):</span>
+              <span className="whitespace-nowrap">
+                {tUI(langCode, "globe.footer.city_radius")}
+              </span>
               <input
                 className="min-w-0 flex-1"
                 type="range"
@@ -590,13 +699,22 @@ export default function GlobeCanvas({
           </div>
           <div className="min-w-0 break-words">
             <div>
-              Continent: <span className="break-words">{continent || "-"}</span>
+              {tUI(langCode, "globe.footer.continent")}{" "}
+              <span className="break-words">
+                {displayUnknown(continent)}
+              </span>
             </div>
             <div>
-              Country: <span className="break-words">{country || "-"}</span>
+              {tUI(langCode, "globe.footer.country")}{" "}
+              <span className="break-words">
+                {displayUnknown(country)}
+              </span>
             </div>
             <div>
-              Nearest city: <span className="break-words">{nearestCity || "-"}</span>
+              {tUI(langCode, "globe.footer.nearest_city")}{" "}
+              <span className="break-words">
+                {displayUnknown(nearestCity)}
+              </span>
             </div>
           </div>
         </div>
@@ -613,6 +731,8 @@ function Scene({
   onDragEnd,
   onPickCity,
   setHoveringCity,
+  markerPosition,
+  markerSize,
 }: {
   radius: number;
   onPickGlobePoint: (lat: number, lon: number) => void;
@@ -621,19 +741,16 @@ function Scene({
   onDragEnd: () => void;
   onPickCity: (lat: number, lon: number, cityName: string) => void;
   setHoveringCity: (b: boolean) => void;
+  markerPosition: THREE.Vector3 | null;
+  markerSize: number;
 }) {
   useEuropeStart(radius);
-  const [marker, setMarker] = React.useState<THREE.Vector3 | null>(null);
 
   const handlePickGlobe = (lat: number, lon: number) => {
-    const p = latLonToVector3(lat, lon, radius + 0.01);
-    setMarker(p);
     onPickGlobePoint(lat, lon);
   };
 
   const handlePickCity = (lat: number, lon: number, cityName: string) => {
-    const p = latLonToVector3(lat, lon, radius + 0.01);
-    setMarker(p);
     onPickCity(lat, lon, cityName);
   };
 
@@ -655,9 +772,9 @@ function Scene({
           setHoveringCity={setHoveringCity}
         />
       )}
-      {marker && (
-        <mesh position={marker}>
-          <sphereGeometry args={[0.006, 16, 16]} />
+      {markerPosition && (
+        <mesh position={markerPosition}>
+          <sphereGeometry args={[markerSize, 16, 16]} />
           <meshBasicMaterial color="#ff0000ff" toneMapped={false} />
         </mesh>
       )}

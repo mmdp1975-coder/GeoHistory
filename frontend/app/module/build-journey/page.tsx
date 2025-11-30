@@ -1,4 +1,4 @@
-﻿
+
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +17,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Scorecard } from "@/app/components/Scorecard";
+import { tUI } from "@/lib/i18n/uiLabels";
 
 type Visibility = "private" | "public";
 
@@ -61,9 +62,7 @@ type AllowFlagKey = "allow_fan" | "allow_stud_high" | "allow_stud_middle" | "all
 type GroupEventTranslationState = {
   lang: string;
   title: string;
-  short_name: string;
   description: string;
-  video_url: string;
 };
 
 type ProfileNameRow = {
@@ -101,22 +100,37 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
 
 type JourneyFilterValue = "all" | Visibility;
 
-const JOURNEY_FILTER_OPTIONS: { value: JourneyFilterValue; label: string }[] = [
-  { value: "all", label: "Tutti i miei video" },
-  { value: "private", label: "Solo quelli privati" },
-  { value: "public", label: "Solo quelli pubblici" },
-];
-
 type JourneySortValue = "approved_desc" | "approved_asc";
-
-const JOURNEY_SORT_OPTIONS: { value: JourneySortValue; label: string }[] = [
-  { value: "approved_desc", label: "Ultimi approvati" },
-  { value: "approved_asc", label: "Primi approvati" },
-];
 
 type JourneyRating = {
   avg_rating: number | null;
   ratings_count: number | null;
+};
+
+const hashString = (input: string) => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0; // force 32-bit
+  }
+  return hash;
+};
+
+const buildAutoSlug = (title?: string | null, description?: string | null) => {
+  const baseSource = title?.trim() || description?.trim() || "journey";
+  const baseSlug = slugifyTitle(baseSource).slice(0, 60);
+  const hashSource = `${title || ""}|${description || ""}`;
+  const hash = Math.abs(hashString(hashSource)).toString(36).slice(0, 4);
+  const uniquePart = hash ? `-${hash}` : "";
+  const slug = `${baseSlug || "journey"}${uniquePart}`;
+  return slug.replace(/-+$/, "");
+};
+
+const buildAutoCode = (title?: string | null, description?: string | null) => {
+  const base = slugifyTitle(title) || "journey";
+  const hashSource = `${title || ""}|${description || ""}`;
+  const hash = Math.abs(hashString(hashSource)).toString(36).toUpperCase().slice(0, 4) || "AUTO";
+  return `${base.slice(0, 8).toUpperCase()}-${hash}`;
 };
 
 type JourneyEventSummary = {
@@ -244,7 +258,6 @@ const createEmptyEventEditor = (): JourneyEventEditor => ({
 const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
   cover_url: "",
   visibility: "private",
-  pitch: "",
   description: "",
   language: DEFAULT_LANGUAGE,
   slug: "",
@@ -268,9 +281,7 @@ const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
 const EMPTY_GROUP_EVENT_TRANSLATION: GroupEventTranslationState = {
   lang: DEFAULT_LANGUAGE,
   title: "",
-  short_name: "",
   description: "",
-  video_url: "",
 };
 
 function toDateTimeLocalValue(value?: string | null): string {
@@ -296,10 +307,34 @@ function fromDateTimeLocalValue(value: string): string {
   return value ? value.replace("T", " ") : "";
 }
 
+const slugifyTitle = (title?: string | null): string => {
+  if (!title) return "";
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/--+/g, "-");
+};
+
+const normalizeYearForEra = (year?: number | null, era?: "AD" | "BC" | null): number | null => {
+  if (year == null) return null;
+  if (era === "BC") return year > 0 ? -year : year;
+  return year;
+};
+
+const formatYearWithEra = (year?: number | null, era?: "AD" | "BC" | null): string | null => {
+  if (year == null) return null;
+  return era === "BC" ? `${year} BC` : `${year}`;
+};
+
 
 export default function BuildJourneyPage() {
   const supabase = useMemo(() => createClient(), []);
   const { profile, checking, error: profileError } = useCurrentUser();
+
+  const [langCode, setLangCode] = useState<string>("en");
 
   const [journeys, setJourneys] = useState<JourneySummary[]>([]);
   const [journeysLoading, setJourneysLoading] = useState(false);
@@ -324,9 +359,10 @@ export default function BuildJourneyPage() {
   const [profileNames, setProfileNames] = useState<Record<string, string>>({});
   const [journeyVisibilityMap, setJourneyVisibilityMap] = useState<Record<string, Visibility>>({});
   const [journeyFilter, setJourneyFilter] = useState<JourneyFilterValue>("all");
-  const [journeySort, setJourneySort] = useState<JourneySortValue>("approved_desc");
+  const [journeySort, setJourneySort] = useState<JourneySortValue>("approved_asc");
   const [journeyRatingMap, setJourneyRatingMap] = useState<Record<string, JourneyRating>>({});
-  const [activeTab, setActiveTab] = useState<"group" | "translations" | "media" | "events">("group");
+  const [activeTab, setActiveTab] = useState<"group" | "events">("group");
+  const [journeySubTab, setJourneySubTab] = useState<"general" | "translations" | "media">("general");
   const [availableEventTypes, setAvailableEventTypes] = useState<{ id: string; label: string }[]>([]);
   const [journeyEvents, setJourneyEvents] = useState<JourneyEventEditor[]>([]);
   const [selectedEventTempId, setSelectedEventTempId] = useState<string | null>(null);
@@ -338,6 +374,9 @@ export default function BuildJourneyPage() {
   const [relatedEventsError, setRelatedEventsError] = useState<string | null>(null);
   const [eventTabMap, setEventTabMap] = useState<Record<string, EventTab>>({});
   const [mediaFilterKind, setMediaFilterKind] = useState<MediaKind | "all">("all");
+  const [mapOverlayEventId, setMapOverlayEventId] = useState<string | null>(null);
+  const [mapRefreshToken, setMapRefreshToken] = useState<number>(0);
+  const [geocodeLoading, setGeocodeLoading] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -345,9 +384,11 @@ export default function BuildJourneyPage() {
   const [approvalSaving, setApprovalSaving] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalOk, setApprovalOk] = useState<string | null>(null);
+  const lastAutoSlugRef = useRef<string>("");
+  const lastAutoCodeRef = useRef<string>("");
   const correlationJourneyOptions = useMemo(() => {
     const formatLabel = (journey: JourneySummary) => {
-      const title = journey.title?.trim() || "(Untitled journey)";
+      const title = journey.title?.trim() || tUI(langCode, "journey.title_fallback");
       const years =
         journey.yearFrom != null || journey.yearTo != null
           ? `${journey.yearFrom ?? "?"}-${journey.yearTo ?? "?"}`
@@ -369,10 +410,83 @@ export default function BuildJourneyPage() {
     );
     const fallbackOptions = Array.from(orphanIds).map((id) => ({
       value: id,
-      label: `${id} (non in elenco)`,
+      label: `${id} ${tUI(langCode, "build.events.not_listed")}`,
     }));
-    return [{ value: "", label: "Seleziona journey" }, ...baseOptions, ...fallbackOptions];
-  }, [journeys, journeyEvents]);
+    return [{ value: "", label: tUI(langCode, "build.events.related_journey") }, ...baseOptions, ...fallbackOptions];
+  }, [journeys, journeyEvents, langCode]);
+
+  const mediaKindOptions = useMemo(
+    () => [
+      { value: "image" as MediaKind, label: tUI(langCode, "build.media.kind.image") },
+      { value: "video" as MediaKind, label: tUI(langCode, "build.media.kind.video") },
+      { value: "other" as MediaKind, label: tUI(langCode, "build.media.kind.other") },
+    ],
+    [langCode],
+  );
+
+  const journeyFilterOptions = useMemo(
+    () => [
+      { value: "all" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.all") },
+      { value: "public" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.public") },
+      { value: "private" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.private") },
+    ],
+    [langCode],
+  );
+
+  const journeySortOptions = useMemo(
+    () => [
+      { value: "approved_desc" as JourneySortValue, label: tUI(langCode, "build.sidebar.sort.last") },
+      { value: "approved_asc" as JourneySortValue, label: tUI(langCode, "build.sidebar.sort.first") },
+    ],
+    [langCode],
+  );
+
+  const languageOptions = useMemo(
+    () => [
+      { value: "it", label: "Italiano" },
+      { value: "en", label: "English" },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    let active = true;
+    const browserLang = typeof window !== "undefined" ? window.navigator.language : "en";
+    (async () => {
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError) {
+          console.warn("[BuildJourney] auth.getUser error:", userError.message);
+        }
+        if (!user) {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("language_code")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (error) {
+          console.warn("[BuildJourney] profiles.language_code error:", error.message);
+          if (active) setLangCode(browserLang);
+          return;
+        }
+        if (active) {
+          const lang = (data?.language_code as string | null) ?? null;
+          setLangCode(lang?.trim() || browserLang);
+        }
+      } catch (err: any) {
+        if (active) setLangCode(browserLang);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   const selectedJourney = useMemo(() => journeys.find((j) => j.id === selectedJourneyId) ?? null, [journeys, selectedJourneyId]);
   const filteredJourneys = useMemo(() => {
@@ -383,12 +497,14 @@ export default function BuildJourneyPage() {
   }, [journeyFilter, journeyVisibilityMap, journeys]);
   const sortedEvents = useMemo(() => {
     const toSortValue = (ev: JourneyEventEditor): number => {
-      if (ev.event.year_from != null) return ev.event.year_from;
+      const yearFrom = normalizeYearForEra(ev.event.year_from, ev.event.era);
+      if (yearFrom != null) return yearFrom;
       if (ev.event.exact_date) {
         const parsed = new Date(ev.event.exact_date);
         if (!isNaN(parsed.getTime())) return parsed.getTime();
       }
-      if (ev.event.year_to != null) return ev.event.year_to;
+      const yearTo = normalizeYearForEra(ev.event.year_to, ev.event.era);
+      if (yearTo != null) return yearTo;
       return Number.POSITIVE_INFINITY;
     };
     return [...journeyEvents]
@@ -404,6 +520,7 @@ export default function BuildJourneyPage() {
     () => journeyEvents.find((ev) => ev.tempId === selectedEventTempId) ?? null,
     [journeyEvents, selectedEventTempId],
   );
+  const toolbarSelectedEventTab = selectedEventTempId ? eventTabMap[selectedEventTempId] ?? "details" : "details";
 
   const buildEventsPayload = useCallback(
     (group_event_id: string): { events: JourneyEventEditPayload[]; delete_event_ids: string[] } => {
@@ -469,12 +586,102 @@ export default function BuildJourneyPage() {
     setApprovalOk(null);
   }, [profile?.id]);
 
+  // Auto-popola slug e code in base a titolo e descrizione, mantenendo la possibilità di override manuale.
+  useEffect(() => {
+    const autoSlug = buildAutoSlug(translation.title, ge.description);
+    const autoCode = buildAutoCode(translation.title, ge.description);
+
+    setGe((prev) => {
+      let next = prev;
+
+      if (autoSlug && (!prev.slug || prev.slug === lastAutoSlugRef.current)) {
+        next = next === prev ? { ...next, slug: autoSlug } : { ...next, slug: autoSlug };
+        lastAutoSlugRef.current = autoSlug;
+      }
+
+      const codeCandidate = autoCode || prev.code;
+      if (codeCandidate && (!prev.code || prev.code === lastAutoCodeRef.current)) {
+        next = next === prev ? { ...next, code: codeCandidate } : { ...next, code: codeCandidate };
+        lastAutoCodeRef.current = codeCandidate;
+      }
+
+      return next;
+    });
+  }, [translation.title, ge.description]);
+
   const handleNewJourney = () => {
     setSelectedJourneyId(null);
     resetForm();
     setSaveError(null);
     setSaveOk(null);
   };
+
+  const reverseGeocode = useCallback(async (lat: number, lng: number) => {
+    const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lng}`);
+    if (!res.ok) {
+      throw new Error("reverse geocode failed");
+    }
+    const data = await res.json();
+    return {
+      continent: (data?.continent as string) || null,
+      country: (data?.country as string) || null,
+      place: (data?.place as string) || null,
+    };
+  }, []);
+
+  const handleMapSelection = useCallback(
+    (tempId: string, lat: number, lng: number) => {
+      const continentGuess = inferContinentFromCoords(lat, lng);
+      const hint = `Lat ${lat.toFixed(3)}, Lon ${lng.toFixed(3)}`;
+
+      setJourneyEvents((prev) =>
+        prev.map((item) => {
+          if (item.tempId !== tempId) return item;
+          return {
+            ...item,
+            event: {
+              ...item.event,
+              latitude: lat,
+              longitude: lng,
+              continent: continentGuess ?? item.event.continent ?? hint,
+            },
+          };
+        }),
+      );
+      setMapRefreshToken((prev) => prev + 1);
+
+          setGeocodeLoading((prev) => ({ ...prev, [tempId]: true }));
+          reverseGeocode(lat, lng)
+            .then((geo) => {
+              setJourneyEvents((prev) =>
+                prev.map((item) => {
+                  if (item.tempId !== tempId) return item;
+                  return {
+                    ...item,
+                    event: {
+                      ...item.event,
+                      continent: geo.continent ?? item.event.continent,
+                      country: geo.country ?? item.event.country ?? "",
+                      location: geo.place ?? item.event.location ?? "",
+                    },
+                  };
+                }),
+              );
+              setMapRefreshToken((prev) => prev + 1);
+            })
+            .catch(() => {
+          // ignore geocode failures, keep manual edit
+        })
+        .finally(() =>
+          setGeocodeLoading((prev) => {
+            const next = { ...prev };
+            delete next[tempId];
+            return next;
+          }),
+        );
+    },
+    [reverseGeocode],
+  );
 
   const loadEventTypes = useCallback(async () => {
     try {
@@ -570,11 +777,11 @@ export default function BuildJourneyPage() {
       }
       setJourneyRatingMap(ratingMap);
     } catch (err: any) {
-      setJourneysError(err?.message || "Impossibile caricare i journeys.");
+      setJourneysError(err?.message || tUI(langCode, "build.messages.list_error"));
     } finally {
       setJourneysLoading(false);
     }
-  }, [profile?.id, supabase, journeySort]);
+  }, [profile?.id, supabase, journeySort, langCode]);
 
   const loadJourneyDetails = useCallback(async (journeyId: string | null) => {
     if (!journeyId) {
@@ -586,14 +793,13 @@ export default function BuildJourneyPage() {
       const { data: base, error: baseError } = await supabase.from("group_events").select("*").eq("id", journeyId).maybeSingle();
       if (baseError) throw baseError;
       if (!base) {
-        throw new Error("Journey non trovato.");
+        throw new Error(tUI(langCode, "build.messages.not_found"));
       }
       const language = (base.language as string) || DEFAULT_LANGUAGE;
       setGe((prev) => ({
         ...prev,
         cover_url: base.cover_url || "",
         visibility: (base.visibility || "private") as Visibility,
-        pitch: base.pitch || "",
         description: base.description || "",
         language,
         slug: base.slug || "",
@@ -616,16 +822,14 @@ export default function BuildJourneyPage() {
 
       const { data: translationsData, error: translationsError } = await supabase
         .from("group_event_translations")
-        .select("lang,title,short_name,description,video_url")
+        .select("lang,title,description")
         .eq("group_event_id", journeyId);
       if (translationsError) throw translationsError;
       const normalized = (translationsData ?? [])
         .map((row) => ({
           lang: (row.lang || "").trim(),
           title: row.title || "",
-          short_name: row.short_name || "",
           description: row.description || "",
-          video_url: row.video_url || "",
         }))
         .filter((row) => row.lang);
       const translationsForUI =
@@ -641,9 +845,7 @@ export default function BuildJourneyPage() {
         setTranslation({
           lang: mainTranslation.lang,
           title: mainTranslation.title || "",
-          short_name: mainTranslation.short_name || "",
           description: mainTranslation.description || "",
-          video_url: mainTranslation.video_url || "",
         });
       } else {
         setSelectedTranslationLang(DEFAULT_LANGUAGE);
@@ -852,7 +1054,7 @@ export default function BuildJourneyPage() {
         setRelatedEvents(
           mapped.map((ev) => ({
             event_id: ev.event_id || ev.tempId,
-            title: ev.translation.title || "(Untitled event)",
+            title: ev.translation.title || tUI(langCode, "build.events.new"),
             description_short: ev.translation.description_short,
             exact_date: ev.event.exact_date,
             year_from: ev.event.year_from,
@@ -862,17 +1064,17 @@ export default function BuildJourneyPage() {
           })),
         );
       } catch (evErr: any) {
-        setRelatedEventsError(evErr?.message || "Errore nel caricamento degli eventi collegati.");
+        setRelatedEventsError(evErr?.message || tUI(langCode, "build.messages.related_events_error"));
       } finally {
         setRelatedEventsLoading(false);
       }
 
     } catch (err: any) {
-      setJourneyDetailsError(err?.message || "Errore durante il caricamento dei dettagli.");
+      setJourneyDetailsError(err?.message || tUI(langCode, "build.messages.details_error"));
     } finally {
       setLoadingJourneyDetails(false);
     }
-  }, [supabase, profile?.id, setGroupEventMedia]);
+  }, [supabase, profile?.id, setGroupEventMedia, langCode]);
 
   useEffect(() => {
     loadJourneys();
@@ -961,9 +1163,7 @@ export default function BuildJourneyPage() {
       setTranslation({
         lang: tr.lang,
         title: tr.title || "",
-        short_name: tr.short_name || "",
         description: tr.description || "",
-        video_url: tr.video_url || "",
       });
     },
     [translations],
@@ -1048,9 +1248,11 @@ export default function BuildJourneyPage() {
 
   const formatEventDateLabel = useCallback((ev: JourneyEventEditor) => {
     if (ev.event.exact_date) return ev.event.exact_date;
-    if (ev.event.year_from && ev.event.year_to) return `${ev.event.year_from}-${ev.event.year_to}`;
-    if (ev.event.year_from) return `${ev.event.year_from}`;
-    if (ev.event.year_to) return `${ev.event.year_to}`;
+    const yearFrom = formatYearWithEra(ev.event.year_from, ev.event.era);
+    const yearTo = formatYearWithEra(ev.event.year_to, ev.event.era);
+    if (yearFrom && yearTo) return `${yearFrom}-${yearTo}`;
+    if (yearFrom) return yearFrom;
+    if (yearTo) return yearTo;
     return "Data n/d";
   }, []);
 
@@ -1121,7 +1323,7 @@ export default function BuildJourneyPage() {
     setEventsSaveOk(null);
 
     if (!canSaveMetadata) {
-      setSaveError("Compila slug e codice per salvare il journey.");
+      setSaveError(tUI(langCode, "build.messages.metadata_required"));
       return;
     }
 
@@ -1134,9 +1336,7 @@ export default function BuildJourneyPage() {
       .map((row) => ({
         lang: row.lang?.trim() ?? "",
         title: row.title || undefined,
-        short_name: row.short_name || undefined,
         description: row.description || undefined,
-        video_url: row.video_url || undefined,
       }))
       .filter((row) => row.lang);
 
@@ -1160,7 +1360,6 @@ export default function BuildJourneyPage() {
         // Title is maintained in translations; group_events table no longer stores it.
         cover_url: ge.cover_url,
         visibility: ge.visibility,
-        pitch: ge.pitch || undefined,
         description: ge.description || undefined,
         language: ge.language || DEFAULT_LANGUAGE,
         slug: ge.slug || undefined,
@@ -1214,10 +1413,10 @@ export default function BuildJourneyPage() {
       if (!eventsError) {
         setSaveOk({ id: groupId });
       } else if (!saveError) {
-        setSaveError(eventsError?.message || "Errore salvataggio eventi.");
+        setSaveError(eventsError?.message || tUI(langCode, "build.messages.events_save_error"));
       }
     } catch (err: any) {
-      const msg = err?.message || "Errore di salvataggio.";
+      const msg = err?.message || tUI(langCode, "build.messages.save_error");
       setSaveError(msg);
       setEventsSaveError((prev) => prev || msg);
     } finally {
@@ -1227,18 +1426,18 @@ export default function BuildJourneyPage() {
 
   async function onDeleteJourney() {
     if (!selectedJourneyId) return;
-    if (!window.confirm("Eliminare definitivamente il journey e gli eventi collegati?")) return;
+    if (!window.confirm(tUI(langCode, "build.messages.delete_confirm"))) return;
     setDeleting(true);
     setDeleteError(null);
     setDeleteOk(null);
     try {
       await deleteJourneyCascade(selectedJourneyId);
-      setDeleteOk("Journey eliminato.");
+      setDeleteOk(tUI(langCode, "build.messages.delete_ok"));
       setSelectedJourneyId(null);
       resetForm();
       await loadJourneys();
     } catch (err: any) {
-      setDeleteError(err?.message || "Errore durante l'eliminazione.");
+      setDeleteError(err?.message || tUI(langCode, "build.messages.delete_error"));
     } finally {
       setDeleting(false);
     }
@@ -1246,7 +1445,7 @@ export default function BuildJourneyPage() {
 
   async function onRequestApproval() {
     if (!selectedJourneyId) {
-      setApprovalError("Seleziona un journey da inviare in approvazione.");
+      setApprovalError(tUI(langCode, "build.messages.select_for_approval"));
       return;
     }
     setApprovalSaving(true);
@@ -1254,11 +1453,11 @@ export default function BuildJourneyPage() {
     setApprovalOk(null);
     try {
       const res = await requestJourneyApproval(selectedJourneyId);
-      setApprovalOk(res.requested_approval_at || "Richiesta inviata.");
+      setApprovalOk(res.requested_approval_at || tUI(langCode, "build.messages.approval_sent"));
       setGe((prev) => ({ ...prev, workflow_state: "submitted", requested_approval_at: res.requested_approval_at || prev.requested_approval_at }));
       await loadJourneyDetails(selectedJourneyId);
     } catch (err: any) {
-      setApprovalError(err?.message || "Errore durante la richiesta di approvazione.");
+      setApprovalError(err?.message || tUI(langCode, "build.messages.approval_error"));
     } finally {
       setApprovalSaving(false);
     }
@@ -1267,261 +1466,71 @@ export default function BuildJourneyPage() {
 
   const renderGroupEventPage = () => {
     const allowFlags: { key: AllowFlagKey; label: string }[] = [
-      { key: "allow_fan", label: "Allow fan" },
-      { key: "allow_stud_high", label: "Allow stud high" },
-      { key: "allow_stud_middle", label: "Allow stud middle" },
-      { key: "allow_stud_primary", label: "Allow stud primary" },
+      { key: "allow_fan", label: tUI(langCode, "build.audience.fan") },
+      { key: "allow_stud_high", label: tUI(langCode, "build.audience.stud_high") },
+      { key: "allow_stud_middle", label: tUI(langCode, "build.audience.stud_middle") },
+      { key: "allow_stud_primary", label: tUI(langCode, "build.audience.stud_primary") },
     ];
 
     return (
       <section className="rounded-3xl border border-neutral-200/80 bg-white/80 backdrop-blur p-6 shadow-xl">
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-neutral-100 px-3 py-2">
-          <button
-            type="button"
-            className="w-32 rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
-            onClick={handleNewJourney}
-          >
-            New
-          </button>
-          <button
-            type="button"
-            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
-              canSaveJourney && !saving
-                ? "bg-gradient-to-r from-sky-600 to-sky-500 text-white hover:shadow-lg"
-                : "bg-neutral-200 text-neutral-500"
-            }`}
-            disabled={!canSaveJourney || saving}
-            onClick={onSave}
-          >
-            {saving ? "Salvataggio..." : "Save"}
-          </button>
-          <button
-            type="button"
-            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
-              selectedJourneyId && !approvalSaving
-                ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:shadow-lg"
-                : "bg-neutral-200 text-neutral-500"
-            }`}
-            disabled={!selectedJourneyId || approvalSaving}
-            onClick={onRequestApproval}
-          >
-            {approvalSaving ? "Invio..." : "Ask approval"}
-          </button>
-          <button
-            type="button"
-            className={`w-32 rounded-full px-4 py-2 text-sm font-semibold shadow-md transition text-center ${
-              selectedJourneyId && !deleting
-                ? "bg-gradient-to-r from-red-600 to-rose-500 text-white hover:shadow-lg"
-                : "bg-neutral-200 text-neutral-500"
-            }`}
-            disabled={!selectedJourneyId || deleting}
-            onClick={onDeleteJourney}
-          >
-            {deleting ? "Elimino..." : "Delete"}
-          </button>
-        </div>
-        <div className="mb-4 flex flex-wrap gap-2 rounded-xl border border-neutral-200 bg-neutral-100/90 px-2 py-2 shadow-sm">
-          <button
-            type="button"
-            className={`relative px-3 py-2 text-sm font-semibold transition ${
-              activeTab === "group" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-            }`}
-            onClick={() => setActiveTab("group")}
-          >
-            Group events
-            <span
-              className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                activeTab === "group" ? "bg-sky-600" : "bg-transparent"
+        <div className="mb-4 flex flex-nowrap items-center gap-2 rounded-2xl bg-white px-3 py-2">
+          <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
+            <button
+              type="button"
+              className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                activeTab === "group" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
               }`}
-            />
-          </button>
-          <button
-            type="button"
-            className={`relative px-3 py-2 text-sm font-semibold transition ${
-              activeTab === "translations" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-            }`}
-            onClick={() => setActiveTab("translations")}
-          >
-            Group translations
-            <span
-              className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                activeTab === "translations" ? "bg-sky-600" : "bg-transparent"
+              onClick={() => {
+                setActiveTab("group");
+                setJourneySubTab("general");
+              }}
+            >
+              {tUI(langCode, "build.tab.journey")}
+              <span
+                className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                  activeTab === "group" ? "bg-sky-600" : "bg-transparent"
+                }`}
+              />
+            </button>
+            <button
+              type="button"
+              className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                activeTab === "events" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
               }`}
-            />
-          </button>
-          <button
-            type="button"
-            className={`relative px-3 py-2 text-sm font-semibold transition ${
-              activeTab === "media" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-            }`}
-            onClick={() => setActiveTab("media")}
-          >
-            Group media
-            <span
-              className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                activeTab === "media" ? "bg-sky-600" : "bg-transparent"
-              }`}
-            />
-          </button>
-          <button
-            type="button"
-            className={`relative px-3 py-2 text-sm font-semibold transition ${
-              activeTab === "events" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-            }`}
-            onClick={() => setActiveTab("events")}
-          >
-            Eventi
-            <span
-              className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                activeTab === "events" ? "bg-sky-600" : "bg-transparent"
-              }`}
-            />
-          </button>
-        </div>
-
-        {activeTab === "group" && (
-          <div className="mt-6 space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
-                  <p className="text-sm font-semibold text-neutral-700">Dati identificativi</p>
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <Input
-                      label="Slug"
-                      value={ge.slug}
-                      onChange={(value) => setGe((prev) => ({ ...prev, slug: value }))}
-                      placeholder="Es. age-of-exploration"
-                    />
-                    <Input
-                      label="Code"
-                      value={ge.code}
-                      onChange={(value) => setGe((prev) => ({ ...prev, code: value }))}
-                      placeholder="Es. EXP001"
-                    />
-                    <Select
-                      label="Visibility"
-                      value={ge.visibility}
-                      onChange={(value) => setGe((prev) => ({ ...prev, visibility: value as Visibility }))}
-                      options={[
-                        { value: "private", label: "Private" },
-                        { value: "public", label: "Public" },
-                      ]}
-                    />
-                    <div>
-                      <p className="mb-1 text-sm font-medium text-neutral-700">Workflow state</p>
-                      <div className="rounded-xl border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm font-semibold text-neutral-700">
-                        {(ge.workflow_state || "draft").replace(/_/g, " ")}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
-                  <p className="text-sm font-semibold text-neutral-700">Audience flags</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {allowFlags.map((flag) => (
-                      <label
-                        key={flag.key}
-                        className="inline-flex items-center gap-2 rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600"
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
-                          checked={!!ge[flag.key]}
-                          onChange={(event) => setGe((prev) => ({ ...prev, [flag.key]: event.target.checked }))}
-                        />
-                        <span>{flag.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-6">
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-5">
-                  <ProfileField
-                    label="Owner profile"
-                    profileId={ge.owner_profile_id}
-                    displayName={getProfileDisplayName(ge.owner_profile_id)}
-                  />
-                  <div className="grid gap-6 md:grid-cols-3">
-                    <Input
-                      label="Requested approval at"
-                      type="datetime-local"
-                      value={toDateTimeLocalValue(ge.requested_approval_at)}
-                      onChange={(value) =>
-                        setGe((prev) => ({ ...prev, requested_approval_at: fromDateTimeLocalValue(value) }))
-                      }
-                    />
-                    <Input
-                      label="Approved at"
-                      type="datetime-local"
-                      value={toDateTimeLocalValue(ge.approved_at)}
-                      onChange={(value) => setGe((prev) => ({ ...prev, approved_at: fromDateTimeLocalValue(value) }))}
-                    />
-                    <Input
-                      label="Refused at"
-                      type="datetime-local"
-                      value={toDateTimeLocalValue(ge.refused_at)}
-                      onChange={(value) => setGe((prev) => ({ ...prev, refused_at: fromDateTimeLocalValue(value) }))}
-                    />
-                  </div>
-                  <div className="grid gap-6 md:grid-cols-2">
-                    <ProfileField
-                      label="Approved by profile"
-                      profileId={ge.approved_by_profile_id}
-                      displayName={getProfileDisplayName(ge.approved_by_profile_id)}
-                      className="w-full"
-                    />
-                    <ProfileField
-                      label="Refused by profile"
-                      profileId={ge.refused_by_profile_id}
-                      displayName={getProfileDisplayName(ge.refused_by_profile_id)}
-                      className="w-full"
-                    />
-                  </div>
-                  <Textarea
-                    label="Refusal reason"
-                    value={ge.refusal_reason}
-                    onChange={(value) => setGe((prev) => ({ ...prev, refusal_reason: value }))}
-                    placeholder="Spiega perch? ? stato rifiutato"
-                  />
-                </div>
-              </div>
-            </div>
+              onClick={() => {
+                setActiveTab("events");
+                if (selectedEventTempId) {
+                  setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: "details" }));
+                }
+              }}
+            >
+              {tUI(langCode, "build.tab.events")}
+              <span
+                className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                  activeTab === "events" ? "bg-sky-600" : "bg-transparent"
+                }`}
+              />
+            </button>
           </div>
-        )}
-
-        {activeTab === "media" && (
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-4 mt-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-neutral-700">Media</p>
-                <p className="text-xs text-neutral-500">Gestisci gli asset collegati al journey.</p>
-              </div>
-              <button
-                type="button"
-                className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600 hover:border-neutral-400"
-                onClick={addMediaItem}
-              >
-                + Nuovo media
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 pb-3">
-              {["all", ...Array.from(new Set(groupEventMedia.map((m) => m.kind || "image")))].map((kind) => {
-                const isActive = mediaFilterKind === kind;
-                const label =
-                  kind === "all"
-                    ? "Tutti"
-                    : MEDIA_KIND_OPTIONS.find((opt) => opt.value === kind)?.label || kind;
+          {activeTab === "group" && (
+            <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
+              {[
+                { value: "general", label: tUI(langCode, "build.group.tab.general") },
+                { value: "translations", label: tUI(langCode, "build.group.tab.translations") },
+                { value: "media", label: tUI(langCode, "build.group.tab.media") },
+              ].map((tab) => {
+                const isActive = journeySubTab === tab.value;
                 return (
                   <button
-                    key={kind}
+                    key={tab.value}
                     type="button"
-                    onClick={() => setMediaFilterKind(kind as MediaKind | "all")}
                     className={`relative px-3 py-2 text-sm font-semibold transition ${
                       isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
                     }`}
+                    onClick={() => setJourneySubTab(tab.value as typeof journeySubTab)}
                   >
-                    {label}
+                    {tab.label}
                     <span
                       className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
                         isActive ? "bg-sky-600" : "bg-transparent"
@@ -1531,13 +1540,287 @@ export default function BuildJourneyPage() {
                 );
               })}
             </div>
+          )}
+          {activeTab === "events" && (
+            <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
+              {[
+                { value: "details", label: tUI(langCode, "build.event.tab.when_where") },
+                { value: "translations", label: tUI(langCode, "build.event.tab.translations") },
+                { value: "media", label: tUI(langCode, "build.event.tab.media") },
+                { value: "relations", label: tUI(langCode, "build.event.tab.details") },
+              ].map((tab) => {
+                const isActive = toolbarSelectedEventTab === tab.value;
+                const disabled = !selectedEventTempId;
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                      disabled
+                        ? "text-neutral-400 cursor-not-allowed"
+                        : isActive
+                        ? "text-sky-700"
+                        : "text-neutral-500 hover:text-neutral-700"
+                    }`}
+                    onClick={() => {
+                      if (disabled || !selectedEventTempId) return;
+                      setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: tab.value as EventTab }));
+                    }}
+                    disabled={disabled}
+                  >
+                    {tab.label}
+                    <span
+                      className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                        isActive ? "bg-sky-600" : "bg-transparent"
+                      }`}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <div className="flex flex-nowrap items-center gap-2 ml-auto">
+            <button
+              type="button"
+              className="h-9 w-24 rounded-full border border-sky-200 bg-white px-2.5 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
+              onClick={handleNewJourney}
+            >
+              {tUI(langCode, "build.actions.new")}
+            </button>
+            <button
+              type="button"
+              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+                canSaveJourney && !saving
+                  ? "bg-gradient-to-r from-sky-600 to-sky-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500"
+              }`}
+              disabled={!canSaveJourney || saving}
+              onClick={onSave}
+            >
+              {saving ? tUI(langCode, "build.actions.save.loading") : tUI(langCode, "build.actions.save")}
+            </button>
+            <button
+              type="button"
+              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+                selectedJourneyId && !approvalSaving
+                  ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500"
+              }`}
+              disabled={!selectedJourneyId || approvalSaving}
+              onClick={onRequestApproval}
+            >
+              {approvalSaving ? tUI(langCode, "build.actions.approval.loading") : tUI(langCode, "build.actions.approval")}
+            </button>
+            <button
+              type="button"
+              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+                selectedJourneyId && !deleting
+                  ? "bg-gradient-to-r from-red-600 to-rose-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500"
+              }`}
+              disabled={!selectedJourneyId || deleting}
+              onClick={onDeleteJourney}
+            >
+              {deleting ? tUI(langCode, "build.actions.delete.loading") : tUI(langCode, "build.actions.delete")}
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "group" && (
+          <div className="mt-6 space-y-6">
+
+            {journeySubTab === "general" && (
+              <div className="grid gap-6 lg:grid-cols-2">
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Select
+                        label={tUI(langCode, "build.group.visibility")}
+                        value={ge.visibility}
+                        onChange={(value) => setGe((prev) => ({ ...prev, visibility: value as Visibility }))}
+                        options={[
+                          { value: "private", label: tUI(langCode, "build.sidebar.filter.private") },
+                          { value: "public", label: tUI(langCode, "build.sidebar.filter.public") },
+                        ]}
+                      />
+                      <div>
+                        <p className="mb-1 text-sm font-medium text-neutral-700">{tUI(langCode, "build.group.workflow")}</p>
+                        <div className="rounded-xl border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm font-semibold text-neutral-700">
+                          {(ge.workflow_state || tUI(langCode, "build.group.workflow.draft")).replace(/_/g, " ")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
+                    <p className="text-sm font-semibold text-neutral-700">{tUI(langCode, "build.group.audience")}</p>
+                    <div className="mt-3 flex flex-col gap-2">
+                      {allowFlags.map((flag) => (
+                        <label
+                          key={flag.key}
+                          className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 bg-white"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
+                            checked={!!ge[flag.key]}
+                            onChange={(event) => setGe((prev) => ({ ...prev, [flag.key]: event.target.checked }))}
+                          />
+                          <span>{flag.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Input
+                        label={tUI(langCode, "build.group.slug")}
+                        value={ge.slug}
+                        placeholder={tUI(langCode, "build.group.slug.placeholder")}
+                        disabled
+                      />
+                      <Input
+                        label={tUI(langCode, "build.group.code")}
+                        value={ge.code}
+                        placeholder={tUI(langCode, "build.group.code.placeholder")}
+                        disabled
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <ProfileField
+                          label={tUI(langCode, "build.group.owner")}
+                          profileId={ge.owner_profile_id}
+                          displayName={getProfileDisplayName(ge.owner_profile_id)}
+                          className="flex-1 min-w-[160px]"
+                          size="sm"
+                        />
+                        <Input
+                          label={tUI(langCode, "build.group.created_at")}
+                          type="datetime-local"
+                          value={toDateTimeLocalValue(ge.created_at)}
+                          disabled
+                          size="sm"
+                          className="w-[135px]"
+                        />
+                        <Input
+                          label={tUI(langCode, "build.group.updated_at")}
+                          type="datetime-local"
+                          value={toDateTimeLocalValue(ge.updated_at)}
+                          disabled
+                          size="sm"
+                          className="w-[135px]"
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <ProfileField
+                          label={tUI(langCode, "build.group.approved_by")}
+                          profileId={ge.approved_by_profile_id}
+                          displayName={getProfileDisplayName(ge.approved_by_profile_id)}
+                          className="flex-1 min-w-[160px]"
+                          size="sm"
+                        />
+                        <Input
+                          label={tUI(langCode, "build.group.approved_at")}
+                          type="datetime-local"
+                          value={toDateTimeLocalValue(ge.approved_at)}
+                          disabled
+                          size="sm"
+                          className="w-[135px]"
+                        />
+                        <Input
+                          label={tUI(langCode, "build.group.requested_at")}
+                          type="datetime-local"
+                          value={toDateTimeLocalValue(ge.requested_approval_at)}
+                          disabled
+                          size="sm"
+                          className="w-[135px]"
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-3">
+                      <div className="flex flex-wrap items-end gap-3">
+                        <ProfileField
+                          label={tUI(langCode, "build.group.refused_by")}
+                          profileId={ge.refused_by_profile_id}
+                          displayName={getProfileDisplayName(ge.refused_by_profile_id)}
+                          className="flex-1 min-w-[160px]"
+                          size="sm"
+                        />
+                        <Input
+                          label={tUI(langCode, "build.group.refused_at")}
+                          type="datetime-local"
+                          value={toDateTimeLocalValue(ge.refused_at)}
+                          disabled
+                          size="sm"
+                          className="w-[135px]"
+                        />
+                      </div>
+                      <Textarea
+                        label={tUI(langCode, "build.group.refusal_reason")}
+                        value={ge.refusal_reason}
+                        onChange={(value) => setGe((prev) => ({ ...prev, refusal_reason: value }))}
+                        placeholder={tUI(langCode, "build.group.refusal_reason.placeholder")}
+                        className="md:col-span-3"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "group" && journeySubTab === "media" && (
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-6 space-y-3 mt-6">
+            <div className="flex flex-nowrap items-center gap-2 border-b border-neutral-200 pb-3">
+              <div className="flex flex-nowrap items-center gap-2">
+                {["all", ...Array.from(new Set(groupEventMedia.map((m) => m.kind || "image")))].map((kind) => {
+                  const isActive = mediaFilterKind === kind;
+                  const label =
+                    kind === "all"
+                      ? tUI(langCode, "build.media.filter_all")
+                      : mediaKindOptions.find((opt) => opt.value === kind)?.label || kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      onClick={() => setMediaFilterKind(kind as MediaKind | "all")}
+                      className={`relative px-3 py-2 text-sm font-semibold transition ${
+                        isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
+                      }`}
+                    >
+                      {label}
+                      <span
+                        className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                          isActive ? "bg-sky-600" : "bg-transparent"
+                        }`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="ml-auto rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-600 hover:border-neutral-400 whitespace-nowrap"
+                onClick={addMediaItem}
+              >
+                + {tUI(langCode, "build.media.add")}
+              </button>
+            </div>
             {mediaFilterKind !== "all" && (
               <p className="text-xs text-neutral-500">
-                Filtrati media di tipo: {MEDIA_KIND_OPTIONS.find((opt) => opt.value === mediaFilterKind)?.label || mediaFilterKind}
+                {tUI(langCode, "build.media.filter_prefix")} {mediaKindOptions.find((opt) => opt.value === mediaFilterKind)?.label || mediaFilterKind}
               </p>
             )}
             {groupEventMedia.length === 0 ? (
-              <p className="text-sm text-neutral-500">Nessun media collegato.</p>
+              <p className="text-sm text-neutral-500">{tUI(langCode, "build.media.empty")}</p>
             ) : (
               <div className="space-y-3">
                 {(mediaFilterKind === "all"
@@ -1545,71 +1828,55 @@ export default function BuildJourneyPage() {
                   : groupEventMedia.filter((m) => m.kind === mediaFilterKind)
                 ).map((media, index) => {
                   const originalIndex = groupEventMedia.findIndex((m) => m.tempId === media.tempId);
-                  const position = (originalIndex >= 0 ? originalIndex : index) + 1;
-                  const safeIndex = originalIndex >= 0 ? originalIndex : index;
+                  const safeIndex = originalIndex === -1 ? index : originalIndex;
+                  const position = index + 1;
                   return (
                     <div
                       key={media.id ?? media.media_id ?? media.tempId ?? index}
                       className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">
-                          Posizione {position}
-                        </p>
+                      <div className="grid gap-4 items-end sm:grid-cols-[110px_1fr_180px_auto]">
+                        <Input
+                          label={tUI(langCode, "build.media.order")}
+                          type="number"
+                          className="w-24"
+                          value={(media.sort_order ?? position).toString()}
+                          onChange={(value) =>
+                            updateMediaItemField(safeIndex, "sort_order", value ? Number(value) : undefined)
+                          }
+                        />
+                        <Input
+                          label={tUI(langCode, "build.media.title")}
+                          value={media.title}
+                          onChange={(value) => updateMediaItemField(safeIndex, "title", value)}
+                          placeholder={tUI(langCode, "build.media.title.placeholder")}
+                        />
+                        <Select
+                          label={tUI(langCode, "build.media.type")}
+                          value={media.kind}
+                          onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
+                          options={mediaKindOptions}
+                        />
                         <button
                           type="button"
-                          className="text-xs font-semibold text-red-600"
+                          className="self-end text-xs font-semibold text-red-600"
                           onClick={() => removeMediaItem(safeIndex)}
                         >
-                          Elimina
+                          {tUI(langCode, "build.media.delete")}
                         </button>
                       </div>
                       <div className="grid gap-4 md:grid-cols-2">
                         <Input
-                          label="URL pubblico"
+                          label={tUI(langCode, "build.media.public_url")}
                           value={media.public_url}
                           onChange={(value) => updateMediaItemField(safeIndex, "public_url", value)}
-                          placeholder="https://"
+                          placeholder={tUI(langCode, "build.media.url.placeholder")}
                         />
                         <Input
-                          label="URL sorgente"
+                          label={tUI(langCode, "build.media.source_url")}
                           value={media.source_url}
                           onChange={(value) => updateMediaItemField(safeIndex, "source_url", value)}
-                          placeholder="https://"
-                        />
-                      </div>
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <Input
-                          label="Titolo"
-                          value={media.title}
-                          onChange={(value) => updateMediaItemField(safeIndex, "title", value)}
-                          placeholder="Titolo asset"
-                        />
-                        <Input
-                          label="Didascalia"
-                          value={media.caption}
-                          onChange={(value) => updateMediaItemField(safeIndex, "caption", value)}
-                          placeholder="Didascalia"
-                        />
-                        <Input
-                          label="Alt text"
-                          value={media.alt_text}
-                          onChange={(value) => updateMediaItemField(safeIndex, "alt_text", value)}
-                          placeholder="Alt text"
-                        />
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Select
-                          label="Tipo"
-                          value={media.kind}
-                          onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
-                          options={MEDIA_KIND_OPTIONS}
-                        />
-                        <Input
-                          label="Ordine"
-                          type="number"
-                          value={(media.sort_order ?? position).toString()}
-                          onChange={(value) => updateMediaItemField(safeIndex, "sort_order", value ? Number(value) : undefined)}
+                          placeholder={tUI(langCode, "build.media.url.placeholder")}
                         />
                       </div>
                     </div>
@@ -1620,43 +1887,12 @@ export default function BuildJourneyPage() {
           </div>
         )}
 
-        {activeTab === "translations" && (
+        {activeTab === "group" && journeySubTab === "translations" && (
           <div className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-4 mt-6 space-y-4 min-h-[80vh]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Lingue disponibili</p>
-                <p className="text-sm text-neutral-500">Seleziona una lingua per modificare la traduzione.</p>
-              </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-2">
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  className="w-[120px] rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  placeholder="es. en"
-                  value={newTranslationLang}
-                  onChange={(e) => setNewTranslationLang(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
-                  onClick={addTranslation}
-                >
-                  + Aggiungi lingua
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-red-600 hover:border-neutral-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={removeTranslation}
-                  disabled={translations.length <= 1}
-                >
-                  Rimuovi lingua
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <div className="flex min-w-max gap-2 border-b border-neutral-200 pb-2">
                 {translations.length === 0 ? (
-                  <p className="text-sm text-neutral-500">Nessuna traduzione disponibile.</p>
+                  <p className="text-sm text-neutral-500">{tUI(langCode, "build.translations.none")}</p>
                 ) : (
                   translations.map((tr) => {
                     const isActive = tr.lang === selectedTranslationLang;
@@ -1677,52 +1913,46 @@ export default function BuildJourneyPage() {
                   })
                 )}
               </div>
+              <div className="flex flex-wrap items-center gap-2 ml-auto">
+                <Select
+                  value={newTranslationLang}
+                  onChange={(value) => setNewTranslationLang(value)}
+                  options={[{ value: "", label: tUI(langCode, "build.translations.select") }, ...languageOptions]}
+                  className="w-[190px]"
+                />
+                <button
+                  type="button"
+                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={addTranslation}
+                  disabled={!newTranslationLang.trim()}
+                >
+                  + {tUI(langCode, "build.translations.add")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-red-600 hover:border-neutral-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={removeTranslation}
+                  disabled={translations.length <= 1}
+                >
+                  {tUI(langCode, "build.translations.remove")}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                Lingua attiva: {selectedTranslationLang || "-"}
-              </p>
-              <div className="grid gap-6 md:grid-cols-2">
-                <Input
-                  label="Title"
-                  value={translation.title}
-                  onChange={(value) => updateTranslationField("title", value)}
-                  placeholder="Titolo pubblico"
-                />
-                <Input
-                  label="Short name"
-                  value={translation.short_name}
-                  onChange={(value) => updateTranslationField("short_name", value)}
-                  placeholder="Nome breve"
-                />
-              </div>
+              <Input
+                label={tUI(langCode, "build.translations.title")}
+                value={translation.title}
+                onChange={(value) => updateTranslationField("title", value)}
+                placeholder={tUI(langCode, "build.translations.title.placeholder")}
+              />
               <Textarea
-                label="Description"
+                label={tUI(langCode, "build.translations.description")}
                 value={translation.description}
                 onChange={(value) => updateTranslationField("description", value)}
-                placeholder="Descrizione estesa"
+                placeholder={tUI(langCode, "build.translations.description.placeholder")}
                 className="min-h-[320px]"
               />
-              <Input
-                label="Video URL"
-                value={translation.video_url}
-                onChange={(value) => updateTranslationField("video_url", value)}
-                placeholder="https://"
-              />
-            </div>
-
-            <div className="border-t border-neutral-200 pt-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-[11px] text-neutral-500">Created at</p>
-                  <p className="text-sm text-neutral-700">{ge.created_at || "---"}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-neutral-500">Updated at</p>
-                  <p className="text-sm text-neutral-700">{ge.updated_at || "---"}</p>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -1732,7 +1962,7 @@ export default function BuildJourneyPage() {
             <div className="mt-2 grid grid-cols-[320px_minmax(0,_1fr)] items-start gap-4">
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3 max-h-[60vh] overflow-y-auto space-y-2">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-neutral-700">Eventi</p>
+                  <p className="text-xs font-semibold text-neutral-700">{tUI(langCode, "build.events.list")}</p>
                   <button
                     type="button"
                     className="rounded-full border border-neutral-300 px-3 py-1 text-xs font-semibold text-neutral-700 hover:border-neutral-400"
@@ -1743,15 +1973,15 @@ export default function BuildJourneyPage() {
                       setSelectedEventTempId(newEvent.tempId);
                     }}
                   >
-                    + Aggiungi evento
+                    + {tUI(langCode, "build.events.add")}
                   </button>
                 </div>
                 {relatedEventsLoading ? (
-                  <p className="text-sm text-neutral-500">Caricamento eventi.</p>
+                  <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.loading")}</p>
                 ) : relatedEventsError ? (
                   <p className="text-sm text-red-600">{relatedEventsError}</p>
                 ) : journeyEvents.length === 0 ? (
-                  <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
+                  <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.empty")}</p>
                 ) : (
                   sortedEvents.map((ev, idx) => {
                     const isActive = ev.tempId === selectedEventTempId;
@@ -1769,7 +1999,7 @@ export default function BuildJourneyPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-neutral-900">
-                              {ev.translation.title || "(Nuovo evento)"}
+                              {ev.translation.title || tUI(langCode, "build.events.new")}
                             </p>
                             <p className="text-xs text-neutral-500">{formatEventDateLabel(ev)}</p>
                           </div>
@@ -1785,7 +2015,7 @@ export default function BuildJourneyPage() {
                                 handleRemoveEvent(ev);
                               }}
                             >
-                              Elimina
+                              {tUI(langCode, "build.events.delete")}
                             </button>
                           </div>
                         </div>
@@ -1795,65 +2025,44 @@ export default function BuildJourneyPage() {
                 )}
               </div>
               <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-3 max-h-[80vh] overflow-y-auto">
-                {relatedEventsLoading ? (
-                  <p className="text-sm text-neutral-500">Caricamento eventi.</p>
-                ) : relatedEventsError ? (
-                  <p className="text-sm text-red-600">{relatedEventsError}</p>
-                ) : journeyEvents.length === 0 ? (
-                  <p className="text-sm text-neutral-500">Nessun evento collegato.</p>
-                ) : (
+              {relatedEventsLoading ? (
+                <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.loading")}</p>
+              ) : relatedEventsError ? (
+                <p className="text-sm text-red-600">{relatedEventsError}</p>
+              ) : journeyEvents.length === 0 ? (
+                <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.empty")}</p>
+              ) : (
                   sortedEvents.map((ev, idx) => {
                     if (ev.tempId !== selectedEventTempId) return null;
                     const dateLabel = formatEventDateLabel(ev);
-                  const eventTabs: { value: EventTab; label: string }[] = [
-                    { value: "details", label: "Dettagli" },
-                    { value: "translations", label: "Traduzioni" },
-                    { value: "relations", label: "Tipi e correlazioni" },
-                    { value: "media", label: "Media" },
-                  ];
                   const activeEventTab = eventTabMap[ev.tempId] || "details";
                   return (
                     <div key={ev.tempId} className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 space-y-3">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {eventTabs.map((tab) => {
-                            const isActive = tab.value === activeEventTab;
-                            return (
-                              <button
-                                key={tab.value}
-                              type="button"
-                              onClick={() =>
-                                setEventTabMap((prev) => ({
-                                  ...prev,
-                                  [ev.tempId]: tab.value,
-                                }))
-                              }
-                              className={`relative px-3 py-2 text-sm font-semibold transition ${
-                                isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-                              }`}
-                              >
-                                {tab.label}
-                                <span
-                                  className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                                    isActive ? "bg-sky-600" : "bg-transparent"
-                                  }`}
-                                />
-                              </button>
-                            );
-                          })}
-                          <div className="ml-auto flex items-center gap-2">
-                            <button
-                              type="button"
-                              className="text-xs font-semibold text-red-600"
-                              onClick={() => handleRemoveEvent(ev)}
-                            >
-                              Elimina
-                            </button>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-neutral-800">{ev.translation.title || tUI(langCode, "build.events.new")}</p>
+                            <p className="text-xs text-neutral-500">{dateLabel}</p>
                           </div>
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-sky-700"
+                            onClick={() =>
+                              setJourneyEvents((prev) =>
+                                prev.map((item) =>
+                                  item.tempId === ev.tempId
+                                    ? { ...item, media: [...item.media, createEmptyGroupEventMediaItem()] }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            + {tUI(langCode, "build.media.add")}
+                          </button>
                         </div>
                         <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "details" ? "" : "hidden"}`}>
                           <div className="grid gap-3 md:grid-cols-4">
                             <Select
-                              label="Era"
+                              label={tUI(langCode, "build.events.era")}
                               value={ev.event.era || "AD"}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1870,7 +2079,7 @@ export default function BuildJourneyPage() {
                               ]}
                             />
                             <Input
-                              label="Anno da"
+                              label={tUI(langCode, "build.events.year_from")}
                               value={ev.event.year_from?.toString() ?? ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1884,7 +2093,7 @@ export default function BuildJourneyPage() {
                               type="number"
                             />
                             <Input
-                              label="Anno a"
+                              label={tUI(langCode, "build.events.year_to")}
                               value={ev.event.year_to?.toString() ?? ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1898,7 +2107,7 @@ export default function BuildJourneyPage() {
                               type="number"
                             />
                             <Input
-                              label="Data esatta"
+                              label={tUI(langCode, "build.events.exact_date")}
                               value={ev.event.exact_date || ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1914,35 +2123,27 @@ export default function BuildJourneyPage() {
                           </div>
                         <div className="grid gap-3 md:grid-cols-[1.1fr_1fr]">
                           <div className="rounded-xl border border-neutral-200 bg-white p-3">
-                            <MapPicker
-                              lat={ev.event.latitude ?? null}
-                              lng={ev.event.longitude ?? null}
-                              onChange={({ lat, lng }) =>
-                                setJourneyEvents((prev) =>
-                                  prev.map((item) => {
-                                    if (item.tempId !== ev.tempId) return item;
-                                    const continentGuess = inferContinentFromCoords(lat, lng);
-                                    const hint = `Lat ${lat.toFixed(3)}, Lon ${lng.toFixed(3)}`;
-                                    return {
-                                      ...item,
-                                      event: {
-                                        ...item.event,
-                                        latitude: lat,
-                                        longitude: lng,
-                                        continent: continentGuess ?? item.event.continent ?? hint,
-                                        country: item.event.country ?? "",
-                                        location: item.event.location ?? "",
-                                      },
-                                    };
-                                  }),
-                                )
-                              }
-                            />
+                            <div className="relative">
+                              <button
+                                type="button"
+                                className="absolute left-3 top-3 z-10 flex items-center justify-center rounded-full border border-neutral-300 bg-white/90 p-2 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+                                aria-label={tUI(langCode, "build.events.map.expand")}
+                                onClick={() => setMapOverlayEventId(ev.tempId)}
+                              >
+                                <span aria-hidden="true">⤢</span>
+                              </button>
+                              <MapPicker
+                                key={`${ev.tempId}-${mapRefreshToken}`}
+                                lat={ev.event.latitude ?? null}
+                                lng={ev.event.longitude ?? null}
+                                onChange={({ lat, lng }) => handleMapSelection(ev.tempId, lat, lng)}
+                              />
+                            </div>
                           </div>
                           <div className="space-y-3">
                             <div className="grid gap-3 sm:grid-cols-2">
                               <Input
-                                label="Latitudine"
+                                label={tUI(langCode, "build.events.latitude")}
                                 className="sm:max-w-[180px]"
                                 value={ev.event.latitude?.toString() ?? ""}
                                 onChange={(value) =>
@@ -1957,7 +2158,7 @@ export default function BuildJourneyPage() {
                                 type="number"
                               />
                               <Input
-                                label="Longitudine"
+                                label={tUI(langCode, "build.events.longitude")}
                                 className="sm:max-w-[180px]"
                                 value={ev.event.longitude?.toString() ?? ""}
                                 onChange={(value) =>
@@ -1973,7 +2174,7 @@ export default function BuildJourneyPage() {
                               />
                             </div>
                             <Input
-                              label="Continent"
+                              label={tUI(langCode, "build.events.continent")}
                               value={ev.event.continent || ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1986,7 +2187,7 @@ export default function BuildJourneyPage() {
                               }
                             />
                             <Input
-                              label="Paese"
+                              label={tUI(langCode, "build.events.country")}
                               value={ev.event.country || ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -1997,7 +2198,7 @@ export default function BuildJourneyPage() {
                               }
                             />
                             <Input
-                              label="Luogo"
+                              label={tUI(langCode, "build.events.location")}
                               value={ev.event.location || ""}
                               onChange={(value) =>
                                 setJourneyEvents((prev) =>
@@ -2011,8 +2212,8 @@ export default function BuildJourneyPage() {
                         </div>
                       </div>
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "translations" ? "" : "hidden"}`}>
-                        <div className="space-y-2">
-                          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">Lingua</p>
+                          <div className="space-y-2">
+                          <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-500">{tUI(langCode, "build.events.language")}</p>
                           <div className="flex flex-wrap gap-2">
                             {Array.from(
                               new Set([ev.activeLang, ...ev.translations_all.map((t) => t.lang || DEFAULT_LANGUAGE)]),
@@ -2051,9 +2252,9 @@ export default function BuildJourneyPage() {
                             })}
                           </div>
                         </div>
-                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="grid gap-4 md:grid-cols-2">
                           <Input
-                            label="Titolo"
+                            label={tUI(langCode, "build.events.title")}
                             value={ev.translation.title}
                             onChange={(value) => {
                               setJourneyEvents((prev) =>
@@ -2071,7 +2272,7 @@ export default function BuildJourneyPage() {
                             }}
                           />
                           <Input
-                            label="Wikipedia URL"
+                            label={tUI(langCode, "build.events.wikipedia")}
                             value={ev.translation.wikipedia_url}
                             onChange={(value) => {
                               setJourneyEvents((prev) =>
@@ -2090,7 +2291,7 @@ export default function BuildJourneyPage() {
                           />
                         </div>
                         <Textarea
-                          label="Descrizione"
+                          label={tUI(langCode, "build.events.description")}
                           value={ev.translation.description}
                           onChange={(value) => {
                             setJourneyEvents((prev) =>
@@ -2111,7 +2312,7 @@ export default function BuildJourneyPage() {
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "relations" ? "" : "hidden"}`}>
                         <div className="space-y-2">
                           <Select
-                            label="Tipo evento"
+                            label={tUI(langCode, "build.events.type")}
                             value={ev.type_codes[0] || ""}
                             onChange={(value) =>
                               setJourneyEvents((prev) =>
@@ -2120,15 +2321,15 @@ export default function BuildJourneyPage() {
                                 ),
                               )
                             }
-                            options={[{ value: "", label: "Seleziona tipo" }, ...availableEventTypes.map((opt) => ({ value: opt.id, label: opt.label }))]}
+                            options={[{ value: "", label: tUI(langCode, "build.events.type.placeholder") }, ...availableEventTypes.map((opt) => ({ value: opt.id, label: opt.label }))]}
                           />
                         </div>
                         <div className="space-y-2">
                         {(ev.correlations.length === 0 ? [{ group_event_id: "", correlation_type: "related" }] : ev.correlations).map(
                           (corr, cIdx) => (
                             <div key={cIdx} className="space-y-2">
-                              <Select
-                                label="Journey correlato"
+                                <Select
+                                label={tUI(langCode, "build.events.related_journey")}
                                 value={corr.group_event_id || ""}
                                 onChange={(value) =>
                                   setJourneyEvents((prev) =>
@@ -2158,181 +2359,119 @@ export default function BuildJourneyPage() {
                             )
                           }
                         >
-                          + Aggiungi correlazione
+                          + {tUI(langCode, "build.events.add_relation")}
                         </button>
                       </div>
                       </div>
                       <div className={`space-y-3 rounded-lg border border-neutral-200 bg-white p-3 ${activeEventTab === "media" ? "" : "hidden"}`}>
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Media (media_assets + media_attachments)</p>
-                          <button
-                            type="button"
-                            className="text-xs font-semibold text-neutral-700"
-                            onClick={() =>
-                              setJourneyEvents((prev) =>
-                                prev.map((item) =>
-                                  item.tempId === ev.tempId
-                                    ? { ...item, media: [...item.media, createEmptyGroupEventMediaItem()] }
-                                    : item,
-                                ),
-                              )
-                            }
-                          >
-                            + Media
-                          </button>
-                        </div>
                         {ev.media.length === 0 ? (
-                          <p className="text-sm text-neutral-500">Nessun media per l'evento.</p>
+                          <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.media.empty")}</p>
                         ) : (
-                          ev.media.map((m, mIdx) => (
-                            <div key={m.tempId} className="rounded-lg border border-neutral-200 bg-white p-3 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">Item {mIdx + 1}</p>
-                                <button
-                                  type="button"
-                                  className="text-xs text-red-600"
-                                  onClick={() =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) =>
-                                        item.tempId === ev.tempId
-                                          ? { ...item, media: item.media.filter((_, idx) => idx !== mIdx) }
-                                          : item,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  Elimina
-                                </button>
+                          ev.media.map((m, mIdx) => {
+                            const itemPosition = mIdx + 1;
+                            return (
+                              <div key={m.tempId} className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
+                                <div className="grid gap-4 items-end sm:grid-cols-[110px_1fr_180px_auto]">
+                                  <Input
+                                    label={tUI(langCode, "build.media.order")}
+                                    type="number"
+                                    className="w-24"
+                                    value={(m.sort_order ?? itemPosition).toString()}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = {
+                                            ...nextMedia[mIdx],
+                                            sort_order: value ? Number(value) : undefined,
+                                          };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                  />
+                                  <Input
+                                    label={tUI(langCode, "build.media.title")}
+                                    value={m.title}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], title: value };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                    placeholder={tUI(langCode, "build.media.title.placeholder")}
+                                  />
+                                  <Select
+                                    label={tUI(langCode, "build.media.type")}
+                                    value={m.kind}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], kind: value as MediaKind };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                    options={mediaKindOptions}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="self-end text-xs font-semibold text-red-600"
+                                    onClick={() =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) =>
+                                          item.tempId === ev.tempId
+                                            ? { ...item, media: item.media.filter((_, idx) => idx !== mIdx) }
+                                            : item,
+                                        ),
+                                      )
+                                    }
+                                  >
+                                    {tUI(langCode, "build.media.delete")}
+                                  </button>
+                                </div>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                  <Input
+                                    label={tUI(langCode, "build.media.public_url")}
+                                    value={m.public_url}
+                                    placeholder={tUI(langCode, "build.media.url.placeholder")}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], public_url: value };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                  />
+                                  <Input
+                                    label={tUI(langCode, "build.media.source_url")}
+                                    value={m.source_url}
+                                    placeholder={tUI(langCode, "build.media.url.placeholder")}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], source_url: value };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </div>
                               </div>
-                              <div className="grid gap-3 md:grid-cols-2">
-                                <Input
-                                  label="URL pubblico"
-                                  value={m.public_url}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], public_url: value };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                                <Input
-                                  label="URL sorgente"
-                                  value={m.source_url}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], source_url: value };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-3">
-                                <Input
-                                  label="Titolo"
-                                  value={m.title}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], title: value };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                                <Input
-                                  label="Didascalia"
-                                  value={m.caption}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], caption: value };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                                <Input
-                                  label="Alt text"
-                                  value={m.alt_text}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], alt_text: value };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-3 md:grid-cols-3">
-                                <Select
-                                  label="Tipo"
-                                  value={m.kind}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], kind: value as MediaKind };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                  options={MEDIA_KIND_OPTIONS}
-                                />
-                                <Select
-                                  label="Ruolo"
-                                  value={m.role}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], role: value as any };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                  options={[
-                                    { value: "gallery", label: "Gallery" },
-                                    { value: "attachment", label: "Attachment" },
-                                    { value: "cover", label: "Cover" },
-                                    { value: "document", label: "Document" },
-                                    { value: "story_track", label: "Story track" },
-                                  ]}
-                                />
-                                <Input
-                                  label="Ordine"
-                                  type="number"
-                                  value={(m.sort_order ?? mIdx).toString()}
-                                  onChange={(value) =>
-                                    setJourneyEvents((prev) =>
-                                      prev.map((item) => {
-                                        if (item.tempId !== ev.tempId) return item;
-                                        const nextMedia = [...item.media];
-                                        nextMedia[mIdx] = { ...nextMedia[mIdx], sort_order: value ? Number(value) : undefined };
-                                        return { ...item, media: nextMedia };
-                                      }),
-                                    )
-                                  }
-                                />
-                              </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -2348,7 +2487,42 @@ export default function BuildJourneyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-sky-50 to-neutral-50 text-neutral-900 lg:flex">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-sky-50 to-neutral-50 text-neutral-900 lg:flex">
+      {mapOverlayEventId && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-5xl rounded-2xl bg-white shadow-2xl">
+            <div className="p-4">
+              {(() => {
+                const ev = journeyEvents.find((item) => item.tempId === mapOverlayEventId);
+                if (!ev) return null;
+                return (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="absolute left-3 top-3 z-10 flex items-center justify-center rounded-full border border-neutral-300 bg-white/90 p-2 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+                      aria-label={tUI(langCode, "build.events.map.close")}
+                      onClick={() => {
+                        setMapOverlayEventId(null);
+                        setMapRefreshToken((prev) => prev + 1);
+                      }}
+                    >
+                      <span aria-hidden="true">⤡</span>
+                    </button>
+                    <MapPicker
+                      key={`${mapOverlayEventId}-${mapRefreshToken}`}
+                      lat={ev.event.latitude ?? null}
+                      lng={ev.event.longitude ?? null}
+                      initialZoom={0.25}
+                      onChange={({ lat, lng }) => handleMapSelection(ev.tempId, lat, lng)}
+                      className="h-[70vh] w-full rounded-2xl border border-neutral-200 overflow-hidden"
+                    />
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/20 backdrop-blur-sm lg:hidden"
@@ -2357,76 +2531,97 @@ export default function BuildJourneyPage() {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-full max-w-[320px] transform bg-white/80 backdrop-blur shadow-lg transition duration-300 ease-in-out lg:static lg:translate-x-0 lg:border-r lg:border-neutral-200/80 lg:h-screen lg:overflow-y-auto ${
+        className={`fixed inset-y-0 left-0 z-10 w-full max-w-[320px] transform bg-white/80 backdrop-blur shadow-lg transition duration-300 ease-in-out lg:static lg:translate-x-0 lg:border-r lg:border-neutral-200/80 lg:h-screen lg:overflow-y-auto ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } h-screen overflow-y-auto`}
       >
         <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-neutral-200 bg-white/90 px-4 py-5 backdrop-blur">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-wrap items-center gap-2">
-              {JOURNEY_FILTER_OPTIONS.map((option) => {
-                const isActive = journeyFilter === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`relative px-3 py-2 text-sm font-semibold transition ${
-                      isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-                    }`}
-                    onClick={() => setJourneyFilter(option.value)}
-                  >
-                    {option.label}
-                    <span
-                      className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                        isActive ? "bg-sky-600" : "bg-transparent"
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                {tUI(langCode, "build.sidebar.visibility")}
+              </p>
+              <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
+                {journeyFilterOptions.map((option) => {
+                  const isActive = journeyFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[70px] text-center ${
+                        isActive
+                          ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
                       }`}
-                    />
-                  </button>
-                );
-              })}
+                      onClick={() => setJourneyFilter(option.value)}
+                      aria-pressed={isActive}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <Select
-              label="Ordina per"
-              value={journeySort}
-              onChange={(value) => setJourneySort(value as JourneySortValue)}
-              options={JOURNEY_SORT_OPTIONS}
-              className="w-full max-w-[220px]"
-            />
+            <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                {tUI(langCode, "build.sidebar.order")}
+              </p>
+              <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
+                {journeySortOptions.map((option) => {
+                  const isActive = journeySort === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[90px] text-center ${
+                        isActive
+                          ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
+                      }`}
+                      onClick={() => setJourneySort(option.value)}
+                      aria-pressed={isActive}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <button
               type="button"
               className="ml-auto rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs font-semibold text-neutral-600 shadow-sm hover:border-neutral-400 lg:hidden"
               onClick={() => setSidebarOpen(false)}
             >
-              Chiudi
+              {tUI(langCode, "build.actions.close")}
             </button>
           </div>
           <p className="text-xs text-neutral-500">
             {filteredJourneys.length === journeys.length
-              ? `${journeys.length} saved`
-              : `${filteredJourneys.length} di ${journeys.length} saved (filtrato)`}
+              ? `${journeys.length} ${tUI(langCode, "build.sidebar.saved")}`
+              : `${filteredJourneys.length} ${tUI(langCode, "build.sidebar.of")} ${journeys.length} ${tUI(langCode, "build.sidebar.saved_filtered")}`}
           </p>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6">
           {journeysLoading ? (
-            <p className="text-sm text-neutral-500">Caricamento journeys.</p>
+            <p className="text-sm text-neutral-500">{tUI(langCode, "build.sidebar.loading")}</p>
           ) : journeysError ? (
             <p className="text-sm text-red-600">{journeysError}</p>
           ) : journeys.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nessun journey salvato. Crea un nuovo flow.</p>
+            <p className="text-sm text-neutral-500">{tUI(langCode, "build.sidebar.empty")}</p>
           ) : filteredJourneys.length === 0 ? (
-            <p className="text-sm text-neutral-500">Nessun journey corrisponde al filtro attivo.</p>
+            <p className="text-sm text-neutral-500">{tUI(langCode, "build.sidebar.no_match")}</p>
           ) : (
             <ul className="space-y-3">
               {filteredJourneys.map((journey) => (
                 <Scorecard
                   key={journey.id}
-                  title={journey.title || "(Untitled journey)"}
+                  title={journey.title || tUI(langCode, "journey.title_fallback")}
                   coverUrl={journey.coverUrl ?? undefined}
                   publishedAt={journey.publishedAt ?? null}
                   eventsCount={journey.eventsCount ?? null}
                   yearFrom={journey.yearFrom ?? null}
                   yearTo={journey.yearTo ?? null}
-                  ctaLabel="Modifica"
+                  ctaLabel={tUI(langCode, "build.actions.edit")}
                   className="w-full"
                   liProps={{
                     className: selectedJourneyId === journey.id ? "border-sky-500 bg-sky-50" : "",
@@ -2443,36 +2638,33 @@ export default function BuildJourneyPage() {
         </div>
         <div className="border-t border-neutral-200 px-4 py-4 text-xs text-neutral-500">
           {checking
-            ? "Verifico la sessioneâ€¦"
+            ? tUI(langCode, "build.sidebar.checking")
             : profile
-            ? `Profile: ${profile.id}`
+            ? `${tUI(langCode, "build.sidebar.profile")} ${profile.id}`
             : profileError
             ? profileError
-            : "Effettua il login per salvare i journeys."}
+            : tUI(langCode, "build.sidebar.login")}
         </div>
       </aside>
-      <main className="flex-1 overflow-auto p-6">
+      <main className="flex-1 h-full overflow-auto p-6">
         <div className="mb-3 flex items-center gap-3 lg:hidden">
           <button
             type="button"
             className="rounded-full border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 shadow-sm"
             onClick={() => setSidebarOpen(true)}
           >
-            Mostra journeys
+            {tUI(langCode, "build.actions.show_journeys")}
           </button>
         </div>
         <div className="mb-2" />
         <div className="space-y-4">
-          {selectedJourneyId && loadingJourneyDetails && (
-            <p className="text-sm text-neutral-500">Caricamento campi del journey selezionato.</p>
-          )}
           {journeyDetailsError && <p className="text-sm text-red-600">{journeyDetailsError}</p>}
           {renderGroupEventPage()}
         </div>
         {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
-        {saveOk && <p className="mt-2 text-sm text-green-700">Creato! ID: {saveOk.id}</p>}
+        {saveOk && <p className="mt-2 text-sm text-green-700">{`${tUI(langCode, "build.messages.save_ok")} ID: ${saveOk.id}`}</p>}
         {eventsSaveError && <p className="mt-1 text-sm text-red-600">{eventsSaveError}</p>}
-        {eventsSaveOk && <p className="mt-1 text-sm text-green-700">Eventi salvati: {eventsSaveOk}</p>}
+        {eventsSaveOk && <p className="mt-1 text-sm text-green-700">{`${tUI(langCode, "build.messages.events_saved_prefix")} ${eventsSaveOk}`}</p>}
         {approvalError && <p className="mt-1 text-sm text-red-600">{approvalError}</p>}
         {approvalOk && <p className="mt-1 text-sm text-green-700">{approvalOk}</p>}
         {deleteError && <p className="mt-1 text-sm text-red-600">{deleteError}</p>}
@@ -2482,30 +2674,72 @@ export default function BuildJourneyPage() {
   );
 }
 
-function Input({ label, value, onChange, placeholder, className, type = "text" }: { label?: string; value?: string; onChange?: (v: string) => void; placeholder?: string; className?: string; type?: string }) {
+function Input({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+  type = "text",
+  disabled = false,
+  readOnly = false,
+  size = "md",
+}: {
+  label?: string;
+  value?: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+  type?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+  size?: "sm" | "md";
+}) {
+  const sizeClasses = size === "sm" ? "py-1.5 px-2 text-xs" : "py-2 px-3 text-sm";
+  const labelClasses = size === "sm" ? "text-[11px]" : "text-sm";
   return (
     <div className={className}>
-      {label && <label className="block text-sm font-medium mb-1">{label}</label>}
+      {label && <label className={`block font-medium mb-1 ${labelClasses}`}>{label}</label>}
       <input
         type={type}
-        className="w-full rounded-xl border border-neutral-200 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70"
+        className={`w-full rounded-xl border border-neutral-200 bg-white/80 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500 disabled:shadow-none ${sizeClasses}`}
         value={value ?? ""}
         placeholder={placeholder}
         onChange={(e) => onChange?.(e.target.value)}
+        disabled={disabled}
+        readOnly={readOnly || disabled}
       />
     </div>
   );
 }
 
-function Textarea({ label, value, onChange, placeholder, className }: { label?: string; value?: string; onChange?: (v: string) => void; placeholder?: string; className?: string }) {
+function Textarea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  className,
+  disabled = false,
+  readOnly = false,
+}: {
+  label?: string;
+  value?: string;
+  onChange?: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+  disabled?: boolean;
+  readOnly?: boolean;
+}) {
   return (
     <div className={className}>
       {label && <label className="block text-sm font-medium mb-1">{label}</label>}
       <textarea
-        className="w-full min-h-[96px] rounded-xl border border-neutral-200 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70"
+        className="w-full min-h-[96px] rounded-xl border border-neutral-200 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500 disabled:shadow-none"
         value={value ?? ""}
         placeholder={placeholder}
         onChange={(e) => onChange?.(e.target.value)}
+        disabled={disabled}
+        readOnly={readOnly || disabled}
       />
     </div>
   );
@@ -2535,21 +2769,22 @@ function ProfileField({
   profileId,
   displayName,
   className,
+  size = "md",
 }: {
   label: string;
   profileId?: string | null;
   displayName?: string;
   className?: string;
+  size?: "sm" | "md";
 }) {
+  const textClasses = size === "sm" ? "text-xs" : "text-sm";
+  const labelClasses = size === "sm" ? "text-[11px]" : "text-sm";
   return (
     <div className={className}>
-      <label className="block text-sm font-medium mb-1">{label}</label>
-      <div className="rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-700">
+      <label className={`block font-medium mb-1 ${labelClasses}`}>{label}</label>
+      <div className={`rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-neutral-500 ${textClasses}`}>
         {displayName || (profileId ? "Nome non disponibile" : "Non assegnato")}
       </div>
-      {profileId && (
-        <p className="text-[11px] text-neutral-500 mt-1">ID: {profileId}</p>
-      )}
     </div>
   );
 }
@@ -2559,11 +2794,13 @@ function MapPicker({
   lng,
   onChange,
   className,
+  initialZoom,
 }: {
   lat?: number | null;
   lng?: number | null;
   onChange?: (coords: { lat: number; lng: number }) => void;
   className?: string;
+  initialZoom?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -2609,7 +2846,7 @@ function MapPicker({
         ],
       },
       center: [lng ?? fallbackCenter[0], lat ?? fallbackCenter[1]],
-      zoom: lat != null && lng != null ? 1.2 : 0.2,
+      zoom: initialZoom ?? (lat != null && lng != null ? 1.2 : 0.2),
     });
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.on("click", (e) => {
