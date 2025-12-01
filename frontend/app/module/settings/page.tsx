@@ -280,16 +280,28 @@ export default function SettingsPage() {
         <div className="rounded-2xl bg-white shadow p-6">
           <h2 className="text-base font-semibold mb-6">Profile preferences</h2>
 
-          {/* 🔥 BOTTONI ADMIN (solo se profiles.is_admin = true) */}
-          {isAdminProfile && (
-            <div className="mb-6">
-              <button
-                type="button"
-                onClick={() => router.push("/module/DB_Manager")}
-                className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
-              >
-                Open DB Manager
-              </button>
+          {/* 🔥 BOTTONI ADMIN/MOD */}
+          {(isAdminOrMod || isAdminProfile) && (
+            <div className="mb-6 flex flex-wrap gap-3">
+              {isAdminOrMod && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/module/build-journey/approval")}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+                >
+                  Journey approval
+                </button>
+              )}
+
+              {isAdminProfile && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/module/DB_Manager")}
+                  className="rounded-xl bg-purple-600 px-4 py-2 text-white hover:bg-purple-700"
+                >
+                  Open DB Manager
+                </button>
+              )}
             </div>
           )}
 

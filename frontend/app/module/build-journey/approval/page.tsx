@@ -13,7 +13,7 @@ import {
   type JourneyEventEditPayload,
   deleteJourneyCascade,
   requestJourneyApproval,
-} from "./actions";
+} from "../actions";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { Scorecard } from "@/app/components/Scorecard";
@@ -100,7 +100,7 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
 
 type JourneyStatus = "draft" | "submitted" | "published" | "refused";
 
-type JourneyFilterValue = "all" | Visibility;
+type JourneyFilterValue = "all" | Visibility | "pending";
 type JourneyStatusFilterValue = "all" | JourneyStatus;
 
 type JourneySortValue = "approved_desc" | "approved_asc";
@@ -361,6 +361,7 @@ export default function BuildJourneyPage() {
   const [groupEventMedia, setGroupEventMedia] = useState<GroupEventMediaItem[]>([]);
   const [profileNames, setProfileNames] = useState<Record<string, string>>({});
   const [journeyVisibilityMap, setJourneyVisibilityMap] = useState<Record<string, Visibility>>({});
+  const [journeyApprovalPendingMap, setJourneyApprovalPendingMap] = useState<Record<string, boolean>>({});
   const [journeyStatusMap, setJourneyStatusMap] = useState<Record<string, JourneyStatus>>({});
   const [journeyFilter, setJourneyFilter] = useState<JourneyFilterValue>("all");
   const [journeyStatusFilter, setJourneyStatusFilter] = useState<JourneyStatusFilterValue>("all");
@@ -388,6 +389,9 @@ export default function BuildJourneyPage() {
   const [approvalSaving, setApprovalSaving] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalOk, setApprovalOk] = useState<string | null>(null);
+  const [moderationSaving, setModerationSaving] = useState(false);
+  const [moderationError, setModerationError] = useState<string | null>(null);
+  const [moderationOk, setModerationOk] = useState<string | null>(null);
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
   const correlationJourneyOptions = useMemo(() => {
@@ -433,6 +437,13 @@ export default function BuildJourneyPage() {
       { value: "all" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.all") },
       { value: "public" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.public") },
       { value: "private" as JourneyFilterValue, label: tUI(langCode, "build.sidebar.filter.private") },
+      {
+        value: "pending" as JourneyFilterValue,
+        label: (() => {
+          const lbl = tUI(langCode, "build.sidebar.filter.pending");
+          return lbl === "build.sidebar.filter.pending" ? "pending" : lbl;
+        })(),
+      },
     ],
     [langCode],
   );
@@ -506,16 +517,21 @@ export default function BuildJourneyPage() {
   const selectedJourney = useMemo(() => journeys.find((j) => j.id === selectedJourneyId) ?? null, [journeys, selectedJourneyId]);
   const filteredJourneys = useMemo(() => {
     if (journeyFilter === "all") {
-      return journeyStatusFilter === "all"
-        ? journeys
-        : journeys.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
+      const byStatus =
+        journeyStatusFilter === "all"
+          ? journeys
+          : journeys.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
+      return byStatus;
+    }
+    if (journeyFilter === "pending") {
+      const base = journeys.filter((journey) => journeyApprovalPendingMap[journey.id]);
+      if (journeyStatusFilter === "all") return base;
+      return base.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
     }
     const byVisibility = journeys.filter((journey) => journeyVisibilityMap[journey.id] === journeyFilter);
-    if (journeyStatusFilter === "all") {
-      return byVisibility;
-    }
+    if (journeyStatusFilter === "all") return byVisibility;
     return byVisibility.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
-  }, [journeyFilter, journeyStatusFilter, journeyVisibilityMap, journeyStatusMap, journeys]);
+  }, [journeyFilter, journeyStatusFilter, journeyVisibilityMap, journeyStatusMap, journeyApprovalPendingMap, journeys]);
   const sortedEvents = useMemo(() => {
     const toSortValue = (ev: JourneyEventEditor): number => {
       const yearFrom = normalizeYearForEra(ev.event.year_from, ev.event.era);
@@ -730,6 +746,7 @@ export default function BuildJourneyPage() {
     setJourneysLoading(true);
     setJourneysError(null);
     setJourneyVisibilityMap({});
+    setJourneyApprovalPendingMap({});
     setJourneyStatusMap({});
     setJourneyRatingMap({});
     try {
@@ -742,6 +759,7 @@ export default function BuildJourneyPage() {
       if (!ownerIds.length) {
         setJourneys([]);
         setJourneyVisibilityMap({});
+        setJourneyApprovalPendingMap({});
         setJourneyStatusMap({});
         return;
       }
@@ -767,16 +785,21 @@ export default function BuildJourneyPage() {
       const journeyIds = journeysFromView.map((journey) => journey.journey_id);
       const { data: visibilityRows, error: visibilityError } = await supabase
         .from("group_events")
-        .select("id,visibility,workflow_state")
+        .select("id,visibility,workflow_state,requested_approval_at,approved_at,refused_at")
         .in("id", ownerIds);
       if (visibilityError) throw visibilityError;
       const visibilityMap: Record<string, Visibility> = {};
+      const pendingMap: Record<string, boolean> = {};
       const statusMap: Record<string, JourneyStatus> = {};
       (visibilityRows ?? []).forEach((row) => {
         if (row.id && (row.visibility === "private" || row.visibility === "public")) {
           visibilityMap[row.id] = row.visibility as Visibility;
         }
+        const requested = (row as any).requested_approval_at;
+        const approved = (row as any).approved_at;
+        const refused = (row as any).refused_at;
         if (row.id) {
+          pendingMap[row.id] = !!requested && !approved && !refused;
           const st = (row as any).workflow_state as string | null;
           const normalized = st && typeof st === "string" ? st.toLowerCase() : null;
           const allowed: JourneyStatus[] = ["draft", "submitted", "published", "refused"];
@@ -786,6 +809,7 @@ export default function BuildJourneyPage() {
         }
       });
       setJourneyVisibilityMap(visibilityMap);
+      setJourneyApprovalPendingMap(pendingMap);
       setJourneyStatusMap(statusMap);
 
       const ratingMap: Record<string, JourneyRating> = {};
@@ -1498,6 +1522,115 @@ export default function BuildJourneyPage() {
     }
   }
 
+  const handleModeration = useCallback(
+    async (action: "approve" | "refuse") => {
+      if (!selectedJourneyId) {
+        setModerationError(tUI(langCode, "build.messages.select_for_approval"));
+        return;
+      }
+      if (!canSaveMetadata) {
+        setModerationError(tUI(langCode, "build.messages.metadata_required"));
+        return;
+      }
+
+      setModerationSaving(true);
+      setModerationError(null);
+      setModerationOk(null);
+
+      const now = new Date().toISOString();
+      const translationsToSave = translations.concat(
+        translations.some((row) => row.lang === translation.lang) ? [] : [translation],
+      );
+      const translationPayloads = translationsToSave
+        .map((row) => ({
+          lang: row.lang?.trim() ?? "",
+          title: row.title || undefined,
+          description: row.description || undefined,
+        }))
+        .filter((row) => row.lang);
+
+      const mediaPayload = groupEventMedia
+        .map((entry, index) => ({
+          public_url: entry.public_url?.trim() || undefined,
+          source_url: entry.source_url?.trim() || undefined,
+          title: entry.title?.trim() || undefined,
+          caption: entry.caption?.trim() || undefined,
+          alt_text: entry.alt_text?.trim() || undefined,
+          role: entry.role,
+          sort_order: entry.sort_order ?? index,
+          is_primary: entry.is_primary,
+          kind: entry.kind,
+        }))
+        .filter((entry) => entry.public_url || entry.source_url);
+
+      const payload: SaveJourneyPayload = {
+        group_event_id: selectedJourneyId,
+        group_event: {
+          cover_url: ge.cover_url,
+          visibility: ge.visibility,
+          description: ge.description || undefined,
+          language: ge.language || DEFAULT_LANGUAGE,
+          slug: ge.slug || undefined,
+          code: ge.code || undefined,
+          workflow_state: action === "approve" ? "published" : "refused",
+          owner_profile_id: ge.owner_profile_id || profile?.id || undefined,
+          requested_approval_at: ge.requested_approval_at || undefined,
+          approved_at: action === "approve" ? now : undefined,
+          approved_by_profile_id: action === "approve" ? profile?.id || undefined : undefined,
+          refused_at: action === "refuse" ? now : undefined,
+          refused_by_profile_id: action === "refuse" ? profile?.id || undefined : undefined,
+          refusal_reason: action === "refuse" ? ge.refusal_reason || "Rifiutato" : undefined,
+          allow_fan: ge.allow_fan,
+          allow_stud_high: ge.allow_stud_high,
+          allow_stud_middle: ge.allow_stud_middle,
+          allow_stud_primary: ge.allow_stud_primary,
+        },
+        group_event_translations: translationPayloads.length ? translationPayloads : undefined,
+        deleted_group_event_translation_langs:
+          deletedTranslationLangs.length > 0 ? deletedTranslationLangs : undefined,
+        video_media_url: null,
+        group_event_media: mediaPayload,
+        events: [],
+      };
+
+      try {
+        const res = await saveJourney(payload);
+        await loadJourneys();
+        await loadJourneyDetails(res.group_event_id);
+        setModerationOk(action === "approve" ? "Journey approvato" : "Journey rifiutato");
+      } catch (err: any) {
+        setModerationError(err?.message || tUI(langCode, "build.messages.save_error"));
+      } finally {
+        setModerationSaving(false);
+      }
+    },
+    [
+      canSaveMetadata,
+      deletedTranslationLangs,
+      ge.allow_fan,
+      ge.allow_stud_high,
+      ge.allow_stud_middle,
+      ge.allow_stud_primary,
+      ge.code,
+      ge.cover_url,
+      ge.description,
+      ge.language,
+      ge.owner_profile_id,
+      ge.refusal_reason,
+      ge.requested_approval_at,
+      ge.slug,
+      ge.visibility,
+      loadJourneyDetails,
+      loadJourneys,
+      groupEventMedia,
+      langCode,
+      profile?.id,
+      selectedJourneyId,
+      translation,
+      translations,
+    ],
+  );
+
 
   const renderGroupEventPage = () => {
     const allowFlags: { key: AllowFlagKey; label: string }[] = [
@@ -1621,6 +1754,30 @@ export default function BuildJourneyPage() {
               onClick={handleNewJourney}
             >
               {tUI(langCode, "build.actions.new")}
+            </button>
+            <button
+              type="button"
+              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+                selectedJourneyId && !moderationSaving
+                  ? "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500"
+              }`}
+              disabled={!selectedJourneyId || moderationSaving}
+              onClick={() => handleModeration("approve")}
+            >
+              {moderationSaving ? "..." : tUI(langCode, "build.actions.approve")}
+            </button>
+            <button
+              type="button"
+              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+                selectedJourneyId && !moderationSaving
+                  ? "bg-gradient-to-r from-rose-600 to-amber-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500"
+              }`}
+              disabled={!selectedJourneyId || moderationSaving}
+              onClick={() => handleModeration("refuse")}
+            >
+              {moderationSaving ? "..." : tUI(langCode, "build.actions.refuse")}
             </button>
             <button
               type="button"
@@ -1802,7 +1959,6 @@ export default function BuildJourneyPage() {
                         onChange={(value) => setGe((prev) => ({ ...prev, refusal_reason: value }))}
                         placeholder={tUI(langCode, "build.group.refusal_reason.placeholder")}
                         className="md:col-span-3"
-                        disabled
                       />
                     </div>
                   </div>
@@ -2597,14 +2753,14 @@ export default function BuildJourneyPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
                   {tUI(langCode, "build.sidebar.visibility")}
                 </p>
-              <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
+              <div className="mt-2 flex flex-wrap items-center gap-1">
                 {journeyFilterOptions.map((option) => {
                   const isActive = journeyFilter === option.value;
                   return (
                     <button
                       key={option.value}
                       type="button"
-                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[70px] text-center ${
+                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-normal leading-tight min-w-[70px] text-center ${
                         isActive
                           ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
                           : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
@@ -2745,6 +2901,8 @@ export default function BuildJourneyPage() {
         {eventsSaveOk && <p className="mt-1 text-sm text-green-700">{`${tUI(langCode, "build.messages.events_saved_prefix")} ${eventsSaveOk}`}</p>}
         {approvalError && <p className="mt-1 text-sm text-red-600">{approvalError}</p>}
         {approvalOk && <p className="mt-1 text-sm text-green-700">{approvalOk}</p>}
+        {moderationError && <p className="mt-1 text-sm text-red-600">{moderationError}</p>}
+        {moderationOk && <p className="mt-1 text-sm text-green-700">{moderationOk}</p>}
         {deleteError && <p className="mt-1 text-sm text-red-600">{deleteError}</p>}
         {deleteOk && <p className="mt-1 text-sm text-green-700">{deleteOk}</p>}
       </main>

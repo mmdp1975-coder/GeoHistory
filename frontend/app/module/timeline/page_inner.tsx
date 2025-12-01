@@ -327,6 +327,51 @@ export default function TimelinePage() {
         const from = debouncedSel.from;
         const to = debouncedSel.to;
 
+        // ids dei journey che matchano il testo degli eventi (event_translations)
+        let eventMatchedJourneyIds: UUID[] = [];
+        if (qDebounced) {
+          try {
+            const qv = `%${qDebounced}%`;
+            const { data: evTranslations, error: evTransErr } = await supabase
+              .from("event_translations")
+              .select("event_id")
+              .or(
+                [
+                  `title.ilike.${qv}`,
+                  `description.ilike.${qv}`,
+                  `description_short.ilike.${qv}`,
+                  `wikipedia_url.ilike.${qv}`,
+                ].join(","),
+              );
+            if (!evTransErr && (evTranslations?.length ?? 0) > 0) {
+              const evIds = Array.from(
+                new Set(
+                  (evTranslations ?? [])
+                    .map((row: any) => row?.event_id)
+                    .filter((id: any): id is string => typeof id === "string" && id.trim().length > 0),
+                ),
+              );
+              if (evIds.length) {
+                const { data: geLinks, error: geLinkErr } = await supabase
+                  .from("event_group_event")
+                  .select("group_event_id")
+                  .in("event_id", evIds);
+                if (!geLinkErr) {
+                  eventMatchedJourneyIds = Array.from(
+                    new Set(
+                      (geLinks ?? [])
+                        .map((row: any) => row?.group_event_id)
+                        .filter((id: any): id is string => typeof id === "string" && id.trim().length > 0),
+                    ),
+                  );
+                }
+              }
+            }
+          } catch {
+            // se la ricerca sugli eventi fallisce, continuiamo con il filtro standard
+          }
+        }
+
         // Base query su v_journeys con tutte le colonne necessarie alla scorecard
         let baseQuery = supabase
           .from("v_journeys")
@@ -358,9 +403,18 @@ export default function TimelinePage() {
 
         if (qDebounced) {
           const qv = `%${qDebounced}%`;
-          baseQuery = baseQuery.or(
-            `journey_slug.ilike.${qv},translation_title.ilike.${qv},translation_description.ilike.${qv}`
-          );
+          const orParts = [
+            `journey_slug.ilike.${qv}`,
+            `translation_title.ilike.${qv}`,
+            `translation_description.ilike.${qv}`,
+          ];
+          if (eventMatchedJourneyIds.length) {
+            const inList = eventMatchedJourneyIds
+              .map((id) => id.replace(/"/g, ""))
+              .join(",");
+            orParts.push(`journey_id.in.(${inList})`);
+          }
+          baseQuery = baseQuery.or(orParts.join(","));
         }
 
         let idsFilter: UUID[] | null = null;
@@ -697,7 +751,7 @@ export default function TimelinePage() {
     <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
       {/* HEADER */}
       <header
-        className="z-20 border-b border-neutral-200"
+        className="sticky top-16 z-20 border-b border-neutral-200"
         style={{ backgroundColor: BRAND_BLUE }}
       >
         <div className="mx-auto max-w-7xl px-4 py-3 text-white">
@@ -960,7 +1014,7 @@ export default function TimelinePage() {
 
       {/* BODY */}
       <main className="mx-auto max-w-7xl px-4 py-5">
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-neutral-600">
             {initializing ? (
               <span>
