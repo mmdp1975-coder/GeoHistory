@@ -25,6 +25,8 @@ type VJourney = {
   year_to_max: number | null;
   is_favourite: boolean | null;
   approved_at: string | null;
+  visibility: string | null;
+  workflow_state: string | null;
 };
 
 type RatingStats = {
@@ -51,7 +53,9 @@ function isVJourney(v: unknown): v is VJourney {
     "year_from_min" in o &&
     "year_to_max" in o &&
     "is_favourite" in o &&
-    "approved_at" in o
+    "approved_at" in o &&
+    "visibility" in o &&
+    "workflow_state" in o
   );
 }
 
@@ -68,9 +72,44 @@ function isRatingStats(v: unknown): v is RatingStats {
 
 export default function NewJourneyPage() {
   const supabase = useMemo(() => createClientComponentClient(), []);
+  const [langCode, setLangCode] = useState<string>("en");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [rows, setRows] = useState<CardRow[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const browserLang = typeof window !== "undefined" ? window.navigator.language : "en";
+    (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("language_code")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (error) {
+          if (active) setLangCode(browserLang);
+          return;
+        }
+        const lang = (data?.language_code as string | null)?.trim();
+        if (active) setLangCode(lang || browserLang);
+      } catch {
+        if (active) setLangCode(browserLang);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
+
+  const isItalian = (langCode || "").toLowerCase().startsWith("it");
 
   useEffect(() => {
     let alive = true;
@@ -94,13 +133,18 @@ export default function NewJourneyPage() {
               "year_to_max",
               "is_favourite",
               "approved_at",
+              "visibility",
+              "workflow_state",
             ].join(",")
           )
           .order("approved_at", { ascending: false, nullsFirst: false });
 
         if (jErr) throw jErr;
 
-        const journeys = ((jRows ?? []) as unknown[]).filter(isVJourney) as VJourney[];
+        const journeysRaw = ((jRows ?? []) as unknown[]).filter(isVJourney) as VJourney[];
+        const journeys = journeysRaw.filter(
+          (j) => j.visibility === "public" && j.workflow_state === "published"
+        );
 
         // 2) Rating (per mostrare stella e conteggi)
         const ids = journeys.map((j) => j.journey_id);
@@ -129,7 +173,9 @@ export default function NewJourneyPage() {
         setRows(merged);
       } catch (e: any) {
         if (!alive) return;
-        setErr(e?.message ?? "Errore nel caricamento dei New Journeys.");
+        setErr(
+          e?.message ?? (isItalian ? "Errore nel caricamento dei New Journeys." : "Error loading New Journeys.")
+        );
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -139,7 +185,7 @@ export default function NewJourneyPage() {
     return () => {
       alive = false;
     };
-  }, [supabase]);
+  }, [supabase, isItalian]);
 
   return (
     <div className="px-4 py-6 md:px-8">
@@ -150,7 +196,7 @@ export default function NewJourneyPage() {
           href="/module/landing"
           className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-800 shadow hover:bg-neutral-100"
         >
-          ← Back
+          {isItalian ? "< Indietro" : "< Back"}
         </Link>
       </div>
 
@@ -162,14 +208,16 @@ export default function NewJourneyPage() {
       )}
       {loading && !err && (
         <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-slate-600">
-          Caricamento…
+          {isItalian ? "Caricamento…" : "Loading…"}
         </div>
       )}
 
       {/* Empty */}
       {!loading && !err && rows.length === 0 && (
         <div className="rounded-2xl p-6 text-center shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
-          <p className="text-base">Nessun Journey pubblicato al momento.</p>
+          <p className="text-base">
+            {isItalian ? "Nessun Journey pubblicato al momento." : "No published journeys at the moment."}
+          </p>
         </div>
       )}
 

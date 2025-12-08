@@ -197,6 +197,42 @@ function getYouTubePreview(url?: string | null) {
   return null;
 }
 
+// Normalizza URL di media (copre percorsi storage con \ o /public/)
+function normalizeMediaUrl(raw?: string | null) {
+  if (!raw) return "";
+  const url = raw.trim();
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) {
+    return url;
+  }
+  const withForwardSlashes = url.replace(/\\/g, "/");
+  // Supabase storage paths without protocol: keep full storage prefix
+  if (withForwardSlashes.includes("storage/v1/object/public/")) {
+    return encodeURI(`/${withForwardSlashes.replace(/^\/+/, "")}`);
+  }
+  const fromPublic = withForwardSlashes.split("/public/");
+  if (fromPublic.length > 1 && fromPublic[1]) {
+    return encodeURI(`/${fromPublic[1]}`);
+  }
+  return encodeURI(withForwardSlashes);
+}
+
+function normalizeMediaItem(m: MediaItem): MediaItem {
+  const normalizedUrl = normalizeMediaUrl(m.url || null);
+  const normalizedPreview = normalizeMediaUrl(m.preview || null);
+  const fallbackPreview =
+    normalizedPreview ||
+    normalizeMediaUrl(m.url || null) ||
+    m.preview ||
+    m.url ||
+    null;
+  return {
+    ...m,
+    url: normalizedUrl || m.url,
+    preview: fallbackPreview || null,
+  };
+}
+
 /* ===================== Player Overlay (2 livelli, autoplay mobile) ===================== */
 function MediaOverlay({
  open,
@@ -759,14 +795,27 @@ useEffect(() => {
  const eventId = r.event_id ?? r.id;
  const location = r.city ?? r.region ?? r.country ?? r.continent ?? null;
  const eventMedia: MediaItem[] = Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [];
+ const coverMedia = eventMedia.find(
+   (m) =>
+     (m?.role || "").toLowerCase() === "cover" &&
+     (m.preview || m.url) &&
+     ((m.type || "").toLowerCase() === "image" || m.mime?.startsWith?.("image/"))
+ );
+ const eventMediaOrdered = coverMedia ? [coverMedia, ...eventMedia.filter((m) => m !== coverMedia)] : eventMedia;
+ const eventMediaNormalized = eventMediaOrdered.map(normalizeMediaItem);
+ const coverPreview = normalizeMediaUrl(coverMedia?.preview || coverMedia?.url || null) || null;
+ const coverUrl = normalizeMediaUrl(coverMedia?.url || coverMedia?.preview || null) || coverMedia?.url || null;
+ const existingEventFirst = normalizeMediaUrl(r.event_media_first || null) || r.event_media_first || null;
  const firstVideo =
    (r as any)?.video_url ||
-   eventMedia.find((m) => (m?.type === "video" || m?.mime?.startsWith?.("video/")) && (m?.url || m?.preview))?.url ||
+   eventMediaNormalized.find((m) => (m?.type === "video" || m?.mime?.startsWith?.("video/")) && (m?.url || m?.preview))?.url ||
    null;
  const fallbackImage =
-   r.event_media_first ||
-   eventMedia.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.preview ||
-   eventMedia.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.url ||
+   coverPreview ||
+   existingEventFirst ||
+   coverUrl ||
+   eventMediaNormalized.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.preview ||
+   eventMediaNormalized.find((m) => (m?.type === "image" || m?.mime?.startsWith?.("image/")) && (m?.preview || m?.url))?.url ||
    null;
  const core: EventCore = {
  id: String(eventId ?? r.id ?? ""),
@@ -787,8 +836,8 @@ useEffect(() => {
  wiki_url: r.wikipedia_url ? String(r.wikipedia_url) : null,
  video_url: firstVideo ? String(firstVideo) : null,
  order_key: chronoOrderKey(core),
- event_media: eventMedia,
- event_media_first: r.event_media_first ?? null,
+ event_media: eventMediaNormalized,
+ event_media_first: coverPreview ?? existingEventFirst ?? coverUrl ?? null,
  };
  // Fallback: if no structured media but a video_url exists, create a single video media item
  if ((!ev.event_media || ev.event_media.length === 0) && ev.video_url) {
@@ -820,15 +869,40 @@ useEffect(() => {
  });
  vms.sort((a, b) => a.order_key - b.order_key);
 
- const j0 = (vjRows ?? [])[0] as any;
- const jm: MediaItem[] = Array.isArray(j0?.journey_media) ? j0.journey_media : [];
- const jmFirst: string | null = j0?.journey_media_first ?? null;
+const j0 = (vjRows ?? [])[0] as any;
+const jm: MediaItem[] = Array.isArray(j0?.journey_media) ? j0.journey_media : [];
+const jmCover = jm.find(
+  (m) =>
+    (m?.role || "").toLowerCase() === "cover" &&
+    (m.preview || m.url) &&
+    ((m.type || "").toLowerCase() === "image" || m.mime?.startsWith?.("image/"))
+);
+const jmOrdered = jmCover ? [jmCover, ...jm.filter((m) => m !== jmCover)] : jm;
+const rawJourneyFirst = j0?.journey_media_first || null;
+const jmNormalized = jmOrdered.map((m, idx) => {
+  const isCover = idx === 0 && !!jmCover;
+  const normUrl = normalizeMediaUrl(m.url || null) || m.url;
+  const normPreview =
+    normalizeMediaUrl(m.preview || null) ||
+    (isCover ? normalizeMediaUrl(rawJourneyFirst || null) : "");
+  const preview = normPreview || normalizeMediaUrl(normUrl || null) || m.preview || m.url || rawJourneyFirst || null;
+  return { ...m, url: normUrl || m.url, preview: preview || null };
+});
+const jmFirst: string | null =
+  normalizeMediaUrl(jmCover?.preview || jmCover?.url || null) ||
+  normalizeMediaUrl(rawJourneyFirst || null) ||
+  rawJourneyFirst ||
+  jmNormalized[0]?.preview ||
+  jmNormalized[0]?.url ||
+  jmCover?.preview ||
+  jmCover?.url ||
+  null;
 
- setGe(geData);
- setGeTr(geTrData);
- setRows(vms);
- setJourneyTitle(j0?.journey_title ?? null);
- setJourneyMedia(jm);
+setGe(geData);
+setGeTr(geTrData);
+setRows(vms);
+setJourneyTitle(j0?.journey_title ?? null);
+ setJourneyMedia(jmNormalized);
  setJourneyMediaFirst(jmFirst);
  if (eidParam) {
  const idx = vms.findIndex((ev) => ev.id === eidParam);
@@ -1930,14 +2004,14 @@ const mapTextureStyle: CSSProperties = {
       <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)]">
         <div className="flex h-32 items-center justify-center">
           {selectedEvent?.event_media?.length ? (
-            <div className="w-full max-w-[260px]">
+            <div className="w-full max-w-[320px]">
               <MediaBox
                 items={selectedEvent.event_media}
                 firstPreview={selectedEvent.event_media_first || undefined}
                 onOpenOverlay={openOverlay}
                 hideHeader
                 compact
-                height={isLg ? "xs" : "sm"}
+                height={isLg ? "sm" : "sm"}
               />
             </div>
           ) : (
@@ -1948,8 +2022,10 @@ const mapTextureStyle: CSSProperties = {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[180px] flex flex-col">
-        <div className="text-[12px] font-semibold text-slate-800">Eventi contemporanei</div>
+      <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[150px] flex flex-col">
+        <div className="text-[12px] font-semibold text-slate-800">
+          {resolvedLang?.toLowerCase?.().startsWith("en") ? "Contemporary events" : "Eventi contemporanei"}
+        </div>
         {concurrentOther && concurrentOther.length ? (
           <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
             {concurrentOther.map((c) => {
@@ -1974,7 +2050,7 @@ const mapTextureStyle: CSSProperties = {
         )}
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[160px] flex flex-col">
+      <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[130px] flex flex-col">
         <div className="text-[12px] font-semibold text-gray-800">connected Journey</div>
           {related?.length ? (
             <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
@@ -1996,7 +2072,7 @@ const mapTextureStyle: CSSProperties = {
     </div>
 
     {/* Colonna 2: Descrizione */}
-    <section className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm h-[60svh] min-h-[480px] overflow-hidden">
+    <section className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm h-[52svh] min-h-[440px] max-h-[560px] overflow-hidden">
       <div className="flex h-full flex-col">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -2056,7 +2132,7 @@ const mapTextureStyle: CSSProperties = {
     </section>
 
     {/* Colonna 3: Mappa */}
-    <section className="relative h-[60svh] min-h-[480px]">
+    <section className="relative h-[52svh] min-h-[400px] max-h-[560px]">
  <div data-map="gehj" key={`map-desktop-${gid ?? "unknown"}`} className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
       {!mapLoaded && (
         <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">

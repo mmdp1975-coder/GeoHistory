@@ -49,7 +49,6 @@ type JourneySummary = {
 type VJourneyRow = {
   journey_id: string;
   journey_slug: string | null;
-  journey_cover_url: string | null;
   translation_title: string | null;
   approved_at: string | null;
   events_count: number | null;
@@ -97,6 +96,17 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
   { value: "video", label: "Video" },
   { value: "other", label: "Altro" },
 ];
+
+const DEFAULT_MEDIA_ROLES = ["gallery", "cover", "poster", "context"];
+
+const buildRoleOptions = (items: GroupEventMediaItem[]) => {
+  const roles = new Set(DEFAULT_MEDIA_ROLES);
+  items.forEach((item) => {
+    const role = (item.role ?? "").trim();
+    if (role) roles.add(role);
+  });
+  return Array.from(roles).map((role) => ({ value: role, label: role }));
+};
 
 type JourneyStatus = "draft" | "submitted" | "published" | "refused";
 
@@ -365,6 +375,7 @@ export default function BuildJourneyPage() {
   const [journeyFilter, setJourneyFilter] = useState<JourneyFilterValue>("all");
   const [journeyStatusFilter, setJourneyStatusFilter] = useState<JourneyStatusFilterValue>("all");
   const [journeySort, setJourneySort] = useState<JourneySortValue>("approved_asc");
+  const [journeySearchTerm, setJourneySearchTerm] = useState<string>("");
   const [journeyRatingMap, setJourneyRatingMap] = useState<Record<string, JourneyRating>>({});
   const [activeTab, setActiveTab] = useState<"group" | "events">("group");
   const [journeySubTab, setJourneySubTab] = useState<"general" | "translations" | "media">("general");
@@ -382,6 +393,7 @@ export default function BuildJourneyPage() {
   const [mapOverlayEventId, setMapOverlayEventId] = useState<string | null>(null);
   const [geocodeLoading, setGeocodeLoading] = useState<Record<string, boolean>>({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteOk, setDeleteOk] = useState<string | null>(null);
@@ -390,6 +402,7 @@ export default function BuildJourneyPage() {
   const [approvalOk, setApprovalOk] = useState<string | null>(null);
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
+  const isItalian = (langCode || "").toLowerCase().startsWith("it");
   const correlationJourneyOptions = useMemo(() => {
     const formatLabel = (journey: JourneySummary) => {
       const title = journey.title?.trim() || tUI(langCode, "journey.title_fallback");
@@ -426,6 +439,11 @@ export default function BuildJourneyPage() {
       { value: "other" as MediaKind, label: tUI(langCode, "build.media.kind.other") },
     ],
     [langCode],
+  );
+
+  const mediaRoleOptions = useMemo(
+    () => buildRoleOptions([...groupEventMedia, ...journeyEvents.flatMap((ev) => ev.media || [])]),
+    [groupEventMedia, journeyEvents],
   );
 
   const journeyFilterOptions = useMemo(
@@ -505,17 +523,31 @@ export default function BuildJourneyPage() {
 
   const selectedJourney = useMemo(() => journeys.find((j) => j.id === selectedJourneyId) ?? null, [journeys, selectedJourneyId]);
   const filteredJourneys = useMemo(() => {
+    const searchText = journeySearchTerm.trim().toLowerCase();
+    const matchesSearch = (journey: JourneySummary) => {
+      if (!searchText) return true;
+      const parts = [
+        journey.title ?? "",
+        journey.id ?? "",
+        journey.owner_profile_id ?? "",
+        journey.yearFrom != null ? `${journey.yearFrom}` : "",
+        journey.yearTo != null ? `${journey.yearTo}` : "",
+      ];
+      return parts.some((part) => part.toLowerCase().includes(searchText));
+    };
     if (journeyFilter === "all") {
-      return journeyStatusFilter === "all"
+      const byStatus =
+        journeyStatusFilter === "all"
         ? journeys
         : journeys.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
+      return byStatus.filter(matchesSearch);
     }
     const byVisibility = journeys.filter((journey) => journeyVisibilityMap[journey.id] === journeyFilter);
     if (journeyStatusFilter === "all") {
-      return byVisibility;
+      return byVisibility.filter(matchesSearch);
     }
-    return byVisibility.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter);
-  }, [journeyFilter, journeyStatusFilter, journeyVisibilityMap, journeyStatusMap, journeys]);
+    return byVisibility.filter((journey) => journeyStatusMap[journey.id] === journeyStatusFilter).filter(matchesSearch);
+  }, [journeyFilter, journeyStatusFilter, journeyVisibilityMap, journeyStatusMap, journeys, journeySearchTerm]);
   const sortedEvents = useMemo(() => {
     const toSortValue = (ev: JourneyEventEditor): number => {
       const yearFrom = normalizeYearForEra(ev.event.year_from, ev.event.era);
@@ -747,16 +779,34 @@ export default function BuildJourneyPage() {
       }
       const { data: rows, error } = await supabase
         .from("v_journeys")
-        .select("journey_id,journey_cover_url,translation_title,approved_at,events_count,year_from_min,year_to_max")
+        .select("journey_id,translation_title,approved_at,events_count,year_from_min,year_to_max")
         .in("journey_id", ownerIds)
         .order("approved_at", { ascending: journeySort === "approved_asc" });
       if (error) throw error;
       const journeysFromView = (rows ?? []) as VJourneyRow[];
+
+      const { data: coverRows, error: coverError } = await supabase
+        .from("v_media_attachments_expanded")
+        .select("group_event_id,public_url,is_primary,sort_order")
+        .in("group_event_id", ownerIds)
+        .eq("entity_type", "group_event")
+        .eq("role", "cover")
+        .order("is_primary", { ascending: false })
+        .order("sort_order", { ascending: true });
+      if (coverError) throw coverError;
+      const coverMap: Record<string, string | undefined> = {};
+      (coverRows ?? []).forEach((row: any) => {
+        const groupId = row.group_event_id as string | undefined;
+        if (!groupId) return;
+        if (coverMap[groupId]) return;
+        if (row.public_url) coverMap[groupId] = row.public_url as string;
+      });
+
       setJourneys(
         journeysFromView.map((journey) => ({
           id: journey.journey_id,
           title: journey.translation_title ?? null,
-          coverUrl: journey.journey_cover_url ?? null,
+          coverUrl: coverMap[journey.journey_id] ?? null,
           publishedAt: journey.approved_at,
           eventsCount: journey.events_count,
           yearFrom: journey.year_from_min,
@@ -1870,11 +1920,11 @@ export default function BuildJourneyPage() {
                       key={media.id ?? media.media_id ?? media.tempId ?? index}
                       className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
                     >
-                      <div className="grid gap-4 items-end sm:grid-cols-[110px_1fr_180px_auto]">
+                      <div className="grid gap-3 items-end sm:grid-cols-[90px_minmax(220px,_2fr)_150px]">
                         <Input
                           label={tUI(langCode, "build.media.order")}
                           type="number"
-                          className="w-24"
+                          className="w-20"
                           value={(media.sort_order ?? position).toString()}
                           onChange={(value) =>
                             updateMediaItemField(safeIndex, "sort_order", value ? Number(value) : undefined)
@@ -1892,9 +1942,27 @@ export default function BuildJourneyPage() {
                           onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
                           options={mediaKindOptions}
                         />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Select
+                          label={isItalian ? "Ruolo" : "Role"}
+                          value={media.role ?? ""}
+                          onChange={(value) => updateMediaItemField(safeIndex, "role", value)}
+                          options={mediaRoleOptions}
+                          className="min-w-[200px] flex-1"
+                        />
+                        <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 bg-white">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
+                            checked={!!media.is_primary}
+                            onChange={(event) => updateMediaItemField(safeIndex, "is_primary", event.target.checked)}
+                          />
+                          <span>{isItalian ? "Primario" : "Primary"}</span>
+                        </label>
                         <button
                           type="button"
-                          className="self-end text-xs font-semibold text-red-600"
+                          className="text-xs font-semibold text-red-600 ml-auto"
                           onClick={() => removeMediaItem(safeIndex)}
                         >
                           {tUI(langCode, "build.media.delete")}
@@ -2424,25 +2492,21 @@ export default function BuildJourneyPage() {
                         {ev.media.length === 0 ? (
                           <p className="text-sm text-neutral-500">{tUI(langCode, "build.events.media.empty")}</p>
                         ) : (
-                          ev.media.map((m, mIdx) => {
-                            const itemPosition = mIdx + 1;
+                              ev.media.map((m, mIdx) => {
                             return (
                               <div key={m.tempId} className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
-                                <div className="grid gap-4 items-end sm:grid-cols-[110px_1fr_180px_auto]">
+                                <div className="grid gap-4 items-end sm:grid-cols-[90px_minmax(220px,_2fr)_150px]">
                                   <Input
                                     label={tUI(langCode, "build.media.order")}
                                     type="number"
-                                    className="w-24"
-                                    value={(m.sort_order ?? itemPosition).toString()}
+                                    className="w-20"
+                                    value={(m.sort_order ?? mIdx + 1).toString()}
                                     onChange={(value) =>
                                       setJourneyEvents((prev) =>
                                         prev.map((item) => {
                                           if (item.tempId !== ev.tempId) return item;
                                           const nextMedia = [...item.media];
-                                          nextMedia[mIdx] = {
-                                            ...nextMedia[mIdx],
-                                            sort_order: value ? Number(value) : undefined,
-                                          };
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], sort_order: value ? Number(value) : undefined };
                                           return { ...item, media: nextMedia };
                                         }),
                                       )
@@ -2478,9 +2542,45 @@ export default function BuildJourneyPage() {
                                     }
                                     options={mediaKindOptions}
                                   />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <Select
+                                    label={isItalian ? "Ruolo" : "Role"}
+                                    value={m.role ?? ""}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], role: value };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                    options={mediaRoleOptions}
+                                    className="min-w-[200px] flex-1"
+                                  />
+                                  <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 bg-white">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
+                                      checked={!!m.is_primary}
+                                      onChange={(event) =>
+                                        setJourneyEvents((prev) =>
+                                          prev.map((item) => {
+                                            if (item.tempId !== ev.tempId) return item;
+                                            const nextMedia = [...item.media];
+                                            nextMedia[mIdx] = { ...nextMedia[mIdx], is_primary: event.target.checked };
+                                            return { ...item, media: nextMedia };
+                                          }),
+                                        )
+                                      }
+                                    />
+                                    <span>{isItalian ? "Primario" : "Primary"}</span>
+                                  </label>
                                   <button
                                     type="button"
-                                    className="self-end text-xs font-semibold text-red-600"
+                                    className="text-xs font-semibold text-red-600 ml-auto"
                                     onClick={() =>
                                       setJourneyEvents((prev) =>
                                         prev.map((item) =>
@@ -2591,91 +2691,128 @@ export default function BuildJourneyPage() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } h-screen overflow-y-auto`}
       >
-        <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-neutral-200 bg-white/90 px-4 py-5 backdrop-blur">
-            <div className="flex flex-wrap items-start gap-3">
-              <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
-                  {tUI(langCode, "build.sidebar.visibility")}
-                </p>
-              <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
-                {journeyFilterOptions.map((option) => {
-                  const isActive = journeyFilter === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[70px] text-center ${
-                        isActive
-                          ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
-                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
-                      }`}
-                      onClick={() => setJourneyFilter(option.value)}
-                      aria-pressed={isActive}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
-                {tUI(langCode, "build.sidebar.status")}
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-1">
-                {journeyStatusOptions.map((option) => {
-                  const isActive = journeyStatusFilter === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-normal leading-tight min-w-[70px] text-center ${
-                        isActive
-                          ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
-                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
-                      }`}
-                      onClick={() => setJourneyStatusFilter(option.value)}
-                      aria-pressed={isActive}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
-                {tUI(langCode, "build.sidebar.order")}
-              </p>
-              <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
-                {journeySortOptions.map((option) => {
-                  const isActive = journeySort === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[90px] text-center ${
-                        isActive
-                          ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
-                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
-                      }`}
-                      onClick={() => setJourneySort(option.value)}
-                      aria-pressed={isActive}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        <div className="sticky top-0 z-10 space-y-3 border-b border-neutral-200 bg-white/90 px-4 py-5 backdrop-blur">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="ml-auto rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs font-semibold text-neutral-600 shadow-sm hover:border-neutral-400 lg:hidden"
+              className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-neutral-700 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/70 hover:text-sky-700"
+              onClick={() => setSidebarFiltersOpen((prev) => !prev)}
+            >
+              <span>{isItalian ? "Ricerca e filtri" : "Search & filters"}</span>
+              <svg
+                aria-hidden="true"
+                className={`h-4 w-4 transition-transform ${sidebarFiltersOpen ? "rotate-180" : "rotate-0"}`}
+                viewBox="0 0 20 20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M5 8l5 5 5-5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-2 py-1 text-xs font-semibold text-neutral-600 shadow-sm hover:border-neutral-400 lg:hidden"
               onClick={() => setSidebarOpen(false)}
             >
               {tUI(langCode, "build.actions.close")}
             </button>
           </div>
+          {sidebarFiltersOpen && (
+            <>
+              <div className="rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+                <Input
+                  size="sm"
+                  label={langCode.startsWith("it") ? "Cerca journey" : "Search journeys"}
+                  value={journeySearchTerm}
+                  placeholder={langCode.startsWith("it") ? "Titolo, codice o anni" : "Title, code or years"}
+                  onChange={setJourneySearchTerm}
+                />
+              </div>
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                    {tUI(langCode, "build.sidebar.visibility")}
+                  </p>
+                  <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
+                    {journeyFilterOptions.map((option) => {
+                      const isActive = journeyFilter === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[70px] text-center ${
+                            isActive
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                              : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
+                          }`}
+                          onClick={() => setJourneyFilter(option.value)}
+                          aria-pressed={isActive}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                    {tUI(langCode, "build.sidebar.status")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    {journeyStatusOptions.map((option) => {
+                      const isActive = journeyStatusFilter === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-normal leading-tight min-w-[70px] text-center ${
+                            isActive
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                              : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
+                          }`}
+                          onClick={() => setJourneyStatusFilter(option.value)}
+                          aria-pressed={isActive}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-[200px] rounded-2xl border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+                    {tUI(langCode, "build.sidebar.order")}
+                  </p>
+                  <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-hidden">
+                    {journeySortOptions.map((option) => {
+                      const isActive = journeySort === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`rounded-full border px-2 py-1 text-xs font-semibold transition whitespace-nowrap min-w-[90px] text-center ${
+                            isActive
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-sm"
+                              : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
+                          }`}
+                          onClick={() => setJourneySort(option.value)}
+                          aria-pressed={isActive}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
           <p className="text-xs text-neutral-500">
             {`${filteredJourneys.length} Journeys`}
           </p>

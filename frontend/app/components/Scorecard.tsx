@@ -61,6 +61,26 @@ function mergeClassNames(...values: Array<string | undefined>) {
   return values.filter(Boolean).join(" ").trim();
 }
 
+function canUseNextImage(url?: string | null) {
+  if (!url) return false;
+  return url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/");
+}
+
+function normalizeCoverUrl(raw?: string | null) {
+  if (!raw) return "";
+  const url = raw.trim();
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/")) {
+    return url;
+  }
+  const withForwardSlashes = url.replace(/\\/g, "/");
+  const fromPublic = withForwardSlashes.split("/public/");
+  if (fromPublic.length > 1 && fromPublic[1]) {
+    return encodeURI(`/${fromPublic[1]}`);
+  }
+  return encodeURI(withForwardSlashes);
+}
+
 export function Scorecard({
   href,
   title,
@@ -223,24 +243,28 @@ export function Scorecard({
         {/* COVER */}
         <div className="relative h-40 w-full bg-neutral-100">
           {coverUrl ? (
-            usePlainImg ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={coverUrl}
-                alt={title}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <Image
-                src={coverUrl}
-                alt={title}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-                priority={false}
-              />
-            )
+            (() => {
+              const browserCoverUrl = normalizeCoverUrl(coverUrl);
+              const allowNextImage = !usePlainImg && canUseNextImage(browserCoverUrl);
+              return allowNextImage ? (
+                <Image
+                  src={browserCoverUrl}
+                  alt={title}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                  priority={false}
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={browserCoverUrl || coverUrl}
+                  alt={title}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              );
+            })()
           ) : (
             <div className="absolute inset-0 grid place-items-center text-sm text-neutral-400">
               {tUI(langCode, "scorecard.cover.missing")}
@@ -276,8 +300,10 @@ export function Scorecard({
                     aria-hidden
                   >
                     <path
-                      fill="currentColor"
-                      d="M12.1 8.3C11.5 7.5 10.5 7 9.5 7 7.6 7 6 8.6 6 10.5c0 .8.3 1.5.8 2.1L12 18l5.2-5.4c.5-.6.8-1.3.8-2.1C18 8.6 16.4 7 14.5 7c-1 0-2 .5-2.4 1.3l-.1.1-.1-.1z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      d="M12 19.5s-4.7-2.8-7.6-6c-.8-.9-.9-2.3-.3-3.4C4.8 8.3 6.1 7.5 7.5 7.5c1.1 0 2.2.5 3 1.4l1.5 1.6 1.5-1.6c.8-.9 1.9-1.4 3-1.4 1.4 0 2.7.8 3.4 1.6.6 1 .5 2.5-.3 3.4C16.7 16.7 12 19.5 12 19.5z"
                     />
                   </svg>
                 )}
@@ -299,7 +325,20 @@ export function Scorecard({
                       d="M12 21s-5.7-3.4-9-7.1C1.1 12 1 10.3 1.8 9.1 2.8 7.4 4.9 6 7 6c1.5 0 3 .7 4 1.9C12 6.7 13.5 6 15 6c2.1 0 4.2 1.4 5.2 3.1.8 1.2.7 2.9-.2 3.9-3.3 3.7-9 7-9 7z"
                     />
                   </svg>
-                ) : null}
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-neutral-400"
+                    aria-hidden
+                  >
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      d="M12 19.5s-4.7-2.8-7.6-6c-.8-.9-.9-2.3-.3-3.4C4.8 8.3 6.1 7.5 7.5 7.5c1.1 0 2.2.5 3 1.4l1.5 1.6 1.5-1.6c.8-.9 1.9-1.4 3-1.4 1.4 0 2.7.8 3.4 1.6.6 1 .5 2.5-.3 3.4C16.7 16.7 12 19.5 12 19.5z"
+                    />
+                  </svg>
+                )}
               </span>
             )}
           </div>
@@ -315,10 +354,18 @@ export function Scorecard({
 
             {hasRating ? (
               <div className="flex flex-col items-end text-xs text-neutral-600">
-                <span className="font-semibold">
+                <span className="inline-flex items-center gap-1 font-semibold">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4 text-amber-500"
+                    fill="currentColor"
+                    aria-hidden
+                  >
+                    <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                  </svg>
                   {safeAverage.toFixed(1)}
                 </span>
-                <span className="text-[10px]">({safeCount})</span>
+                <span className="text-[10px] text-neutral-500">({safeCount})</span>
               </div>
             ) : null}
           </div>

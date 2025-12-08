@@ -24,7 +24,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 
 type Visibility = "private" | "public";
-type MediaRole = "cover" | "attachment" | "gallery";
+type MediaRole = "cover" | "attachment" | "gallery" | "poster" | "context" | (string & {});
 export type MediaKind = "image" | "video" | "other";
 type MediaAssetType = "image" | "video" | "audio" | "document";
 
@@ -572,9 +572,9 @@ async function findOrCreateMediaAsset({
     throw new Error(`media select: ${error.message}`);
   }
   if (data?.id) {
-    return data;
+    return { ...data, created: false };
   }
-  return insertRow(T.media, {
+  const inserted = await insertRow(T.media, {
     storage_bucket: "public",
     storage_path: url,
     public_url: url,
@@ -583,6 +583,7 @@ async function findOrCreateMediaAsset({
     status: "ready",
     created_at: ts(),
   });
+  return { ...inserted, created: true };
 }
 
 async function upsertGroupEventTranslations(
@@ -642,6 +643,11 @@ function normalizeDeletedTranslationLangs(
   return normalizedDeleted.filter((lang) => !translationLangs.has(lang));
 }
 
+async function deleteGroupEventAttachments(group_event_id: string) {
+  const { error } = await sb().from(T.attach).delete().eq("group_event_id", group_event_id);
+  if (error) throw new Error(`attachments delete: ${error.message}`);
+}
+
 export async function saveJourney(payload: SaveJourneyPayload) {
   const created = {
     group_event_id: "" as string,
@@ -667,6 +673,13 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     if (payload.group_event.visibility === "private") return "published";
     return "draft";
   })();
+  const coverFromMedia = (payload.group_event_media ?? []).find(
+    (m) => (m.role ?? "gallery") === "cover",
+  );
+  const coverUrl =
+    coverFromMedia
+      ? coverFromMedia.public_url?.trim() || coverFromMedia.source_url?.trim() || null
+      : null;
   const groupEventPayload = {
     visibility: payload.group_event.visibility,
     allow_fan: payload.group_event.allow_fan ?? false,
@@ -684,11 +697,40 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       refused_by_profile_id: payload.group_event.refused_by_profile_id ?? null,
       refusal_reason: payload.group_event.refusal_reason ?? null,
     };
-    const galleryOnlyMedia = (payload.group_event_media ?? []).filter(
-      (m) => (m.role ?? "gallery") !== "cover",
-    );
+    // Normalize and dedupe gallery media to avoid unique constraint collisions on (entity, media, role, sort_order).
+    const seenGalleryKeys = new Set<string>();
+    const galleryOnlyMedia = (payload.group_event_media ?? [])
+      .filter((m) => (m.role ?? "gallery") !== "cover")
+      .map((m, idx) => ({
+        ...m,
+        // Force deterministic ordering; DB index enforces uniqueness on media_id + sort_order.
+        sort_order: Number.isFinite(m.sort_order as number) ? (m.sort_order as number) : idx,
+      }))
+      .filter((m) => {
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) return false;
+        const key = `${resolvedUrl}|${m.sort_order}|${m.role ?? "gallery"}`;
+        if (seenGalleryKeys.has(key)) return false;
+        seenGalleryKeys.add(key);
+        return true;
+      });
 
     if (payload.group_event_id) {
+      // Track previous media to clean up orphan assets when removed.
+      const { data: existingAttach } = await sb()
+        .from(T.attach)
+        .select("media_id, role")
+        .eq("group_event_id", payload.group_event_id)
+        .or("entity_type.is.null,entity_type.eq.group_event");
+      const prevMediaIds = (existingAttach ?? [])
+        .map((row: any) => row.media_id)
+        .filter((id): id is string => Boolean(id));
+      const prevNonCoverMediaIds = (existingAttach ?? [])
+        .filter((row: any) => row.role !== "cover")
+        .map((row: any) => row.media_id)
+        .filter((id: any): id is string => Boolean(id));
+      const usedGroupMediaIds = new Set<string>();
+
       await updateRow(T.group_events, { id: payload.group_event_id }, {
         ...groupEventPayload,
         updated_at: now,
@@ -699,13 +741,37 @@ export async function saveJourney(payload: SaveJourneyPayload) {
       );
       await deleteGroupEventTranslations(payload.group_event_id, deletedLangs);
       await upsertGroupEventTranslations(payload.group_event_id, payload.group_event_translations);
+      // Clear all attachments for this group_event; we'll re-add cover + gallery based on payload.
+      await deleteGroupEventAttachments(payload.group_event_id);
+
+      // Recreate cover attachment if coverUrl is present.
+      if (coverUrl) {
+        const cov = await findOrCreateMediaAsset({
+          url: coverUrl,
+          kind: "image",
+          sourceUrl: coverUrl,
+        });
+        if (cov?.id) {
+          usedGroupMediaIds.add(cov.id);
+          if (cov.created !== false) {
+            created.media_ids.push(cov.id);
+          }
+          const att = await insertRow(T.attach, {
+            media_id: cov.id,
+            entity_type: "group_event" as EntityType,
+            group_event_id: payload.group_event_id,
+            role: "cover" as MediaRole,
+            sort_order: 0,
+            is_primary: true,
+            created_at: ts(),
+          });
+          created.ge_attach_ids.push(att.id);
+        }
+      } else {
+        // No cover provided; ensure it's cleared.
+        // Nothing to do on group_events: cover is only tracked via attachments.
+      }
       if (galleryOnlyMedia.length) {
-        await sb()
-          .from(T.attach)
-          .delete()
-          .eq("entity_type", "group_event")
-          .eq("group_event_id", payload.group_event_id)
-          .eq("role", "gallery");
         for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
           const m = galleryOnlyMedia[mIdx];
           const resolvedUrl = m.public_url ?? m.source_url ?? null;
@@ -718,7 +784,10 @@ export async function saveJourney(payload: SaveJourneyPayload) {
             sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
           });
           if (asset?.id) {
-            created.media_ids.push(asset.id);
+            usedGroupMediaIds.add(asset.id);
+            if (asset.created !== false) {
+              created.media_ids.push(asset.id);
+            }
             const att = await insertRow(T.attach, {
               media_id: asset.id,
               entity_type: "group_event" as EntityType,
@@ -734,6 +803,36 @@ export async function saveJourney(payload: SaveJourneyPayload) {
             created.ge_attach_ids.push(att.id);
           }
         }
+      }
+      // Remove any attachment leftover for this group_event that is not in the current payload list.
+      const usedMediaArr = Array.from(usedGroupMediaIds);
+      if (usedMediaArr.length === 0) {
+        await sb()
+          .from(T.attach)
+          .delete()
+          .eq("group_event_id", payload.group_event_id)
+          .or("entity_type.is.null,entity_type.eq.group_event");
+      } else {
+        const notIn = `(${usedMediaArr.map((id) => `"${id}"`).join(",")})`;
+        await sb()
+          .from(T.attach)
+          .delete()
+          .eq("group_event_id", payload.group_event_id)
+          .not("media_id", "in", notIn)
+          .or("entity_type.is.null,entity_type.eq.group_event");
+      }
+      // Remove media assets that were attached to this journey but are no longer in the payload.
+      const removedMediaIds = prevNonCoverMediaIds.filter((id) => !usedGroupMediaIds.has(id));
+      if (removedMediaIds.length) {
+        // Best effort: clean attachments just in case, then delete assets.
+        const { error: delAttachErr } = await sb()
+          .from(T.attach)
+          .delete()
+          .eq("group_event_id", payload.group_event_id)
+          .in("media_id", removedMediaIds);
+        if (delAttachErr) throw new Error(`attachments cleanup: ${delAttachErr.message}`);
+        const { error: delMediaErr } = await sb().from(T.media).delete().in("id", removedMediaIds);
+        if (delMediaErr) throw new Error(`media cleanup: ${delMediaErr.message}`);
       }
       return { ok: true, group_event_id: payload.group_event_id };
     }
@@ -756,14 +855,16 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     await upsertGroupEventTranslations(group_event_id, payload.group_event_translations);
 
     // 1c) COVER in media_assets + media_attachments
-    if (payload.group_event.cover_url) {
+    if (coverUrl) {
       const cov = await findOrCreateMediaAsset({
-        url: payload.group_event.cover_url,
+        url: coverUrl,
         kind: "image",
-        sourceUrl: payload.group_event.cover_url,
+        sourceUrl: coverUrl,
       });
       if (cov?.id) {
-        created.media_ids.push(cov.id);
+        if (cov.created !== false) {
+          created.media_ids.push(cov.id);
+        }
         const att = await insertRow(T.attach, {
           media_id: cov.id,
           entity_type: "group_event" as EntityType,
@@ -774,7 +875,6 @@ export async function saveJourney(payload: SaveJourneyPayload) {
           created_at: ts(),
         });
         created.ge_attach_ids.push(att.id);
-        await updateRow(T.group_events, { id: group_event_id }, { cover_media_id: cov.id, updated_at: ts() });
       }
     }
 
@@ -786,7 +886,9 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         sourceUrl: payload.video_media_url,
       });
       if (v?.id) {
-        created.media_ids.push(v.id);
+        if (v.created !== false) {
+          created.media_ids.push(v.id);
+        }
         const att = await insertRow(T.attach, {
           media_id: v.id,
           entity_type: "group_event" as EntityType,
@@ -801,12 +903,7 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     }
 
     if (galleryOnlyMedia.length) {
-      await sb()
-        .from(T.attach)
-        .delete()
-        .eq("entity_type", "group_event")
-        .eq("group_event_id", group_event_id)
-        .eq("role", "gallery");
+      await deleteGroupEventAttachments(group_event_id);
 
       for (let mIdx = 0; mIdx < galleryOnlyMedia.length; mIdx++) {
         const m = galleryOnlyMedia[mIdx];
@@ -820,7 +917,9 @@ export async function saveJourney(payload: SaveJourneyPayload) {
           sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
         });
         if (asset?.id) {
-          created.media_ids.push(asset.id);
+          if (asset.created !== false) {
+            created.media_ids.push(asset.id);
+          }
           const att = await insertRow(T.attach, {
             media_id: asset.id,
             entity_type: "group_event" as EntityType,
@@ -896,23 +995,35 @@ export async function saveJourney(payload: SaveJourneyPayload) {
         });
       }
 
-      // 2e) media per evento
-      for (let mIdx = 0; mIdx < (ev.media?.length || 0); mIdx++) {
-        const m = ev.media[mIdx];
-        const resolvedUrl = m.public_url ?? m.source_url ?? null;
-        if (!resolvedUrl) {
-          continue;
-        }
-        const asset = await insertRow(T.media, {
-          storage_bucket: "public",
-          storage_path: resolvedUrl,
-          public_url: resolvedUrl,
-          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
-          media_type: toMediaAssetType((m as any).kind ?? null),
-          status: "ready",
-          created_at: ts(),
+      // 2e) media per evento (normalizza/duplica per evitare collisioni con unique index)
+      const seenEventMediaKeys = new Set<string>();
+      const eventMedia = (ev.media ?? [])
+        .map((m, idx) => ({
+          ...m,
+          role: m.role ?? "gallery",
+          sort_order: Number.isFinite(m.sort_order as number) ? (m.sort_order as number) : idx,
+        }))
+        .filter((m) => {
+          const resolvedUrl = m.public_url ?? m.source_url ?? null;
+          if (!resolvedUrl) return false;
+          const key = `${resolvedUrl}|${m.role}|${m.sort_order}`;
+          if (seenEventMediaKeys.has(key)) return false;
+          seenEventMediaKeys.add(key);
+          return true;
         });
-        created.media_ids.push(asset.id);
+
+      for (let mIdx = 0; mIdx < eventMedia.length; mIdx++) {
+        const m = eventMedia[mIdx];
+        const resolvedUrl = m.public_url ?? m.source_url ?? null;
+        if (!resolvedUrl) continue;
+        const asset = await findOrCreateMediaAsset({
+          url: resolvedUrl,
+          kind: (m as any).kind ?? null,
+          sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
+        });
+        if (asset?.id && asset.created !== false) {
+          created.media_ids.push(asset.id);
+        }
 
         const att = await insertRow(T.attach, {
           media_id: asset.id,
@@ -1078,14 +1189,10 @@ export async function saveJourneyEvents(payload: SaveJourneyEventsPayload) {
         const m = item.media![mIdx];
         const resolvedUrl = m.public_url ?? m.source_url ?? null;
         if (!resolvedUrl) continue;
-        const asset = await insertRow(T.media, {
-          storage_bucket: "public",
-          storage_path: resolvedUrl,
-          public_url: resolvedUrl,
-          source_url: m.source_url ?? m.public_url ?? resolvedUrl,
-          media_type: toMediaAssetType(m.kind),
-          status: "ready",
-          created_at: now,
+        const asset = await findOrCreateMediaAsset({
+          url: resolvedUrl,
+          kind: m.kind,
+          sourceUrl: m.source_url ?? m.public_url ?? resolvedUrl,
         });
         const att = await insertRow(T.attach, {
           media_id: asset.id,

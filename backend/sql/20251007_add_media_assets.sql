@@ -326,10 +326,21 @@ as $$
 begin
   if (tg_op = 'INSERT' or tg_op = 'UPDATE') then
     if new.role = 'cover' then
-      if new.event_id is not null then
+      -- Only attempt legacy sync if destination tables actually expose cover columns
+      if new.event_id is not null
+         and exists (
+           select 1 from information_schema.columns
+           where table_name = 'events_list' and column_name = 'image_url'
+         )
+      then
         perform sync_event_cover(new.event_id);
       end if;
-      if new.group_event_id is not null then
+      if new.group_event_id is not null
+         and exists (
+           select 1 from information_schema.columns
+           where table_name = 'group_events' and column_name = 'cover_url'
+         )
+      then
         perform sync_group_event_cover(new.group_event_id);
       end if;
     end if;
@@ -337,10 +348,20 @@ begin
 
   if (tg_op = 'UPDATE' or tg_op = 'DELETE') then
     if old.role = 'cover' then
-      if old.event_id is not null then
+      if old.event_id is not null
+         and exists (
+           select 1 from information_schema.columns
+           where table_name = 'events_list' and column_name = 'image_url'
+         )
+      then
         perform sync_event_cover(old.event_id);
       end if;
-      if old.group_event_id is not null then
+      if old.group_event_id is not null
+         and exists (
+           select 1 from information_schema.columns
+           where table_name = 'group_events' and column_name = 'cover_url'
+         )
+      then
         perform sync_group_event_cover(old.group_event_id);
       end if;
     end if;
