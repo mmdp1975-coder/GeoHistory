@@ -185,12 +185,24 @@ function getYouTubePreview(url?: string | null) {
     const normalized = url.startsWith("http") ? url : `https://${url}`;
     const u = new URL(normalized);
     const host = u.hostname.replace(/^www\./, "");
-    if (!host.includes("youtube.com") && host !== "youtu.be") return null;
-    const searchId = u.searchParams.get("v");
-    if (searchId) return `https://img.youtube.com/vi/${searchId}/hqdefault.jpg`;
+    const isYT = host.includes("youtube.com") || host === "youtu.be";
+    if (!isYT) return null;
+
     const pathParts = u.pathname.split("/").filter(Boolean);
-    const candidate = pathParts.pop();
-    if (candidate && candidate !== "watch") return `https://img.youtube.com/vi/${candidate}/hqdefault.jpg`;
+    const searchId = u.searchParams.get("v");
+    const idFromShorts = pathParts[0] === "shorts" ? pathParts[1] : null;
+    const idFromEmbed = pathParts[0] === "embed" ? pathParts[1] : null;
+    const idFromWatch = pathParts[0] === "watch" ? searchId : null;
+    const idFromLive = pathParts[0] === "live" ? pathParts[1] : null;
+    const idFromYoutu = host === "youtu.be" ? pathParts[0] : null;
+    const fallbackId = searchId || idFromShorts || idFromEmbed || idFromWatch || idFromLive || idFromYoutu;
+
+    const finalId =
+      fallbackId && /^[0-9A-Za-z_-]{6,}/.test(fallbackId)
+        ? fallbackId
+        : pathParts.find((p) => /^[0-9A-Za-z_-]{6,}/.test(p)) || null;
+
+    if (finalId) return `https://img.youtube.com/vi/${finalId}/hqdefault.jpg`;
   } catch {
     return null;
   }
@@ -206,6 +218,11 @@ function normalizeMediaUrl(raw?: string | null) {
     return url;
   }
   const withForwardSlashes = url.replace(/\\/g, "/");
+  // Supabase storage bucket paths without domain -> prepend public object path
+  const bucketMatch = withForwardSlashes.match(/^((journey-covers|media)\/.+)$/i);
+  if (bucketMatch) {
+    return `/storage/v1/object/public/${bucketMatch[1]}`;
+  }
   // Supabase storage paths without protocol: keep full storage prefix
   if (withForwardSlashes.includes("storage/v1/object/public/")) {
     return encodeURI(`/${withForwardSlashes.replace(/^\/+/, "")}`);
@@ -220,16 +237,63 @@ function normalizeMediaUrl(raw?: string | null) {
 function normalizeMediaItem(m: MediaItem): MediaItem {
   const normalizedUrl = normalizeMediaUrl(m.url || null);
   const normalizedPreview = normalizeMediaUrl(m.preview || null);
+  const youtubeThumb = getYouTubePreview(normalizedUrl || m.url || "") || null;
   const fallbackPreview =
     normalizedPreview ||
+    youtubeThumb ||
     normalizeMediaUrl(m.url || null) ||
     m.preview ||
     m.url ||
     null;
+  const looksVideo =
+    (m.type && m.type.toLowerCase() === "video") ||
+    /youtu\.?be|vimeo\.com/i.test(normalizedUrl || m.url || "");
   return {
     ...m,
+    type: looksVideo ? "video" : m.type,
     url: normalizedUrl || m.url,
     preview: fallbackPreview || null,
+  };
+}
+
+function coerceMediaItem(raw: any): MediaItem | null {
+  if (!raw) return null;
+  const url =
+    raw.url ||
+    raw.public_url ||
+    raw.source_url ||
+    raw.media_url ||
+    raw.path ||
+    "";
+  const preview =
+    raw.preview ||
+    raw.public_url ||
+    raw.source_url ||
+    raw.media_url ||
+    url ||
+    null;
+  const looksLikeVideo =
+    (typeof url === "string" && /youtu\.?be|vimeo\.com/i.test(url)) ||
+    (typeof url === "string" && /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url)) ||
+    (raw.media_type && String(raw.media_type).toLowerCase().startsWith("video/"));
+  const type =
+    raw.type ||
+    raw.media_type ||
+    (looksLikeVideo ? "video" : "image");
+  const previewOrThumb =
+    preview ||
+    (looksLikeVideo ? getYouTubePreview(typeof url === "string" ? url : "") : null) ||
+    null;
+  return {
+    media_id: String(raw.media_id || raw.id || url || Math.random().toString(36).slice(2)),
+    type,
+    role: raw.role ?? null,
+    url: typeof url === "string" ? url : "",
+    preview: typeof previewOrThumb === "string" ? previewOrThumb : null,
+    source: raw.source_url ?? raw.public_url ?? raw.url ?? null,
+    mime: raw.mime ?? raw.media_type ?? null,
+    lang: raw.lang ?? null,
+    sort_order: raw.sort_order ?? null,
   };
 }
 
@@ -267,7 +331,7 @@ function MediaOverlay({
 
  if (!open || !media) return null;
 
- const isVideo = media.type === "video";
+ const isVideo = media.type === "video" || /youtu\.?be|vimeo\.com/i.test(media.url || "");
  const isYouTube = isVideo && /youtu\.?be/.test(media.url);
 
  const base =
@@ -402,8 +466,12 @@ function MediaBox({
  }
 
  const curr = items[index];
- const isVideo = curr?.type === "video";
- const videoPreview = curr?.preview || (isVideo ? getYouTubePreview(curr?.url) : null);
+ const isVideo = curr?.type === "video" || /youtu\.?be|vimeo\.com/i.test(curr?.url || "");
+ const videoPreview =
+ getYouTubePreview(curr?.url) ||
+ getYouTubePreview(curr?.preview) ||
+ curr?.preview ||
+ null;
 
  const goPrev = () => setIndex((i) => (i - 1 + items.length) % items.length);
  const goNext = () => setIndex((i) => (i + 1) % items.length);
@@ -794,7 +862,9 @@ useEffect(() => {
  const vms: EventVM[] = (vjRows ?? []).map((r: any) => {
  const eventId = r.event_id ?? r.id;
  const location = r.city ?? r.region ?? r.country ?? r.continent ?? null;
- const eventMedia: MediaItem[] = Array.isArray(r.event_media) ? (r.event_media as MediaItem[]) : [];
+ const eventMedia: MediaItem[] = Array.isArray(r.event_media)
+   ? (r.event_media as any[]).map(coerceMediaItem).filter(Boolean) as MediaItem[]
+   : [];
  const coverMedia = eventMedia.find(
    (m) =>
      (m?.role || "").toLowerCase() === "cover" &&
@@ -870,7 +940,9 @@ useEffect(() => {
  vms.sort((a, b) => a.order_key - b.order_key);
 
 const j0 = (vjRows ?? [])[0] as any;
-const jm: MediaItem[] = Array.isArray(j0?.journey_media) ? j0.journey_media : [];
+const jm: MediaItem[] = Array.isArray(j0?.journey_media)
+  ? (j0.journey_media as any[]).map(coerceMediaItem).filter(Boolean) as MediaItem[]
+  : [];
 const jmCover = jm.find(
   (m) =>
     (m?.role || "").toLowerCase() === "cover" &&

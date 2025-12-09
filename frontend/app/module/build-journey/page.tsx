@@ -89,6 +89,11 @@ type GroupEventMediaItem = GroupEventMediaEntry & {
   media_id?: string;
   tempId: string;
   kind: MediaKind;
+  sourceType?: "url" | "file";
+  localFile?: File | null;
+  previewUrl?: string | null;
+  uploading?: boolean;
+  uploadError?: string | null;
 };
 
 const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
@@ -119,6 +124,19 @@ type JourneyRating = {
   avg_rating: number | null;
   ratings_count: number | null;
 };
+
+type ImportPreview = {
+  journeyRows: number;
+  eventRows: number;
+  sheets: string[];
+};
+
+type ImportParsedData = {
+  journeyRow: Record<string, unknown> | null;
+  eventRows: Record<string, unknown>[];
+};
+
+const EXCEL_ALLOWED_EXTENSIONS = ["xlsx", "xls"];
 
 const hashString = (input: string) => {
   let hash = 0;
@@ -228,6 +246,11 @@ const createEmptyGroupEventMediaItem = (): GroupEventMediaItem => ({
   alt_text: "",
   is_primary: false,
   sort_order: undefined,
+  sourceType: "url",
+  localFile: null,
+  previewUrl: null,
+  uploading: false,
+  uploadError: null,
 });
 
 const createEmptyEventTranslation = (lang: string, id?: string) => ({
@@ -267,6 +290,18 @@ const createEmptyEventEditor = (): JourneyEventEditor => ({
   media: [],
   correlations: [],
 });
+
+const isProbablyVideo = (url?: string | null, kind?: MediaKind | null) => {
+  if (kind === "video") return true;
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v|avi|mkv)(\?|#|$)/i.test(url);
+};
+
+const buildAcceptFromKind = (kind?: MediaKind | null) => {
+  if (kind === "video") return "video/*";
+  if (kind === "image") return "image/*";
+  return "image/*,video/*";
+};
 
 const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
   cover_url: "",
@@ -392,7 +427,7 @@ export default function BuildJourneyPage() {
   const [mediaFilterKind, setMediaFilterKind] = useState<MediaKind | "all">("all");
   const [mapOverlayEventId, setMapOverlayEventId] = useState<string | null>(null);
   const [geocodeLoading, setGeocodeLoading] = useState<Record<string, boolean>>({});
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -400,9 +435,22 @@ export default function BuildJourneyPage() {
   const [approvalSaving, setApprovalSaving] = useState(false);
   const [approvalError, setApprovalError] = useState<string | null>(null);
   const [approvalOk, setApprovalOk] = useState<string | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importParsed, setImportParsed] = useState<ImportParsedData>({ journeyRow: null, eventRows: [] });
+  const [importAppliedMessage, setImportAppliedMessage] = useState<string | null>(null);
+  const [importActiveLang, setImportActiveLang] = useState<string>(DEFAULT_LANGUAGE);
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
   const isItalian = (langCode || "").toLowerCase().startsWith("it");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setSidebarOpen(window.innerWidth >= 1024);
+  }, []);
   const correlationJourneyOptions = useMemo(() => {
     const formatLabel = (journey: JourneySummary) => {
       const title = journey.title?.trim() || tUI(langCode, "journey.title_fallback");
@@ -575,21 +623,102 @@ export default function BuildJourneyPage() {
   );
   const toolbarSelectedEventTab = selectedEventTempId ? eventTabMap[selectedEventTempId] ?? "details" : "details";
 
+  const uploadMediaFile = useCallback(
+    async ({
+      file,
+      role,
+      entityId,
+      kind,
+    }: {
+      file: File;
+      role?: string | null;
+      entityId?: string | null;
+      kind?: MediaKind | null;
+    }) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (role) form.append("role", role);
+      if (kind) form.append("kind", kind);
+      if (entityId) form.append("entityId", entityId);
+
+      const res = await fetch("/api/upload-media", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson?.error || res.statusText || "Upload failed");
+      }
+      const data = (await res.json()) as { publicUrl: string; bucket: string; path: string };
+      return {
+        publicUrl: data.publicUrl,
+        storagePath: data.path,
+        bucket: data.bucket,
+        kind: kind ?? "image",
+      };
+    },
+    [],
+  );
+
   const buildEventsPayload = useCallback(
-    (group_event_id: string): { events: JourneyEventEditPayload[]; delete_event_ids: string[] } => {
-      const events = journeyEvents.map((ev) => {
+    async (group_event_id: string): Promise<{ events: JourneyEventEditPayload[]; delete_event_ids: string[] }> => {
+      const events: JourneyEventEditPayload[] = [];
+      for (let evIdx = 0; evIdx < journeyEvents.length; evIdx++) {
+        const ev = journeyEvents[evIdx];
         const typeCodes =
           ev.type_codes && ev.type_codes.length
             ? ev.type_codes
             : ev.event.event_types_id
             ? [ev.event.event_types_id]
             : [];
-        return {
+
+        const media: GroupEventMediaEntry[] = [];
+        for (let mIdx = 0; mIdx < ev.media.length; mIdx++) {
+          const m = ev.media[mIdx] as GroupEventMediaItem;
+          const role = (m.role || "gallery").trim();
+          const kind = m.kind || "image";
+          const sourceType = m.sourceType || (m.localFile ? "file" : "url");
+
+          if (role === "cover" && kind !== "image") {
+            throw new Error(isItalian ? "Le cover devono essere immagini." : "Cover must be an image.");
+          }
+
+          let public_url = (m.public_url || "").trim();
+          let source_url = (m.source_url || "").trim();
+
+          if (sourceType === "file" && m.localFile) {
+            const uploaded = await uploadMediaFile({
+              file: m.localFile,
+              role,
+              entityId: ev.event_id || group_event_id || ev.tempId,
+              kind,
+            });
+            public_url = uploaded.publicUrl;
+            source_url = source_url || uploaded.publicUrl;
+          }
+
+          if (!public_url && !source_url) {
+            continue;
+          }
+
+          media.push({
+            public_url: public_url || undefined,
+            source_url: source_url || public_url || undefined,
+            title: m.title?.trim() || undefined,
+            caption: m.caption?.trim() || undefined,
+            alt_text: m.alt_text?.trim() || undefined,
+            role,
+            sort_order: m.sort_order ?? mIdx,
+            is_primary: m.is_primary,
+            kind,
+          });
+        }
+
+        events.push({
           event_id: ev.event_id,
           added_by_user_ref: ev.added_by_user_ref ?? null,
           event: { ...ev.event },
           translation: { ...ev.translation },
-          translations: ev.translations_all,
           type_codes: typeCodes.map((code) => code?.trim()).filter(Boolean),
           correlations: ev.correlations
             .map((c) => ({
@@ -597,24 +726,12 @@ export default function BuildJourneyPage() {
               correlation_type: c.correlation_type || "related",
             }))
             .filter((c) => c.group_event_id),
-          media: ev.media
-            .map((m, mIdx) => ({
-              public_url: m.public_url?.trim() || undefined,
-              source_url: m.source_url?.trim() || undefined,
-              title: m.title?.trim() || undefined,
-              caption: m.caption?.trim() || undefined,
-              alt_text: m.alt_text?.trim() || undefined,
-              role: m.role ?? "gallery",
-              sort_order: m.sort_order ?? mIdx,
-              is_primary: m.is_primary,
-              kind: m.kind,
-            }))
-            .filter((m) => m.public_url || m.source_url),
-        };
-      });
+          media,
+        });
+      }
       return { events, delete_event_ids: deletedEventIds };
     },
-    [deletedEventIds, journeyEvents],
+    [deletedEventIds, isItalian, journeyEvents, uploadMediaFile],
   );
 
   const resetForm = useCallback(() => {
@@ -1326,6 +1443,98 @@ export default function BuildJourneyPage() {
     [],
   );
 
+  const handleGroupMediaFileChange = useCallback((index: number, file: File | null) => {
+    if (!file) return;
+    setGroupEventMedia((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? {
+              ...item,
+              localFile: file,
+              sourceType: "file",
+              public_url: "",
+              source_url: "",
+              previewUrl: URL.createObjectURL(file),
+              uploadError: null,
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const previewUrlFromMedia = useCallback((m: GroupEventMediaItem | GroupEventMediaEntry & { previewUrl?: string | null }) => {
+    return m.previewUrl || m.public_url || (m as any).source_url || "";
+  }, []);
+
+  const handleEventMediaFileChange = useCallback((tempId: string, mediaIndex: number, file: File | null) => {
+    if (!file) return;
+    setJourneyEvents((prev) =>
+      prev.map((item) => {
+        if (item.tempId !== tempId) return item;
+        const nextMedia = [...item.media];
+        if (!nextMedia[mediaIndex]) return item;
+        nextMedia[mediaIndex] = {
+          ...nextMedia[mediaIndex],
+          localFile: file,
+          sourceType: "file",
+          public_url: "",
+          source_url: "",
+          previewUrl: URL.createObjectURL(file),
+          uploadError: null,
+        } as any;
+        return { ...item, media: nextMedia };
+      }),
+    );
+  }, []);
+
+  const prepareGroupMediaForSave = useCallback(
+    async (groupId: string | null) => {
+      let coverUrl = ge.cover_url?.trim() || "";
+      const processed: GroupEventMediaEntry[] = [];
+      for (let i = 0; i < groupEventMedia.length; i++) {
+        const item = groupEventMedia[i];
+        const role = (item.role || "gallery").trim();
+        const kind = item.kind || "image";
+        const sourceType = item.sourceType || (item.localFile ? "file" : "url");
+
+        if (role === "cover" && kind !== "image") {
+          throw new Error(isItalian ? "La cover deve essere un'immagine." : "Cover must be an image.");
+        }
+
+        let publicUrl = (item.public_url || "").trim();
+        let sourceUrl = (item.source_url || "").trim();
+
+        if (sourceType === "file" && item.localFile) {
+          const uploaded = await uploadMediaFile({ file: item.localFile, role, entityId: groupId, kind });
+          publicUrl = uploaded.publicUrl;
+          sourceUrl = sourceUrl || uploaded.publicUrl;
+        }
+
+        if (!publicUrl && !sourceUrl) {
+          continue;
+        }
+
+        const payload: GroupEventMediaEntry = {
+          public_url: publicUrl || undefined,
+          source_url: sourceUrl || publicUrl || undefined,
+          title: item.title?.trim() || undefined,
+          caption: item.caption?.trim() || undefined,
+          alt_text: item.alt_text?.trim() || undefined,
+          role,
+          sort_order: item.sort_order ?? i,
+          is_primary: !!item.is_primary,
+          kind,
+        };
+        processed.push(payload);
+        if (role === "cover" && publicUrl) {
+          coverUrl = publicUrl;
+        }
+      }
+      return { coverUrl, media: processed };
+    },
+    [ge.cover_url, groupEventMedia, isItalian, uploadMediaFile],
+  );
+
   const formatEventDateLabel = useCallback((ev: JourneyEventEditor) => {
     if (ev.event.exact_date) return ev.event.exact_date;
     const yearFrom = formatYearWithEra(ev.event.year_from, ev.event.era);
@@ -1424,26 +1633,19 @@ export default function BuildJourneyPage() {
         description: row.description || undefined,
       }))
       .filter((row) => row.lang);
+    let preparedGroupMedia: { coverUrl: string; media: GroupEventMediaEntry[] } = { coverUrl: ge.cover_url || "", media: [] };
+    try {
+      preparedGroupMedia = await prepareGroupMediaForSave(selectedJourneyId);
+    } catch (err: any) {
+      setSaveError(err?.message || tUI(langCode, "build.messages.save_error"));
+      setSaving(false);
+      return;
+    }
 
-    const mediaPayload = groupEventMedia
-      .map((entry, index) => ({
-        public_url: entry.public_url?.trim() || undefined,
-        source_url: entry.source_url?.trim() || undefined,
-        title: entry.title?.trim() || undefined,
-        caption: entry.caption?.trim() || undefined,
-        alt_text: entry.alt_text?.trim() || undefined,
-        role: entry.role,
-        sort_order: entry.sort_order ?? index,
-        is_primary: entry.is_primary,
-        kind: entry.kind,
-      }))
-      .filter((entry) => entry.public_url || entry.source_url);
-
-    const payload: SaveJourneyPayload = {
+    const basePayload: SaveJourneyPayload = {
       group_event_id: selectedJourneyId ?? undefined,
       group_event: {
-        // Title is maintained in translations; group_events table no longer stores it.
-        cover_url: ge.cover_url,
+        cover_url: preparedGroupMedia.coverUrl || undefined,
         visibility: ge.visibility,
         description: ge.description || undefined,
         language: ge.language || DEFAULT_LANGUAGE,
@@ -1466,47 +1668,79 @@ export default function BuildJourneyPage() {
       deleted_group_event_translation_langs:
         deletedTranslationLangs.length > 0 ? deletedTranslationLangs : undefined,
       video_media_url: null,
-      group_event_media: mediaPayload,
+      group_event_media: preparedGroupMedia.media,
       events: [],
     };
 
-    try {
-      const res = await saveJourney(payload);
-      const groupId = res.group_event_id;
-      setSelectedJourneyId(groupId);
+    let attempt = 0;
+    let completed = false;
+    while (attempt < 2 && !completed) {
+      try {
+        const payload: SaveJourneyPayload = {
+          ...basePayload,
+          group_event: {
+            ...basePayload.group_event,
+            slug: ge.slug || basePayload.group_event.slug,
+            code: ge.code || basePayload.group_event.code,
+          },
+        };
 
-      let eventsError: any = null;
-      const { events, delete_event_ids } = buildEventsPayload(groupId);
-      if (events.length || delete_event_ids.length) {
-        try {
-          const eventsRes = await saveJourneyEvents({
-            group_event_id: groupId,
-            events,
-            delete_event_ids,
-          });
-          setEventsSaveOk((eventsRes.event_ids?.length ?? 0).toString());
-          setDeletedEventIds([]);
-        } catch (err: any) {
-          eventsError = err;
-          setEventsSaveError(err?.message || "Errore salvataggio eventi.");
+        const res = await saveJourney(payload);
+        const groupId = res.group_event_id;
+        setSelectedJourneyId(groupId);
+
+        let eventsError: any = null;
+        const { events, delete_event_ids } = await buildEventsPayload(groupId);
+        if (events.length || delete_event_ids.length) {
+          try {
+            const eventsRes = await saveJourneyEvents({
+              group_event_id: groupId,
+              events,
+              delete_event_ids,
+            });
+            setEventsSaveOk((eventsRes.event_ids?.length ?? 0).toString());
+            setDeletedEventIds([]);
+          } catch (err: any) {
+            eventsError = err;
+            setEventsSaveError(err?.message || "Errore salvataggio eventi.");
+          }
         }
-      }
 
-      await loadJourneys();
-      await loadJourneyDetails(groupId);
+        await loadJourneys();
+        await loadJourneyDetails(groupId);
 
-      if (!eventsError) {
-        setSaveOk({ id: groupId });
-      } else if (!saveError) {
-        setSaveError(eventsError?.message || tUI(langCode, "build.messages.events_save_error"));
+        if (!eventsError) {
+          setSaveOk({ id: groupId });
+        } else if (!saveError) {
+          setSaveError(eventsError?.message || tUI(langCode, "build.messages.events_save_error"));
+        }
+        completed = true;
+      } catch (err: any) {
+        const errMsg = err?.message || tUI(langCode, "build.messages.save_error");
+        const dupCode = typeof errMsg === "string" && errMsg.includes("group_events_code_key");
+        const dupSlug = typeof errMsg === "string" && errMsg.includes("group_events_slug_key");
+        if (attempt === 0 && (dupCode || dupSlug)) {
+          if (dupCode) {
+            const baseCode = buildAutoCode(translation.title, ge.description).replace(/-+$/, "").replace(/--+/g, "-");
+            const bumped = `${baseCode}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+            setGe((prev) => ({ ...prev, code: bumped }));
+          }
+          if (dupSlug) {
+            const baseSlug = (ge.slug || buildAutoSlug(translation.title, ge.description) || "journey")
+              .replace(/-+$/, "")
+              .replace(/--+/g, "-");
+            const bumped = `${baseSlug}-${Math.random().toString(36).slice(2, 5)}`;
+            setGe((prev) => ({ ...prev, slug: bumped }));
+          }
+          attempt += 1;
+          continue; // retry automatically once
+        }
+        setSaveError(errMsg);
+        setEventsSaveError((prev) => prev || errMsg);
+        completed = true;
       }
-    } catch (err: any) {
-      const msg = err?.message || tUI(langCode, "build.messages.save_error");
-      setSaveError(msg);
-      setEventsSaveError((prev) => prev || msg);
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   }
 
   async function onDeleteJourney() {
@@ -1548,6 +1782,373 @@ export default function BuildJourneyPage() {
     }
   }
 
+  const resetImportState = useCallback(() => {
+    setImportFile(null);
+    setImportError(null);
+    setImportPreview(null);
+    setImportLoading(false);
+    setImportParsed({ journeyRow: null, eventRows: [] });
+    setImportAppliedMessage(null);
+    setImportActiveLang(DEFAULT_LANGUAGE);
+  }, []);
+
+  const handleImportFileChange = useCallback(
+    (fileList: FileList | null) => {
+      const nextFile = fileList?.item(0) ?? null;
+      setImportPreview(null);
+
+      if (!nextFile) {
+        setImportFile(null);
+        setImportError(null);
+        return;
+      }
+
+      const ext = (nextFile.name.split(".").pop() || "").toLowerCase();
+      if (!EXCEL_ALLOWED_EXTENSIONS.includes(ext)) {
+        setImportFile(null);
+        setImportError(tUI(langCode, "build.import.error.invalid_type"));
+        return;
+      }
+
+      setImportFile(nextFile);
+      setImportError(null);
+    },
+    [langCode],
+  );
+
+  const handleImportDrop = useCallback(
+    (event: React.DragEvent<HTMLElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const files = event.dataTransfer?.files ?? null;
+      if (files?.length) {
+        handleImportFileChange(files);
+      }
+    },
+    [handleImportFileChange],
+  );
+
+  const handleValidateImportFile = useCallback(async () => {
+    if (!importFile) {
+      setImportError(tUI(langCode, "build.import.error.missing_file"));
+      return;
+    }
+
+    const ext = (importFile.name.split(".").pop() || "").toLowerCase();
+    if (!EXCEL_ALLOWED_EXTENSIONS.includes(ext)) {
+      setImportError(tUI(langCode, "build.import.error.invalid_type"));
+      return;
+    }
+
+    try {
+      setImportLoading(true);
+      const XLSX = await import("xlsx");
+      const buffer = await importFile.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const normalizedSheets = workbook.SheetNames.map((name) => name.trim().toLowerCase());
+      const journeySheetIndex = normalizedSheets.indexOf("journey");
+      const eventsSheetIndex = normalizedSheets.indexOf("events");
+
+      if (journeySheetIndex === -1 || eventsSheetIndex === -1) {
+        setImportError(tUI(langCode, "build.import.error.missing_sheets"));
+        setImportPreview(null);
+        return;
+      }
+
+      const journeySheetName = workbook.SheetNames[journeySheetIndex];
+      const eventsSheetName = workbook.SheetNames[eventsSheetIndex];
+      const journeyRows = XLSX.utils.sheet_to_json(workbook.Sheets[journeySheetName], { defval: "" }) as Record<
+        string,
+        unknown
+      >[];
+      const eventRows = XLSX.utils.sheet_to_json(workbook.Sheets[eventsSheetName], { defval: "" }) as Record<
+        string,
+        unknown
+      >[];
+
+      setImportPreview({
+        journeyRows: journeyRows.length,
+        eventRows: eventRows.length,
+        sheets: workbook.SheetNames,
+      });
+      setImportError(null);
+      setImportParsed({ journeyRow: journeyRows[0] ?? null, eventRows });
+      setImportAppliedMessage(null);
+    } catch (err) {
+      console.error("[BuildJourney] Excel import error:", err);
+      setImportError(tUI(langCode, "build.import.error.generic"));
+      setImportPreview(null);
+      setImportParsed({ journeyRow: null, eventRows: [] });
+    } finally {
+      setImportLoading(false);
+    }
+  }, [importFile, langCode]);
+
+  const handleApplyImportToForm = useCallback(() => {
+    if (!importParsed.journeyRow) {
+      setImportError(tUI(langCode, "build.import.error.missing_file"));
+      return;
+    }
+
+    const normalizeKey = (key: string) => key.trim().toLowerCase();
+    const normalizeValue = (value: unknown) => (value == null ? "" : String(value).trim());
+    const parseNumber = (value: unknown): number | null => {
+      if (value == null) return null;
+      if (typeof value === "number") return Number.isFinite(value) ? value : null;
+      const str = String(value).trim().replace(/\s+/g, "").replace(/,/g, ".");
+      if (!str) return null;
+      let num = parseFloat(str);
+      if (!Number.isFinite(num)) return null;
+      // Heuristic: if no decimal separator in input and the value is clearly out of coordinate range, scale down.
+      if (!str.includes(".") && Math.abs(num) > 180) {
+        let scaled = num;
+        let factor = 0;
+        while (Math.abs(scaled) > 180 && factor < 6) {
+          scaled = scaled / 10;
+          factor += 1;
+        }
+        num = scaled;
+      }
+      return num;
+    };
+    const extract = (row: Record<string, unknown>, candidates: string[]): unknown => {
+      const lowered = Object.fromEntries(
+        Object.entries(row || {}).map(([k, v]) => [normalizeKey(k), v]),
+      );
+      for (const key of candidates) {
+        const value = lowered[normalizeKey(key)];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+          return value;
+        }
+      }
+      return null;
+    };
+
+    // accept both EN/IT headings from the workbook
+    const journeyTitleKeys = ["title", "name", "titolo"];
+    const journeyDescriptionKeys = ["description", "summary", "descrizione"];
+    const journeyLangKeys = ["language", "lang", "locale", "lingua"];
+    const journeyVisibilityKeys = ["visibility", "public", "visibilita", "visibilità"];
+    const journeyCoverKeys = ["cover", "cover_url", "image", "coverurl", "copertina"];
+
+    const eventTitleKeys = ["title", "name", "titolo"];
+    const eventDescShortKeys = ["description_short", "summary", "descrizione_breve"];
+    const eventDescKeys = ["description", "details", "descrizione"];
+    const eventEraKeys = ["era", "periodo"];
+    const eventYearFromKeys = ["year_from", "from", "start_year", "anno_da", "inizio"];
+    const eventYearToKeys = ["year_to", "to", "end_year", "anno_a", "fine"];
+    const eventExactDateKeys = ["exact_date", "date", "data"];
+    const eventContinentKeys = ["continent", "continente"];
+    const eventCountryKeys = ["country", "paese", "nazione"];
+    const eventLocationKeys = ["location", "place", "city", "luogo", "citta", "città"];
+    const eventLatKeys = ["latitude", "lat", "latitudine"];
+    const eventLngKeys = ["longitude", "lon", "lng", "longitudine"];
+    const eventImageKeys = ["image", "image_url", "immagine"];
+    const eventTypeKeys = ["event_type_id", "event_types_id", "tipo_evento", "type", "type_event", "type event"];
+    const eventWikipediaKeys = ["wikipedia", "wikipedia_url"];
+
+    const buildTranslationsFromJourneyRow = (
+      row: Record<string, unknown>,
+    ): { lang: string; title?: string; description?: string }[] => {
+      const entries: Record<string, { lang: string; title?: string; description?: string }> = {};
+      Object.entries(row || {}).forEach(([rawKey, rawVal]) => {
+        const key = normalizeKey(rawKey);
+        const value = normalizeValue(rawVal);
+        if (!value) return;
+        // Detect language suffix e.g. "titolo it", "title en"
+        const match = key.match(/(titolo|title|descrizione|description)[_\s-]*([a-z]{2})?$/i);
+        if (!match) return;
+        const kind = match[1];
+        const lang = (match[2] || "").toLowerCase() || translationLang;
+        const bucket = entries[lang] || { lang };
+        if (kind.startsWith("titolo") || kind.startsWith("title")) {
+          bucket.title = value;
+        } else if (kind.startsWith("descrizione") || kind.startsWith("description")) {
+          bucket.description = value;
+        }
+        entries[lang] = bucket;
+      });
+      return Object.values(entries).filter((t) => t.title || t.description);
+    };
+
+    const buildEventTranslationsFromRow = (
+      row: Record<string, unknown>,
+      fallbackLang: string,
+    ): {
+      lang: string;
+      title?: string;
+      description?: string;
+      description_short?: string;
+      wikipedia_url?: string;
+    }[] => {
+      const entries: Record<string, { lang: string; title?: string; description?: string; description_short?: string; wikipedia_url?: string }> = {};
+      Object.entries(row || {}).forEach(([rawKey, rawVal]) => {
+        const value = normalizeValue(rawVal);
+        if (!value) return;
+        const tokens = normalizeKey(rawKey)
+          .split(/[\s_-]+/)
+          .filter(Boolean);
+        if (!tokens.length) return;
+        const langToken = tokens[tokens.length - 1];
+        const lang = langToken.length === 2 ? langToken : fallbackLang;
+        const kindToken = tokens.find((t) => ["titolo", "title", "descrizione", "description", "wikipedia"].includes(t));
+        if (!kindToken) return;
+        const bucket = entries[lang] || { lang };
+        if (kindToken === "titolo" || kindToken === "title") {
+          bucket.title = value;
+        } else if (kindToken === "descrizione" || kindToken === "description") {
+          bucket.description = value;
+          bucket.description_short = bucket.description_short || value;
+        } else if (kindToken === "wikipedia") {
+          bucket.wikipedia_url = value;
+        }
+        entries[lang] = bucket;
+      });
+      return Object.values(entries).filter((t) => t.title || t.description || t.wikipedia_url);
+    };
+
+    const journeyRow = importParsed.journeyRow;
+    const journeyTitle = normalizeValue(extract(journeyRow, journeyTitleKeys) || "");
+    const journeyDescription = normalizeValue(extract(journeyRow, journeyDescriptionKeys) || "");
+    const journeyLang = normalizeValue(extract(journeyRow, journeyLangKeys) || "") || DEFAULT_LANGUAGE;
+    const journeyVisibility = normalizeValue(extract(journeyRow, journeyVisibilityKeys) || "").toLowerCase();
+    const visibility: Visibility =
+      journeyVisibility === "public" || journeyVisibility === "pubblic"
+        ? "public"
+        : journeyVisibility === "private"
+        ? "private"
+        : ge.visibility;
+    const coverUrl = normalizeValue(extract(journeyRow, journeyCoverKeys) || "");
+    const slugFromSheet = normalizeValue(extract(journeyRow, ["slug"]) || "");
+    const codeFromSheet = normalizeValue(extract(journeyRow, ["code"]) || "");
+    const slug = slugFromSheet || buildAutoSlug(journeyTitle, journeyDescription);
+    const code = codeFromSheet || buildAutoCode(journeyTitle, journeyDescription);
+
+    setGe((prev) => ({
+      ...prev,
+      visibility,
+      cover_url: coverUrl || prev.cover_url,
+      description: journeyDescription || prev.description,
+      language: journeyLang || prev.language,
+      slug,
+      code,
+    }));
+
+    const translationLang = journeyLang || DEFAULT_LANGUAGE;
+    const sheetTranslations = buildTranslationsFromJourneyRow(journeyRow);
+    const translationsToUse =
+      sheetTranslations.length > 0
+        ? sheetTranslations
+        : [{ lang: translationLang, title: journeyTitle, description: journeyDescription }];
+
+    const primary = translationsToUse[0];
+    setTranslation({
+      lang: primary.lang || translationLang,
+      title: primary.title || journeyTitle,
+      description: primary.description || journeyDescription,
+    });
+    setTranslations(
+      translationsToUse.map((tr) => ({
+        lang: tr.lang || translationLang,
+        title: tr.title || "",
+        description: tr.description || "",
+      })),
+    );
+    setSelectedTranslationLang(primary.lang || translationLang);
+    setImportActiveLang(primary.lang || translationLang);
+
+    const mappedEvents: JourneyEventEditor[] = (importParsed.eventRows || []).map((row) => {
+      const ev = createEmptyEventEditor();
+      const title = normalizeValue(extract(row, eventTitleKeys) || "");
+      const descShort = normalizeValue(extract(row, eventDescShortKeys) || "");
+      const desc = normalizeValue(extract(row, eventDescKeys) || descShort);
+      const eraRaw = normalizeValue(extract(row, eventEraKeys) || "AD").toUpperCase();
+      const era: "AD" | "BC" = eraRaw === "BC" ? "BC" : "AD";
+      const sheetTranslations = buildEventTranslationsFromRow(row, translationLang);
+      const baseTranslation =
+        sheetTranslations.find((tr) => tr.lang === translationLang) ||
+        sheetTranslations[0] ||
+        null;
+      const fallbackTitleFromSheet = sheetTranslations[0]?.title || "";
+      const primaryTitle = baseTranslation?.title || title || fallbackTitleFromSheet;
+      const primaryDesc = baseTranslation?.description || desc || "";
+      const primaryDescShort = baseTranslation?.description_short || descShort || primaryDesc;
+      const primaryWiki = baseTranslation?.wikipedia_url || normalizeValue(extract(row, eventWikipediaKeys) || "");
+
+      ev.translation = {
+        ...ev.translation,
+        lang: baseTranslation?.lang || translationLang,
+        title: primaryTitle,
+        description_short: primaryDescShort || "",
+        description: primaryDesc || "",
+        wikipedia_url: primaryWiki || "",
+      };
+      ev.translations_all = (
+        sheetTranslations.length
+          ? sheetTranslations
+          : [
+              {
+                lang: translationLang,
+                title: primaryTitle,
+                description: primaryDesc,
+                description_short: primaryDescShort,
+                wikipedia_url: primaryWiki,
+              },
+            ]
+      ).map((tr) => ({
+        id: undefined,
+        lang: tr.lang || translationLang,
+        title: tr.title || "",
+        description: tr.description || "",
+        description_short: tr.description_short || tr.description || "",
+        wikipedia_url: tr.wikipedia_url || "",
+        video_url: "",
+      }));
+      ev.event.era = era;
+      ev.event.year_from = parseNumber(extract(row, eventYearFromKeys));
+      ev.event.year_to = parseNumber(extract(row, eventYearToKeys));
+      ev.event.exact_date = normalizeValue(extract(row, eventExactDateKeys) || "") || null;
+      ev.event.continent = normalizeValue(extract(row, eventContinentKeys) || "") || null;
+      ev.event.country = normalizeValue(extract(row, eventCountryKeys) || "") || null;
+      ev.event.location = normalizeValue(extract(row, eventLocationKeys) || "") || null;
+      ev.event.latitude = parseNumber(extract(row, eventLatKeys));
+      ev.event.longitude = parseNumber(extract(row, eventLngKeys));
+      ev.event.image_url = normalizeValue(extract(row, eventImageKeys) || "") || null;
+      const typeValueRaw = normalizeValue(extract(row, eventTypeKeys) || "") || "";
+      const resolveType = (value: string) => {
+        if (!value) return undefined;
+        const matchById = availableEventTypes.find((opt) => opt.id === value)?.id;
+        if (matchById) return matchById;
+        const matchByLabel = availableEventTypes.find((opt) => opt.label.toLowerCase() === value.toLowerCase())?.id;
+        if (matchByLabel) return matchByLabel;
+        return undefined; // ignore unknown to avoid FK errors
+      };
+      const typeValue = resolveType(typeValueRaw);
+      ev.event.event_types_id = typeValue || undefined;
+      ev.type_codes = typeValue ? [typeValue] : [];
+      return ev;
+    }).filter((ev) => ev.translation.title || ev.event.year_from !== null || ev.event.year_to !== null);
+
+    if (mappedEvents.length > 0) {
+      const tabMap: Record<string, EventTab> = {};
+      mappedEvents.forEach((ev) => {
+        tabMap[ev.tempId] = "details";
+      });
+      setEventTabMap(tabMap);
+      setSelectedEventTempId(mappedEvents[0]?.tempId ?? null);
+      setJourneyEvents(mappedEvents);
+      setDeletedEventIds([]);
+    } else {
+      setJourneyEvents([]);
+      setSelectedEventTempId(null);
+    }
+
+    setActiveTab("group");
+    setJourneySubTab("general");
+    setImportAppliedMessage(tUI(langCode, "build.import.applied"));
+    setImportModalOpen(false);
+  }, [ge.visibility, importParsed.eventRows, importParsed.journeyRow, langCode]);
+
 
   const renderGroupEventPage = () => {
     const allowFlags: { key: AllowFlagKey; label: string }[] = [
@@ -1559,122 +2160,138 @@ export default function BuildJourneyPage() {
 
     return (
       <section className="rounded-3xl border border-neutral-200/80 bg-white/80 backdrop-blur p-6 shadow-xl">
-        <div className="mb-4 flex flex-nowrap items-center gap-2 rounded-2xl bg-white px-3 py-2">
-          <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
-            <button
-              type="button"
-              className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
-                activeTab === "group" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-              }`}
-              onClick={() => {
-                setActiveTab("group");
-                setJourneySubTab("general");
-              }}
-            >
-              {tUI(langCode, "build.tab.journey")}
-              <span
-                className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                  activeTab === "group" ? "bg-sky-600" : "bg-transparent"
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl bg-white px-3 py-2 sm:flex-row sm:flex-nowrap sm:items-center">
+          <div className="order-2 flex flex-col gap-2 sm:order-1 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-3">
+            <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
+              <button
+                type="button"
+                className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                  activeTab === "group" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
                 }`}
-              />
-            </button>
-            <button
-              type="button"
-              className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
-                activeTab === "events" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-              }`}
-              onClick={() => {
-                setActiveTab("events");
-                if (selectedEventTempId) {
-                  setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: "details" }));
-                }
-              }}
-            >
-              {tUI(langCode, "build.tab.events")}
-              <span
-                className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                  activeTab === "events" ? "bg-sky-600" : "bg-transparent"
+                onClick={() => {
+                  setActiveTab("group");
+                  setJourneySubTab("general");
+                }}
+              >
+                {tUI(langCode, "build.tab.journey")}
+                <span
+                  className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                    activeTab === "group" ? "bg-sky-600" : "bg-transparent"
+                  }`}
+                />
+              </button>
+              <button
+                type="button"
+                className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                  activeTab === "events" ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
                 }`}
-              />
-            </button>
+                onClick={() => {
+                  setActiveTab("events");
+                  if (selectedEventTempId) {
+                    setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: "details" }));
+                  }
+                }}
+              >
+                {tUI(langCode, "build.tab.events")}
+                <span
+                  className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                    activeTab === "events" ? "bg-sky-600" : "bg-transparent"
+                  }`}
+                />
+              </button>
+            </div>
+            {activeTab === "group" && (
+              <div className="w-full overflow-x-auto">
+                <div className="flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm min-w-fit">
+                  {[
+                    { value: "general", label: tUI(langCode, "build.group.tab.general") },
+                    { value: "translations", label: tUI(langCode, "build.group.tab.translations") },
+                    { value: "media", label: tUI(langCode, "build.group.tab.media") },
+                  ].map((tab) => {
+                    const isActive = journeySubTab === tab.value;
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        className={`relative px-3 py-2 text-sm font-semibold transition ${
+                          isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
+                        }`}
+                        onClick={() => setJourneySubTab(tab.value as typeof journeySubTab)}
+                      >
+                        {tab.label}
+                        <span
+                          className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                            isActive ? "bg-sky-600" : "bg-transparent"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {activeTab === "events" && (
+              <div className="w-full overflow-x-auto">
+                <div className="flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm min-w-fit">
+                  {[
+                    { value: "details", label: tUI(langCode, "build.event.tab.when_where") },
+                    { value: "translations", label: tUI(langCode, "build.event.tab.translations") },
+                    { value: "media", label: tUI(langCode, "build.event.tab.media") },
+                    { value: "relations", label: tUI(langCode, "build.event.tab.details") },
+                  ].map((tab) => {
+                    const isActive = toolbarSelectedEventTab === tab.value;
+                    const disabled = !selectedEventTempId;
+                    return (
+                      <button
+                        key={tab.value}
+                        type="button"
+                        className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
+                          disabled
+                            ? "text-neutral-400 cursor-not-allowed"
+                            : isActive
+                            ? "text-sky-700"
+                            : "text-neutral-500 hover:text-neutral-700"
+                        }`}
+                        onClick={() => {
+                          if (disabled || !selectedEventTempId) return;
+                          setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: tab.value as EventTab }));
+                        }}
+                        disabled={disabled}
+                      >
+                        {tab.label}
+                        <span
+                          className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
+                            isActive ? "bg-sky-600" : "bg-transparent"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-          {activeTab === "group" && (
-            <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
-              {[
-                { value: "general", label: tUI(langCode, "build.group.tab.general") },
-                { value: "translations", label: tUI(langCode, "build.group.tab.translations") },
-                { value: "media", label: tUI(langCode, "build.group.tab.media") },
-              ].map((tab) => {
-                const isActive = journeySubTab === tab.value;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    className={`relative px-3 py-2 text-sm font-semibold transition ${
-                      isActive ? "text-sky-700" : "text-neutral-500 hover:text-neutral-700"
-                    }`}
-                    onClick={() => setJourneySubTab(tab.value as typeof journeySubTab)}
-                  >
-                    {tab.label}
-                    <span
-                      className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                        isActive ? "bg-sky-600" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {activeTab === "events" && (
-            <div className="inline-flex flex-nowrap items-center gap-2 rounded-xl border border-neutral-200 bg-white px-2 py-2 shadow-sm">
-              {[
-                { value: "details", label: tUI(langCode, "build.event.tab.when_where") },
-                { value: "translations", label: tUI(langCode, "build.event.tab.translations") },
-                { value: "media", label: tUI(langCode, "build.event.tab.media") },
-                { value: "relations", label: tUI(langCode, "build.event.tab.details") },
-              ].map((tab) => {
-                const isActive = toolbarSelectedEventTab === tab.value;
-                const disabled = !selectedEventTempId;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    className={`relative px-2.5 py-2 text-sm font-semibold transition whitespace-nowrap ${
-                      disabled
-                        ? "text-neutral-400 cursor-not-allowed"
-                        : isActive
-                        ? "text-sky-700"
-                        : "text-neutral-500 hover:text-neutral-700"
-                    }`}
-                    onClick={() => {
-                      if (disabled || !selectedEventTempId) return;
-                      setEventTabMap((prev) => ({ ...prev, [selectedEventTempId]: tab.value as EventTab }));
-                    }}
-                    disabled={disabled}
-                  >
-                    {tab.label}
-                    <span
-                      className={`pointer-events-none absolute inset-x-1 -bottom-1 h-[3px] rounded-full transition ${
-                        isActive ? "bg-sky-600" : "bg-transparent"
-                      }`}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div className="flex flex-nowrap items-center gap-2 ml-auto">
+          <div className="order-1 ml-auto flex w-full flex-wrap items-center gap-2 justify-start sm:order-2 sm:w-auto sm:flex-nowrap sm:justify-end">
             <button
               type="button"
-              className="h-9 w-24 rounded-full border border-sky-200 bg-white px-2.5 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
+              className="h-8 w-full sm:w-24 rounded-full border border-sky-200 bg-white px-2.5 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
               onClick={handleNewJourney}
             >
               {tUI(langCode, "build.actions.new")}
             </button>
             <button
               type="button"
-              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className="h-8 w-full sm:w-24 rounded-full border border-amber-200 bg-white px-2.5 text-[11px] font-semibold text-amber-700 shadow-sm hover:border-amber-300 hover:bg-amber-50 text-center"
+              onClick={() => {
+                resetImportState();
+                setImportModalOpen(true);
+              }}
+            >
+              {tUI(langCode, "build.actions.import")}
+            </button>
+            <button
+              type="button"
+              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 canSaveJourney && !saving
                   ? "bg-gradient-to-r from-sky-600 to-sky-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -1686,7 +2303,7 @@ export default function BuildJourneyPage() {
             </button>
             <button
               type="button"
-              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 selectedJourneyId && !approvalSaving
                   ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -1698,7 +2315,7 @@ export default function BuildJourneyPage() {
             </button>
             <button
               type="button"
-              className={`h-9 w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 selectedJourneyId && !deleting
                   ? "bg-gradient-to-r from-red-600 to-rose-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -1920,7 +2537,7 @@ export default function BuildJourneyPage() {
                       key={media.id ?? media.media_id ?? media.tempId ?? index}
                       className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
                     >
-                      <div className="grid gap-3 items-end sm:grid-cols-[90px_minmax(220px,_2fr)_150px]">
+                      <div className="grid gap-3 items-end md:grid-cols-[90px_minmax(200px,_2fr)_minmax(160px,_1fr)_150px]">
                         <Input
                           label={tUI(langCode, "build.media.order")}
                           type="number"
@@ -1937,6 +2554,12 @@ export default function BuildJourneyPage() {
                           placeholder={tUI(langCode, "build.media.title.placeholder")}
                         />
                         <Select
+                          label={isItalian ? "Ruolo" : "Role"}
+                          value={media.role ?? ""}
+                          onChange={(value) => updateMediaItemField(safeIndex, "role", value)}
+                          options={mediaRoleOptions}
+                        />
+                        <Select
                           label={tUI(langCode, "build.media.type")}
                           value={media.kind}
                           onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
@@ -1944,22 +2567,6 @@ export default function BuildJourneyPage() {
                         />
                       </div>
                       <div className="flex flex-wrap items-center gap-3">
-                        <Select
-                          label={isItalian ? "Ruolo" : "Role"}
-                          value={media.role ?? ""}
-                          onChange={(value) => updateMediaItemField(safeIndex, "role", value)}
-                          options={mediaRoleOptions}
-                          className="min-w-[200px] flex-1"
-                        />
-                        <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 bg-white">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
-                            checked={!!media.is_primary}
-                            onChange={(event) => updateMediaItemField(safeIndex, "is_primary", event.target.checked)}
-                          />
-                          <span>{isItalian ? "Primario" : "Primary"}</span>
-                        </label>
                         <button
                           type="button"
                           className="text-xs font-semibold text-red-600 ml-auto"
@@ -1968,19 +2575,97 @@ export default function BuildJourneyPage() {
                           {tUI(langCode, "build.media.delete")}
                         </button>
                       </div>
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <Input
-                          label={tUI(langCode, "build.media.public_url")}
-                          value={media.public_url}
-                          onChange={(value) => updateMediaItemField(safeIndex, "public_url", value)}
-                          placeholder={tUI(langCode, "build.media.url.placeholder")}
-                        />
-                        <Input
-                          label={tUI(langCode, "build.media.source_url")}
-                          value={media.source_url}
-                          onChange={(value) => updateMediaItemField(safeIndex, "source_url", value)}
-                          placeholder={tUI(langCode, "build.media.url.placeholder")}
-                        />
+                      <div className="grid gap-4 md:grid-cols-[1.5fr_minmax(220px,_1fr)] items-start">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-neutral-600">
+                            {isItalian ? "Sorgente" : "Source"}
+                          </span>
+                          {(["url", "file"] as const).map((mode) => {
+                            const active = (media.sourceType || "url") === mode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                  active
+                                    ? "border-sky-500 bg-sky-50 text-sky-700"
+                                    : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                                }`}
+                                onClick={() =>
+                                  updateMediaItemField(safeIndex, "sourceType", mode as "url" | "file")
+                                }
+                              >
+                                {mode === "url" ? "URL" : isItalian ? "File locale" : "Upload file"}
+                              </button>
+                            );
+                          })}
+                          {media.role === "cover" && (
+                            <span className="text-[11px] text-neutral-500">
+                              {isItalian ? "Solo immagini" : "Images only"}
+                            </span>
+                          )}
+                          {(media.sourceType || "url") === "url" ? (
+                            <div className="flex-1">
+                              <Input
+                                label={tUI(langCode, "build.media.public_url")}
+                                value={media.public_url || media.source_url || ""}
+                                onChange={(value) =>
+                                  setGroupEventMedia((prev) =>
+                                    prev.map((item, idx) =>
+                                      idx === safeIndex
+                                        ? { ...item, public_url: value, source_url: value }
+                                        : item,
+                                    ),
+                                  )
+                                }
+                                placeholder={tUI(langCode, "build.media.url.placeholder")}
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex-1 space-y-2">
+                              <input
+                                type="file"
+                                accept={buildAcceptFromKind(media.kind)}
+                                onChange={(e) => handleGroupMediaFileChange(safeIndex, e.target.files?.[0] || null)}
+                                className="block w-full text-sm text-neutral-700 file:mr-3 file:rounded-lg file:border file:border-neutral-200 file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-neutral-700 hover:file:border-neutral-300"
+                              />
+                              {media.localFile && (
+                                <p className="text-xs text-neutral-500">
+                                  {media.localFile.name} ({Math.round(media.localFile.size / 1024)} KB)
+                                </p>
+                              )}
+                              {media.uploadError && (
+                                <p className="text-xs text-red-600">{media.uploadError}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 p-3 h-36">
+                          {(() => {
+                            const previewUrl = previewUrlFromMedia(media);
+                            if (!previewUrl) {
+                              return (
+                                <p className="text-xs text-neutral-500">
+                                  {isItalian ? "Nessuna anteprima" : "No preview yet"}
+                                </p>
+                              );
+                            }
+                            const showVideo = isProbablyVideo(previewUrl, media.kind);
+                            return showVideo ? (
+                              <video
+                                src={previewUrl}
+                                controls
+                                className="h-full w-full rounded-lg bg-black object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={previewUrl}
+                                alt={media.title || "media preview"}
+                                className="h-full w-full rounded-lg object-cover"
+                              />
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
                   );
@@ -2039,6 +2724,9 @@ export default function BuildJourneyPage() {
                 >
                   {tUI(langCode, "build.translations.remove")}
                 </button>
+                <div className="rounded-full bg-neutral-100 px-3 py-1 text-[11px] font-semibold text-neutral-600">
+                  {tUI(langCode, "build.translations.selected_label")}: {selectedTranslationLang || importActiveLang}
+                </div>
               </div>
             </div>
 
@@ -2495,7 +3183,7 @@ export default function BuildJourneyPage() {
                               ev.media.map((m, mIdx) => {
                             return (
                               <div key={m.tempId} className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
-                                <div className="grid gap-4 items-end sm:grid-cols-[90px_minmax(220px,_2fr)_150px]">
+                                <div className="grid gap-4 items-end md:grid-cols-[90px_minmax(200px,_2fr)_minmax(160px,_1fr)_150px]">
                                   <Input
                                     label={tUI(langCode, "build.media.order")}
                                     type="number"
@@ -2528,6 +3216,21 @@ export default function BuildJourneyPage() {
                                     placeholder={tUI(langCode, "build.media.title.placeholder")}
                                   />
                                   <Select
+                                    label={isItalian ? "Ruolo" : "Role"}
+                                    value={m.role ?? ""}
+                                    onChange={(value) =>
+                                      setJourneyEvents((prev) =>
+                                        prev.map((item) => {
+                                          if (item.tempId !== ev.tempId) return item;
+                                          const nextMedia = [...item.media];
+                                          nextMedia[mIdx] = { ...nextMedia[mIdx], role: value };
+                                          return { ...item, media: nextMedia };
+                                        }),
+                                      )
+                                    }
+                                    options={mediaRoleOptions}
+                                  />
+                                  <Select
                                     label={tUI(langCode, "build.media.type")}
                                     value={m.kind}
                                     onChange={(value) =>
@@ -2544,40 +3247,6 @@ export default function BuildJourneyPage() {
                                   />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3">
-                                  <Select
-                                    label={isItalian ? "Ruolo" : "Role"}
-                                    value={m.role ?? ""}
-                                    onChange={(value) =>
-                                      setJourneyEvents((prev) =>
-                                        prev.map((item) => {
-                                          if (item.tempId !== ev.tempId) return item;
-                                          const nextMedia = [...item.media];
-                                          nextMedia[mIdx] = { ...nextMedia[mIdx], role: value };
-                                          return { ...item, media: nextMedia };
-                                        }),
-                                      )
-                                    }
-                                    options={mediaRoleOptions}
-                                    className="min-w-[200px] flex-1"
-                                  />
-                                  <label className="flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-semibold text-neutral-700 bg-white">
-                                    <input
-                                      type="checkbox"
-                                      className="h-4 w-4 rounded border-neutral-300 text-sky-600 focus:ring-sky-500"
-                                      checked={!!m.is_primary}
-                                      onChange={(event) =>
-                                        setJourneyEvents((prev) =>
-                                          prev.map((item) => {
-                                            if (item.tempId !== ev.tempId) return item;
-                                            const nextMedia = [...item.media];
-                                            nextMedia[mIdx] = { ...nextMedia[mIdx], is_primary: event.target.checked };
-                                            return { ...item, media: nextMedia };
-                                          }),
-                                        )
-                                      }
-                                    />
-                                    <span>{isItalian ? "Primario" : "Primary"}</span>
-                                  </label>
                                   <button
                                     type="button"
                                     className="text-xs font-semibold text-red-600 ml-auto"
@@ -2592,39 +3261,111 @@ export default function BuildJourneyPage() {
                                     }
                                   >
                                     {tUI(langCode, "build.media.delete")}
-                                  </button>
-                                </div>
-                                <div className="grid gap-4 md:grid-cols-2">
-                                  <Input
-                                    label={tUI(langCode, "build.media.public_url")}
-                                    value={m.public_url}
-                                    placeholder={tUI(langCode, "build.media.url.placeholder")}
-                                    onChange={(value) =>
-                                      setJourneyEvents((prev) =>
-                                        prev.map((item) => {
-                                          if (item.tempId !== ev.tempId) return item;
-                                          const nextMedia = [...item.media];
-                                          nextMedia[mIdx] = { ...nextMedia[mIdx], public_url: value };
-                                          return { ...item, media: nextMedia };
-                                        }),
-                                      )
-                                    }
-                                  />
-                                  <Input
-                                    label={tUI(langCode, "build.media.source_url")}
-                                    value={m.source_url}
-                                    placeholder={tUI(langCode, "build.media.url.placeholder")}
-                                    onChange={(value) =>
-                                      setJourneyEvents((prev) =>
-                                        prev.map((item) => {
-                                          if (item.tempId !== ev.tempId) return item;
-                                          const nextMedia = [...item.media];
-                                          nextMedia[mIdx] = { ...nextMedia[mIdx], source_url: value };
-                                          return { ...item, media: nextMedia };
-                                        }),
-                                      )
-                                    }
-                                  />
+                                </button>
+                              </div>
+                                <div className="grid gap-4 md:grid-cols-[1.5fr_minmax(220px,_1fr)] items-start">
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs font-semibold text-neutral-600">
+                                        {isItalian ? "Sorgente" : "Source"}
+                                      </span>
+                                      {(["url", "file"] as const).map((mode) => {
+                                        const active = (m.sourceType || "url") === mode;
+                                        return (
+                                          <button
+                                            key={mode}
+                                            type="button"
+                                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                              active
+                                                ? "border-sky-500 bg-sky-50 text-sky-700"
+                                                : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                                            }`}
+                                            onClick={() =>
+                                              setJourneyEvents((prev) =>
+                                                prev.map((item) => {
+                                                  if (item.tempId !== ev.tempId) return item;
+                                                  const nextMedia = [...item.media];
+                                                  nextMedia[mIdx] = { ...nextMedia[mIdx], sourceType: mode };
+                                                  return { ...item, media: nextMedia };
+                                                }),
+                                              )
+                                            }
+                                          >
+                                            {mode === "url" ? "URL" : isItalian ? "File locale" : "Upload file"}
+                                          </button>
+                                        );
+                                      })}
+                                      {m.role === "cover" && (
+                                        <span className="text-[11px] text-neutral-500">
+                                          {isItalian ? "Solo immagini" : "Images only"}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {(m.sourceType || "url") === "url" ? (
+                                      <Input
+                                        label={tUI(langCode, "build.media.public_url")}
+                                        value={m.public_url || m.source_url || ""}
+                                        placeholder={tUI(langCode, "build.media.url.placeholder")}
+                                        onChange={(value) =>
+                                          setJourneyEvents((prev) =>
+                                            prev.map((item) => {
+                                              if (item.tempId !== ev.tempId) return item;
+                                              const nextMedia = [...item.media];
+                                              nextMedia[mIdx] = {
+                                                ...nextMedia[mIdx],
+                                                public_url: value,
+                                                source_url: value,
+                                              };
+                                              return { ...item, media: nextMedia };
+                                            }),
+                                          )
+                                        }
+                                      />
+                                    ) : (
+                                      <div className="space-y-2">
+                                        <input
+                                          type="file"
+                                          accept={buildAcceptFromKind(m.kind)}
+                                          onChange={(e) =>
+                                            handleEventMediaFileChange(ev.tempId, mIdx, e.target.files?.[0] || null)
+                                          }
+                                          className="block w-full text-sm text-neutral-700 file:mr-3 file:rounded-lg file:border file:border-neutral-200 file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-neutral-700 hover:file:border-neutral-300"
+                                        />
+                                        {m.localFile && (
+                                          <p className="text-xs text-neutral-500">
+                                            {m.localFile.name} ({Math.round(m.localFile.size / 1024)} KB)
+                                          </p>
+                                        )}
+                                        {m.uploadError && <p className="text-xs text-red-600">{m.uploadError}</p>}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 p-3 h-36">
+                                    {(() => {
+                                      const previewUrl = previewUrlFromMedia(m as any);
+                                      if (!previewUrl) {
+                                        return (
+                                          <p className="text-xs text-neutral-500">
+                                            {isItalian ? "Nessuna anteprima" : "No preview yet"}
+                                          </p>
+                                        );
+                                      }
+                                      const showVideo = isProbablyVideo(previewUrl, m.kind);
+                                      return showVideo ? (
+                                        <video
+                                          src={previewUrl}
+                                          controls
+                                          className="h-full w-full rounded-lg bg-black object-cover"
+                                        />
+                                      ) : (
+                                        <img
+                                          src={previewUrl}
+                                          alt={m.title || "media preview"}
+                                          className="h-full w-full rounded-lg object-cover"
+                                        />
+                                      );
+                                    })()}
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -2643,8 +3384,121 @@ export default function BuildJourneyPage() {
     );
   };
 
+  const renderImportModal = () => {
+    if (!importModalOpen) return null;
+
+    return (
+      <div
+        className="fixed inset-0 z-[65] flex items-center justify-center bg-black/45 px-4 py-6"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={handleImportDrop}
+      >
+        <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b border-neutral-200 px-6 py-4">
+            <div>
+              <p className="text-lg font-semibold text-neutral-900">{tUI(langCode, "build.import.title")}</p>
+              <p className="mt-1 text-sm text-neutral-600">{tUI(langCode, "build.import.description")}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 px-6 py-5">
+            <div
+              className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-3"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={handleImportDrop}
+            >
+              <label className="flex flex-col gap-1 text-sm font-semibold text-neutral-800" htmlFor="journey-import-file">
+                {tUI(langCode, "build.import.select_label")}
+              </label>
+              <input
+                id="journey-import-file"
+                type="file"
+                accept=".xlsx,.xls"
+                className="mt-2 text-sm text-neutral-700"
+                onChange={(event) => handleImportFileChange(event.target.files)}
+                disabled={importLoading}
+              />
+              {importFile && (
+                <p className="mt-2 text-xs text-neutral-700">
+                  {tUI(langCode, "build.import.selected")}:{" "}
+                  <span className="font-semibold text-neutral-900">{importFile.name}</span>
+                </p>
+              )}
+            </div>
+
+            {importPreview && (
+              <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                <p className="font-semibold">{tUI(langCode, "build.import.preview.title")}</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <span>
+                    {tUI(langCode, "build.import.preview.journey_rows")}: {importPreview.journeyRows}
+                  </span>
+                  <span>
+                    {tUI(langCode, "build.import.preview.event_rows")}: {importPreview.eventRows}
+                  </span>
+                  <span className="sm:col-span-2 text-xs text-sky-800">
+                    {tUI(langCode, "build.import.selected")}: {importPreview.sheets.join(", ")}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {importError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {importError}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-neutral-200 px-6 py-4">
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+              onClick={() => {
+                resetImportState();
+                setImportModalOpen(false);
+              }}
+              disabled={importLoading}
+            >
+              {tUI(langCode, "build.actions.close")}
+            </button>
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-sm font-semibold shadow-md transition ${
+                importLoading
+                  ? "border border-neutral-200 bg-neutral-100 text-neutral-500"
+                  : "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:shadow-lg"
+              }`}
+              onClick={handleValidateImportFile}
+              disabled={importLoading}
+            >
+              {importLoading ? tUI(langCode, "generic.loading") : tUI(langCode, "build.import.button.submit")}
+            </button>
+            {importPreview && (
+              <button
+                type="button"
+                className="rounded-full bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg"
+                onClick={handleApplyImportToForm}
+                disabled={importLoading}
+              >
+                {tUI(langCode, "build.import.button.apply")}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-sky-50 to-neutral-50 text-neutral-900 lg:flex">
+      {renderImportModal()}
       {mapOverlayEventId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="relative w-full max-w-5xl rounded-2xl bg-white shadow-2xl">
@@ -2687,7 +3541,7 @@ export default function BuildJourneyPage() {
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-10 w-full max-w-[320px] transform bg-white/80 backdrop-blur shadow-lg transition duration-300 ease-in-out lg:static lg:translate-x-0 lg:border-r lg:border-neutral-200/80 lg:h-screen lg:overflow-y-auto ${
+        className={`fixed inset-y-0 left-0 z-30 w-full max-w-[320px] transform bg-white/80 backdrop-blur shadow-lg transition duration-300 ease-in-out lg:static lg:translate-x-0 lg:border-r lg:border-neutral-200/80 lg:h-screen lg:overflow-y-auto ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } h-screen overflow-y-auto`}
       >
@@ -2867,7 +3721,7 @@ export default function BuildJourneyPage() {
           <button
             type="button"
             className="rounded-full border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 shadow-sm"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setSidebarOpen((prev) => !prev)}
           >
             {tUI(langCode, "build.actions.show_journeys")}
           </button>
@@ -2877,6 +3731,7 @@ export default function BuildJourneyPage() {
           {journeyDetailsError && <p className="text-sm text-red-600">{journeyDetailsError}</p>}
           {renderGroupEventPage()}
         </div>
+        {importAppliedMessage && <p className="mt-2 text-sm text-emerald-700">{importAppliedMessage}</p>}
         {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
         {eventsSaveError && <p className="mt-1 text-sm text-red-600">{eventsSaveError}</p>}
         {eventsSaveOk && <p className="mt-1 text-sm text-green-700">{`${tUI(langCode, "build.messages.events_saved_prefix")} ${eventsSaveOk}`}</p>}
@@ -3020,64 +3875,83 @@ function MapPicker({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const handleContextLost = useCallback((event: Event) => {
+    event.preventDefault();
+    setMapError("Map preview not available in this environment.");
+  }, []);
 
   // Default center over Italy to keep context relevant.
   const fallbackCenter: [number, number] = [12.4964, 41.9028];
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      attributionControl: false,
-      style: {
-        version: 8,
-        sources: {
-          esri: {
-            type: "raster",
-            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-            tileSize: 256,
-            attribution: "",
+    try {
+      const container = containerRef.current;
+      container.addEventListener("webglcontextlost", handleContextLost as EventListener, { passive: false });
+
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        attributionControl: false,
+        style: {
+          version: 8,
+          sources: {
+            esri: {
+              type: "raster",
+              tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+              tileSize: 256,
+              attribution: "",
+            },
+            esriLabels: {
+              type: "raster",
+              tiles: [
+                "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+              ],
+              tileSize: 256,
+              attribution: "",
+            },
           },
-          esriLabels: {
-            type: "raster",
-            tiles: [
-              "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-            ],
-            tileSize: 256,
-            attribution: "",
-          },
+          layers: [
+            {
+              id: "esri",
+              type: "raster",
+              source: "esri",
+            },
+            {
+              id: "esri-labels",
+              type: "raster",
+              source: "esriLabels",
+            },
+          ],
         },
-        layers: [
-          {
-            id: "esri",
-            type: "raster",
-            source: "esri",
-          },
-          {
-            id: "esri-labels",
-            type: "raster",
-            source: "esriLabels",
-          },
-        ],
-      },
-      center: [lng ?? fallbackCenter[0], lat ?? fallbackCenter[1]],
-      zoom: initialZoom ?? (lat != null && lng != null ? 1.2 : 0.2),
-    });
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-    map.on("click", (e) => {
-      const { lat: newLat, lng: newLng } = e.lngLat;
-      if (!markerRef.current) {
-        markerRef.current = new maplibregl.Marker({ color: "#0ea5e9" }).setLngLat([newLng, newLat]).addTo(map);
-      } else {
-        markerRef.current.setLngLat([newLng, newLat]);
-      }
-      onChange?.({ lat: newLat, lng: newLng });
-    });
-    mapRef.current = map;
+        center: [lng ?? fallbackCenter[0], lat ?? fallbackCenter[1]],
+        zoom: initialZoom ?? (lat != null && lng != null ? 1.2 : 0.2),
+      });
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      map.on("click", (e) => {
+        const { lat: newLat, lng: newLng } = e.lngLat;
+        if (!markerRef.current) {
+          markerRef.current = new maplibregl.Marker({ color: "#0ea5e9" }).setLngLat([newLng, newLat]).addTo(map);
+        } else {
+          markerRef.current.setLngLat([newLng, newLat]);
+        }
+        onChange?.({ lat: newLat, lng: newLng });
+      });
+      mapRef.current = map;
+      setMapError(null);
+    } catch (err: any) {
+      console.warn("[MapPicker] map init error:", err?.message || err);
+      setMapError("Map preview not available in this environment.");
+      mapRef.current = null;
+    }
 
     return () => {
+      if (containerRef.current) {
+        containerRef.current.removeEventListener("webglcontextlost", handleContextLost as EventListener);
+      }
+      const map = mapRef.current;
       try {
-        map.remove();
+        map?.remove();
       } catch {
         // ignore cleanup errors
       }
@@ -3105,6 +3979,16 @@ function MapPicker({
     }
   }, [lat, lng]);
 
-  return <div ref={containerRef} className={className ?? "h-64 w-full rounded-xl border border-neutral-200 overflow-hidden"} />;
+  return (
+    <div className={className ?? "h-64 w-full rounded-xl border border-neutral-200 overflow-hidden"}>
+      {mapError ? (
+        <div className="flex h-full items-center justify-center bg-neutral-50 text-sm text-neutral-600 px-4 text-center">
+          {mapError}
+        </div>
+      ) : (
+        <div ref={containerRef} className="h-full w-full" />
+      )}
+    </div>
+  );
 }
 
