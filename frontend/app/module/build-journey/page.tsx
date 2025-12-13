@@ -1884,6 +1884,45 @@ export default function BuildJourneyPage() {
     }
   }, [importFile, langCode]);
 
+  const handleDownloadTemplate = useCallback(async () => {
+    try {
+      setImportError(null);
+      const XLSX = await import("xlsx");
+      const journeyHeaders = ["Titolo IT", "Descrizione IT", "Title EN", "Description EN"];
+      const eventsHeaders = [
+        "Journey IT",
+        "Journey EN",
+        "Era (AD|BC)",
+        "From (year)",
+        "To (year)",
+        "Continent",
+        "Country",
+        "Location",
+        "Lat (text, dot decimal)",
+        "Lon (text, dot decimal)",
+        "Titolo evento IT",
+        "wikipedia URL evento IT",
+        "Descrizione evento IT",
+        "Title event EN",
+        "wikipedia URL event EN",
+        "Description event EN",
+        "Type event",
+        "Journey approfondimento 1",
+        "Journey approfondimento 2",
+        "Journey approfondimento 3",
+      ];
+      const journeySheet = XLSX.utils.aoa_to_sheet([journeyHeaders]);
+      const eventsSheet = XLSX.utils.aoa_to_sheet([eventsHeaders]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, journeySheet, "Journey");
+      XLSX.utils.book_append_sheet(workbook, eventsSheet, "Events");
+      XLSX.writeFile(workbook, "journey_import_template.xlsx");
+    } catch (err: any) {
+      console.error("[BuildJourney] template download error:", err?.message || err);
+      setImportError(tUI(langCode, "build.import.error.generic"));
+    }
+  }, [langCode]);
+
   const handleApplyImportToForm = useCallback(() => {
     if (!importParsed.journeyRow) {
       setImportError(tUI(langCode, "build.import.error.missing_file"));
@@ -3405,6 +3444,22 @@ export default function BuildJourneyPage() {
           </div>
 
           <div className="space-y-4 px-6 py-5">
+            <div className="rounded-xl border border-sky-100 bg-sky-50/70 px-4 py-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1 text-sm text-neutral-700">
+                    <p className="text-xs text-neutral-500">{tUI(langCode, "build.import.template.helper")}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-700 shadow-sm transition hover:border-sky-300 hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-neutral-400"
+                  onClick={handleDownloadTemplate}
+                  disabled={importLoading}
+                >
+                  {tUI(langCode, "build.import.template.button")}
+                </button>
+              </div>
+            </div>
+
             <div
               className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-3"
               onDragOver={(e) => {

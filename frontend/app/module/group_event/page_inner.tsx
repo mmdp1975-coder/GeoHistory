@@ -417,6 +417,65 @@ function MediaOverlay({
  );
 }
 
+/* ===================== Quiz Overlay ===================== */
+function QuizOverlay({
+  open,
+  onClose,
+  src = "/module/quiz",
+}: {
+  open: boolean;
+  onClose: () => void;
+  src?: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[5200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+      <div className="relative h-[82vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
+        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+          {!loaded ? (
+            <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 shadow-sm ring-1 ring-amber-200">
+              Caricamento...
+            </div>
+          ) : null}
+          <button
+            onClick={onClose}
+            className="inline-flex h-9 items-center gap-2 rounded-full bg-white/95 px-3 text-sm font-semibold text-slate-700 shadow-lg ring-1 ring-black/10 transition hover:bg-white hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            aria-label="Chiudi quiz"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Chiudi
+          </button>
+        </div>
+        <iframe
+          src={src}
+          title="Quiz"
+          className="h-full w-full border-0"
+          onLoad={() => setLoaded(true)}
+        />
+      </div>
+    </div>
+  );
+}
+
 /* ===================== MediaBox (play ? overlay con autoplay) ===================== */
 function MediaBox({
  items,
@@ -619,11 +678,39 @@ const desiredLang = (() => {
   return "it";
 })();
 
- const [gid, setGid] = useState<string | null>(null);
- const [eidParam, setEidParam] = useState<string | null>(null);
- const group_event_id = gid;
+const [ge, setGe] = useState<AnyObj | null>(null);
+const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string; lang?: string } | null>(null);
 
- const geUrl = useCallback(
+const resolvedLang = useMemo(
+  () => geTr?.lang?.toLowerCase?.() || desiredLang,
+  [geTr, desiredLang]
+);
+
+const [rows, setRows] = useState<EventVM[]>([]);
+const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
+const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
+const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
+const [selectedIndex, setSelectedIndex] = useState(0);
+const [loading, setLoading] = useState(true);
+const [isPlaying, setIsPlaying] = useState(false);
+const [speechSupported, setSpeechSupported] = useState(false);
+const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+const speechAutoAdvanceRef = useRef(false);
+const normalizeLang = (v?: string | null) => (v ? v.slice(0, 2).toLowerCase() : "");
+const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
+const BRAND_BLUE = "#0f3c8c";
+
+const toggleMapModeView = useCallback(() => {
+  setMapMode((m) => (m === "normal" ? "fullscreen" : "normal"));
+}, []);
+
+const [gid, setGid] = useState<string | null>(null);
+const [eidParam, setEidParam] = useState<string | null>(null);
+const group_event_id = gid;
+
+const geUrl = useCallback(
    (targetGid: string, eid?: string | null) => {
      const base = `/module/group_event?gid=${targetGid}`;
      const extras: string[] = [];
@@ -663,7 +750,7 @@ const desiredLang = (() => {
  }
  }, [sp]);
 
- useEffect(() => {
+useEffect(() => {
  try {
  const ref = (typeof document !== "undefined" && document.referrer) || "";
  if (!ref) return;
@@ -672,46 +759,144 @@ const desiredLang = (() => {
  } catch {}
  }, []);
 
-const [ge, setGe] = useState<AnyObj | null>(null);
-const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string; lang?: string } | null>(null);
-const [rows, setRows] = useState<EventVM[]>([]);
-const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
+// ===== Sintesi vocale =====
+useEffect(() => {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  setSpeechSupported(true);
+  const synth = window.speechSynthesis;
+  const loadVoices = () => {
+    const list = synth.getVoices() || [];
+    setVoices([...list]);
+  };
+  loadVoices();
+  synth.onvoiceschanged = loadVoices;
+  return () => { synth.onvoiceschanged = null; };
+}, []);
 
-const resolvedLang = useMemo(
-  () => geTr?.lang?.toLowerCase?.() || desiredLang,
-  [geTr, desiredLang]
+const stopSpeech = useCallback(() => {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  speechUtteranceRef.current = null;
+  speechAutoAdvanceRef.current = false;
+}, []);
+
+const speakEventDescription = useCallback(
+  (ev: EventVM | null | undefined, opts?: { autoAdvance?: boolean }) => {
+    if (!ev || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const parts = [ev.title, ev.description].filter(Boolean);
+    const text = parts.join(". ").trim();
+    if (!text) return;
+    stopSpeech();
+    const langHint = (ev as any)?.lang || resolvedLang || desiredLang;
+    const chosen =
+      (selectedVoiceId && voices.find((v) => v.voiceURI === selectedVoiceId)) ||
+      voices.find((v) => normalizeLang(v.lang) === normalizeLang(langHint)) ||
+      voices[0] ||
+      null;
+    const utter = new SpeechSynthesisUtterance(text);
+    if (chosen) {
+      utter.voice = chosen;
+      utter.lang = chosen.lang || utter.lang;
+    } else if (langHint) {
+      utter.lang = langHint;
+    }
+    speechAutoAdvanceRef.current = !!opts?.autoAdvance;
+    utter.onend = () => {
+      speechUtteranceRef.current = null;
+      if (speechAutoAdvanceRef.current) {
+        setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0));
+      }
+    };
+    utter.onerror = () => {
+      speechUtteranceRef.current = null;
+    };
+    speechUtteranceRef.current = utter;
+    window.speechSynthesis.speak(utter);
+  },
+  [desiredLang, resolvedLang, selectedVoiceId, voices, rows.length, stopSpeech]
 );
 
-const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
-const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
+useEffect(() => {
+  if (!speechSupported || !isPlaying) return;
+  const ev = rows[selectedIndex];
+  speakEventDescription(ev, { autoAdvance: true });
+}, [isPlaying, rows, selectedIndex, speakEventDescription, speechSupported]);
 
- const [selectedIndex, setSelectedIndex] = useState(0);
- const [loading, setLoading] = useState(true);
- const [isPlaying, setIsPlaying] = useState(false);
+// Se cambio voce mentre riproduce, riavvia con la nuova voce
+useEffect(() => {
+ if (!speechSupported || !isPlaying) return;
+ const ev = rows[selectedIndex];
+ stopSpeech();
+ speakEventDescription(ev, { autoAdvance: true });
+}, [selectedVoiceId, speechSupported, isPlaying, rows, selectedIndex, speakEventDescription, stopSpeech]);
+
+// Pausa immediata quando isPlaying diventa false
+useEffect(() => {
+  if (!speechSupported) return;
+  if (!isPlaying) {
+    stopSpeech();
+  }
+}, [isPlaying, speechSupported, stopSpeech]);
+
+useEffect(() => {
+  if (!speechSupported) return;
+  if (selectedVoiceId) return;
+  const wantIt = normalizeLang(resolvedLang || desiredLang) === "it";
+  const best =
+    (wantIt && voices.find((v) => normalizeLang(v.lang) === "it" && /elsa/i.test(v.name))) ||
+    voices.find((v) => normalizeLang(v.lang) === "it") ||
+    voices.find((v) => normalizeLang(v.lang) === "en") ||
+    voices[0];
+  if (best) setSelectedVoiceId(best.voiceURI);
+}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang]);
+
+// Stop speech on unmount
+useEffect(() => stopSpeech, [stopSpeech]);
+
+const voiceOptions = useMemo(() => {
+  if (!voices.length) return [] as { id: string; label: string; lang: string }[];
+  return voices.map((v) => ({
+    id: v.voiceURI,
+    lang: normalizeLang(v.lang),
+    label: `${v.name}${v.localService ? " (local)" : ""} - ${v.lang || ""}`,
+  }));
+}, [voices]);
 
 const [overlayOpen, setOverlayOpen] = useState(false);
 const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
 const [overlayMedia, setOverlayMedia] = useState<MediaItem | null>(null);
 const [overlayAutoplay, setOverlayAutoplay] = useState<boolean>(false);
+const [quizOpen, setQuizOpen] = useState(false);
+const [quizUrl, setQuizUrl] = useState<string>("/module/quiz");
 const [concurrentOther, setConcurrentOther] = useState<Array<{ evId: string; geId: string; geTitle?: string | null; evTitle: string; startYear?: number }>>([]);
- const [relatedFrom, setRelatedFrom] = useState<CorrelatedJourney | null>(null);
+const [relatedFrom, setRelatedFrom] = useState<CorrelatedJourney | null>(null);
 
 // Correlazioni: cache per event_id
 const [corrByEvent, setCorrByEvent] = useState<Record<string, CorrelatedJourney[]>>({});
 
- const openOverlay = useCallback((m: MediaItem, opts?: { autoplay?: boolean }) => {
- setOverlayMedia(m);
- setOverlayMode("overlay");
- setOverlayAutoplay(!!opts?.autoplay);
- setOverlayOpen(true);
- }, []);
- const closeOverlay = useCallback(() => {
- setOverlayOpen(false);
- setTimeout(() => { setOverlayMedia(null); setOverlayAutoplay(false); }, 180);
- }, []);
- const toggleOverlayMode = useCallback(() => {
- setOverlayMode((prev) => (prev === "overlay" ? "full" : "overlay"));
- }, []);
+const openOverlay = useCallback((m: MediaItem, opts?: { autoplay?: boolean }) => {
+  setOverlayMedia(m);
+  setOverlayMode("overlay");
+  setOverlayAutoplay(!!opts?.autoplay);
+  setOverlayOpen(true);
+}, []);
+const closeOverlay = useCallback(() => {
+  setOverlayOpen(false);
+  setTimeout(() => { setOverlayMedia(null); setOverlayAutoplay(false); }, 180);
+}, []);
+const toggleOverlayMode = useCallback(() => {
+  setOverlayMode((prev) => (prev === "overlay" ? "full" : "overlay"));
+}, []);
+const openQuiz = useCallback(() => {
+  const base = "/module/quiz";
+  const params = new URLSearchParams();
+  if (gid) params.set("gid", gid);
+  if (resolvedLang || desiredLang) params.set("lang", resolvedLang || desiredLang);
+  const withParams = params.toString() ? `${base}?${params.toString()}` : base;
+  setQuizUrl(withParams);
+  setQuizOpen(true);
+}, [gid, resolvedLang, desiredLang]);
+const closeQuiz = useCallback(() => setQuizOpen(false), []);
 
  /* ===== Mappa ===== */
  const mapRef = useRef<MapLibreMap | null>(null);
@@ -719,6 +904,52 @@ const markersRef = useRef<MapLibreMarker[]>([]);
 const [mapReady, setMapReady] = useState(false);
 const [mapLoaded, setMapLoaded] = useState(false);
  const [mapVersion, setMapVersion] = useState(0);
+
+const fitMapToRows = useCallback(() => {
+  const map = mapRef.current;
+  if (!map || !mapReady) return;
+  const pts = rows
+    .filter((ev) => ev.latitude != null && ev.longitude != null)
+    .map((ev) => [ev.longitude!, ev.latitude!] as [number, number]);
+  if (!pts.length) return;
+  try {
+    const bounds = pts.reduce<[[number, number], [number, number]]>(
+      (b, c) => [
+        [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
+        [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
+      ],
+      [
+        [pts[0][0], pts[0][1]],
+        [pts[0][0], pts[0][1]],
+      ]
+    );
+    (map as any).fitBounds(bounds as any, { padding: 100, duration: 800 });
+  } catch {}
+}, [rows, mapReady]);
+
+// Lock scroll quando la mappa è full-screen
+useEffect(() => {
+  if (mapMode !== "fullscreen") return;
+  const prev = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  return () => { document.body.style.overflow = prev; };
+}, [mapMode]);
+
+// Forza resize + fit dopo toggle view
+useEffect(() => {
+  if (!mapRef.current || !mapReady) return;
+  try { mapRef.current.resize(); } catch {}
+  setTimeout(() => { try { mapRef.current?.resize(); } catch {} }, 120);
+  if (mapMode === "fullscreen") {
+    fitMapToRows();
+  }
+}, [mapMode, mapReady, fitMapToRows]);
+
+// Fit mappa quando cambiano dati e la mappa è pronta/caricata
+useEffect(() => {
+  if (!mapReady || !mapLoaded) return;
+  fitMapToRows();
+}, [fitMapToRows, mapReady, mapLoaded]);
 
 // Reset cache/markers quando cambio journey
 useEffect(() => {
@@ -1221,21 +1452,11 @@ if (!map || !mapReady || !gid) return;
  });
 
  try {
- if (pts.length) {
- const bounds = pts.reduce<[[number, number], [number, number]]>(
- (b, c) => [
- [Math.min(b[0][0], c[0]), Math.min(b[0][1], c[1])],
- [Math.max(b[1][0], c[0]), Math.max(b[1][1], c[1])],
- ],
- [
- [pts[0][0], pts[0][1]],
- [pts[0][0], pts[0][1]],
- ]
- );
- (map as any).fitBounds(bounds as any, { padding: 84, duration: 800 });
- } else {
- (map as any).flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
- }
+  if (pts.length) {
+    fitMapToRows();
+  } else {
+    (map as any).flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
+  }
  } catch {}
  }, [rows, mapReady, selectedIndex]);
 
@@ -1340,19 +1561,23 @@ if (!map || !mapReady || !gid) return;
  return (
  <div className="relative flex flex-col items-center justify-center h-full">
  {/* Barra timeline */}
- <div className="relative w-full h-[8px] rounded-full bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900 shadow-inner">
- <div
- className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white bg-blue-500 shadow"
- style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, boxShadow: "0 0 6px rgba(30,64,175,0.45)" }}
- />
+  <div
+    className="relative w-full h-[8px] rounded-full shadow-inner"
+    style={{ background: "linear-gradient(90deg, #0f3c8c 0%, #1a64d6 60%, #0f3c8c 100%)" }}
+  >
+  <div
+  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white shadow"
+  style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, backgroundColor: "#1a64d6", boxShadow: "0 0 8px rgba(15,60,140,0.55)" }}
+  />
  {minorTicks.map((t, i) => {
  const pos = ((t - data.min) / data.range) * 100;
  return (
  <div
  key={`mtick-${i}`}
- className="absolute top-1/2 -translate-y-1/2 h-[10px] w-[1px] -translate-x-1/2 bg-blue-900/40"
- style={{ left: `${pos}%` }}
- />
+  className="absolute top-1/2 -translate-y-1/2 h-[10px] w-[1px] -translate-x-1/2"
+  style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.35)" }}
+  style={{ left: `${pos}%` }}
+  />
  );
  })}
  {tickYears.map((t, i) => {
@@ -1360,9 +1585,9 @@ if (!map || !mapReady || !gid) return;
  return (
  <div
  key={`tick-${i}`}
- className="absolute top-1/2 -translate-y-1/2 h-[14px] w-[2px] -translate-x-1/2 bg-blue-900/70"
- style={{ left: `${pos}%` }}
- />
+  className="absolute top-1/2 -translate-y-1/2 h-[14px] w-[2px] -translate-x-1/2"
+  style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.7)" }}
+  />
  );
  })}
  </div>
@@ -1622,6 +1847,19 @@ const mapTextureStyle: CSSProperties = {
             </span>
           </button>
  {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+          <button
+            onClick={openQuiz}
+            className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(15,60,140,0.35)] ring-1 ring-white/15 transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_rgba(15,60,140,0.42)] focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            title="Apri il quiz"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className="drop-shadow-sm">
+              <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M12 16.5v.2" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+              <path d="M9.75 9.4c0-1.3 1.1-2.35 2.45-2.35 1.2 0 2.3.85 2.3 2.05 0 1.6-1.85 1.95-2.3 3.1-.14.36-.2.78-.2 1.2" stroke="currentColor" strokeWidth="1.9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Quiz</span>
+          </button>
  {/* Link "Apri pagina" rimosso */}
 
  </div>
@@ -1862,25 +2100,31 @@ const mapTextureStyle: CSSProperties = {
  const fromLabel = fromY != null ? formatTimelineYearLabel(fromY) : "";
  const toLabel = toY != null ? formatTimelineYearLabel(toY) : "";
  const info = [fromLabel, toLabel, ev.location || ""].filter(Boolean).join(" - ");
- return (
- <button
- key={ev.id}
- ref={(el) => { if (el) itemRefs.current.set(ev.id, el); }}
- onClick={() => setSelectedIndex(idx)}
- className={`shrink-0 w-[60vw] md:w-[280px] max-w-[320px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
- active ? "border-black bg-black text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
- }`}
- title={ev.title}
- >
- <div className="flex items-start gap-2">
- <div className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] ${
- active ? "bg-white text-black" : "bg-gray-900 text-white"
- }`}>
- {idx + 1}
- </div>
- <div className="min-w-0 leading-tight">
- <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
- {ev.title}
+  return (
+  <button
+  key={ev.id}
+  ref={(el) => { if (el) itemRefs.current.set(ev.id, el); }}
+  onClick={() => setSelectedIndex(idx)}
+  className={`shrink-0 w-[60vw] md:w-[280px] max-w-[320px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
+  active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
+  }`}
+  style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
+  title={ev.title}
+  >
+  <div className="flex items-start gap-2">
+  <div
+    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
+    style={
+      active
+        ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
+        : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
+    }
+  >
+  {idx + 1}
+  </div>
+  <div className="min-w-0 leading-tight">
+  <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+  {ev.title}
  </div>
  <div className={`truncate text-[11.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
  {info}
@@ -1940,6 +2184,20 @@ const mapTextureStyle: CSSProperties = {
         >
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
+        {voiceOptions.length > 1 && (
+          <select
+            value={selectedVoiceId ?? ""}
+            onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
+            className="ml-1 min-w-[70px] max-w-[120px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[9.5px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            aria-label="Voce sintesi"
+          >
+            {voiceOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     )}
   >
@@ -2150,52 +2408,69 @@ const mapTextureStyle: CSSProperties = {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-indigo-500 to-blue-500 text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              aria-label="Evento precedente"
-            >
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label="Evento precedente"
+          >
               <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
                 <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
             <button
               onClick={() => setIsPlaying((p) => !p)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-[0_3px_12px_rgba(59,130,246,0.35)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-blue-300"
-              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-            >
-              {isPlaying ? (
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
-                </svg>
-              )}
-            </button>
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_3px_12px_rgba(15,60,140,0.35)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+          >
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+              </svg>
+            )}
+          </button>
             <button
               onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-              aria-label="Evento successivo"
-            >
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label="Evento successivo"
+          >
               <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
                 <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
+            {voiceOptions.length > 1 && (
+              <select
+                value={selectedVoiceId ?? ""}
+                onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
+                className="min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                aria-label="Voce sintesi"
+              >
+                {voiceOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            )}
+            {selectedEvent?.wiki_url ? (
+              <a
+                href={selectedEvent.wiki_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-50"
+              >
+                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                  <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Wiki
+              </a>
+            ) : null}
           </div>
-          {selectedEvent?.wiki_url ? (
-            <a
-              href={selectedEvent.wiki_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-1.5 text-sm font-medium text-blue-800 hover:bg-blue-50"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Wikipedia
-            </a>
-          ) : null}
         </div>
         <div className="flex-1 overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap scroll-pr-2" style={{ scrollbarWidth: "thin" }}>
           {selectedEvent?.description || "No description available."}
@@ -2204,11 +2479,91 @@ const mapTextureStyle: CSSProperties = {
     </section>
 
     {/* Colonna 3: Mappa */}
-    <section className="relative h-[52svh] min-h-[400px] max-h-[560px]">
- <div data-map="gehj" key={`map-desktop-${gid ?? "unknown"}`} className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+    <section
+      className={
+        mapMode === "fullscreen"
+          ? "fixed inset-0 z-[5000] bg-white"
+          : "relative h-[52svh] min-h-[400px] max-h-[560px]"
+      }
+    >
+      <div
+        data-map="gehj"
+        key={`map-desktop-${gid ?? "unknown"}`}
+        className={
+          mapMode === "fullscreen"
+            ? "absolute inset-0"
+            : "h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+        }
+        aria-label="Map canvas"
+      />
       {!mapLoaded && (
         <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
           Inizializzazione mappa.
+        </div>
+      )}
+      <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+        <button
+          onClick={toggleMapModeView}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          title={
+            mapMode === "normal"
+              ? "Schermo intero"
+              : "Riduci mappa"
+          }
+          aria-label={
+            mapMode === "normal"
+              ? "Schermo intero"
+              : "Riduci mappa"
+          }
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            {mapMode === "fullscreen" ? (
+              <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            )}
+          </svg>
+        </button>
+      </div>
+      {mapMode === "fullscreen" && (
+        <div className="absolute left-3 top-14 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+          <button
+            onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label="Evento precedente"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setIsPlaying((p) => !p)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+          >
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+              </svg>
+            )}
+          </button>
+          <button
+            onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            aria-label="Evento successivo"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
         </div>
       )}
     </section>
@@ -2216,6 +2571,7 @@ const mapTextureStyle: CSSProperties = {
 </div>
 
 /* Overlay/Full-screen player */}
+ <QuizOverlay open={quizOpen} onClose={closeQuiz} src={quizUrl} />
  <MediaOverlay
  open={overlayOpen}
  mode={overlayMode}
@@ -2227,4 +2583,3 @@ const mapTextureStyle: CSSProperties = {
  </div>
  );
 }
-
