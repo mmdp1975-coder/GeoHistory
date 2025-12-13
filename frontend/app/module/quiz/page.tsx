@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type Question = {
@@ -40,7 +40,7 @@ function LoadingSkeleton() {
   );
 }
 
-export default function QuizPage() {
+function QuizInner() {
   const sp = useSearchParams();
   const gid = sp.get("gid");
   const lang = (sp.get("lang") || "").slice(0, 5) || "it";
@@ -341,5 +341,13 @@ export default function QuizPage() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function QuizPage() {
+  return (
+    <Suspense fallback={<LoadingSkeleton />}>
+      <QuizInner />
+    </Suspense>
   );
 }
