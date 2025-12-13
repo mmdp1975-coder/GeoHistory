@@ -15,6 +15,8 @@ type ApiResponse = {
   journeyTitle?: string | null;
   questions?: Question[];
   error?: string;
+  fallback?: boolean;
+  aiError?: string;
 };
 
 function LoadingSkeleton() {

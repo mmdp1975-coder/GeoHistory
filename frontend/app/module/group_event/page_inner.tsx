@@ -1571,12 +1571,11 @@ if (!map || !mapReady || !gid) return;
   />
  {minorTicks.map((t, i) => {
  const pos = ((t - data.min) / data.range) * 100;
- return (
+  return (
  <div
  key={`mtick-${i}`}
   className="absolute top-1/2 -translate-y-1/2 h-[10px] w-[1px] -translate-x-1/2"
   style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.35)" }}
-  style={{ left: `${pos}%` }}
   />
  );
  })}

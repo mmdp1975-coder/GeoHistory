@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -193,7 +194,7 @@ export async function POST(req: Request) {
   if (openaiKey) {
     const openai = new OpenAI({ apiKey: openaiKey });
 
-    const messages = [
+    const messages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content:
