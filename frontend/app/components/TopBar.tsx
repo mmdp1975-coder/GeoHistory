@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import {
   Home,
@@ -19,6 +19,7 @@ import { tUI } from '@/lib/i18n/uiLabels';
 
 export default function TopBar() {
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClientComponentClient();
 
   const [isVideoOpen, setIsVideoOpen] = useState(false);
@@ -163,104 +164,128 @@ export default function TopBar() {
     setShouldAutoplay(false);
   }, [isVideoOpen, shouldAutoplay, volume]);
 
+  const isQuiz = pathname?.startsWith('/module/quiz');
+
   return (
     <>
       <nav className="sticky top-0 z-20 bg-white border-b border-slate-200">
         <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
-          {/* Logo + motto */}
-          <Link
-            href="/"
-            aria-label={tUI(langCode, 'topbar.logo.ariaLabel')}
-            className="flex items-end space-x-3"
-          >
-            <Image
-              src="/logo.png"
-              alt={tUI(langCode, 'app.title')}
-              width={300}
-              height={80}
-              priority
-              className="h-10 md:h-12 w-auto"
-            />
-            <span className="hidden md:inline text-slate-600 text-xs md:text-sm italic mt-2">
-              {tUI(langCode, 'topbar.motto')}
-            </span>
-          </Link>
+          {isQuiz ? (
+            <>
+              <div className="flex items-end space-x-3">
+                <Image
+                  src="/logo.png"
+                  alt={tUI(langCode, 'app.title')}
+                  width={220}
+                  height={64}
+                  priority
+                  className="h-10 md:h-12 w-auto"
+                />
+                <span className="hidden md:inline text-slate-600 text-xs md:text-sm italic mt-2">
+                  {tUI(langCode, 'topbar.motto')}
+                </span>
+              </div>
+              <button
+                onClick={() => router.back()}
+                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                type="button"
+                aria-label="Chiudi"
+                title="Chiudi"
+              >
+                Chiudi
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/"
+                aria-label={tUI(langCode, 'topbar.logo.ariaLabel')}
+                className="flex items-end space-x-3"
+              >
+                <Image
+                  src="/logo.png"
+                  alt={tUI(langCode, 'app.title')}
+                  width={300}
+                  height={80}
+                  priority
+                  className="h-10 md:h-12 w-auto"
+                />
+                <span className="hidden md:inline text-slate-600 text-xs md:text-sm italic mt-2">
+                  {tUI(langCode, 'topbar.motto')}
+                </span>
+              </Link>
 
-          {/* Menu a destra */}
-          <div className="flex items-center gap-4 md:gap-6 text-sm md:text-base">
-            {/* Home */}
-            <button
-              onClick={goHome}
-              className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
-              type="button"
-              aria-label={tUI(langCode, 'topbar.home')}
-              title={tUI(langCode, 'topbar.home.title')}
-            >
-              <Home className="w-5 h-5" />
-              <span className="hidden md:inline">
-                {tUI(langCode, 'topbar.home')}
-              </span>
-            </button>
+              <div className="flex items-center gap-4 md:gap-6 text-sm md:text-base">
+                <button
+                  onClick={goHome}
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  type="button"
+                  aria-label={tUI(langCode, 'topbar.home')}
+                  title={tUI(langCode, 'topbar.home.title')}
+                >
+                  <Home className="w-5 h-5" />
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.home')}
+                  </span>
+                </button>
 
-            {/* Back */}
-            <button
-              onClick={() => router.back()}
-              className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
-              type="button"
-              aria-label={tUI(langCode, 'topbar.back')}
-              title={tUI(langCode, 'topbar.back.title')}
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden md:inline">
-                {tUI(langCode, 'topbar.back')}
-              </span>
-            </button>
+                <button
+                  onClick={() => router.back()}
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  type="button"
+                  aria-label={tUI(langCode, 'topbar.back')}
+                  title={tUI(langCode, 'topbar.back.title')}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.back')}
+                  </span>
+                </button>
 
-            {/* Settings */}
-            <Link
-              href="/module/settings"
-              className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
-              aria-label={tUI(langCode, 'topbar.settings')}
-              title={tUI(langCode, 'topbar.settings.title')}
-            >
-              <SettingsIcon className="w-5 h-5" />
-              <span className="hidden md:inline">
-                {tUI(langCode, 'topbar.settings')}
-              </span>
-            </Link>
+                <Link
+                  href="/module/settings"
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  aria-label={tUI(langCode, 'topbar.settings')}
+                  title={tUI(langCode, 'topbar.settings.title')}
+                >
+                  <SettingsIcon className="w-5 h-5" />
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.settings')}
+                  </span>
+                </Link>
 
-            {/* Intro video */}
-            <button
-              onClick={openVideo}
-              className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
-              type="button"
-              aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
-              title={tUI(langCode, 'topbar.guide.title')}
-            >
-              <PlayCircle className="w-5 h-5" />
-              <span className="hidden md:inline">
-                {tUI(langCode, 'topbar.guide')}
-              </span>
-            </button>
+                <button
+                  onClick={openVideo}
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  type="button"
+                  aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
+                  title={tUI(langCode, 'topbar.guide.title')}
+                >
+                  <PlayCircle className="w-5 h-5" />
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.guide')}
+                  </span>
+                </button>
 
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
-              type="button"
-              aria-label={tUI(langCode, 'topbar.logout')}
-              title={tUI(langCode, 'topbar.logout.title')}
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="hidden md:inline">
-                {tUI(langCode, 'topbar.logout')}
-              </span>
-            </button>
-          </div>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  type="button"
+                  aria-label={tUI(langCode, 'topbar.logout')}
+                  title={tUI(langCode, 'topbar.logout.title')}
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.logout')}
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </nav>
 
-      {isVideoOpen && (
+      {isVideoOpen && !isQuiz && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
           <div className="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl p-4">
             <button

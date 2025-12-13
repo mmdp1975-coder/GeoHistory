@@ -56,6 +56,8 @@ function QuizInner() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [fallbackInfo, setFallbackInfo] = useState<string | null>(null);
+  const [aiErrorInfo, setAiErrorInfo] = useState<string | null>(null);
 
   const current = questions[index];
   const total = questions.length;
@@ -109,10 +111,8 @@ function QuizInner() {
       if (!qs.length) throw new Error("Nessuna domanda generata.");
       setQuestions(qs);
       setJourneyTitle(data.journeyTitle || "Quiz");
-      if (data.fallback) {
-        setError("Quiz generato in modalità offline (senza AI).");
-        setTimeout(() => setError(null), 4000);
-      }
+      setFallbackInfo(data.fallback ? "Quiz generato in modalità offline (senza AI)." : null);
+      setAiErrorInfo(data.aiError || null);
     } catch (e: any) {
       setError(e?.message || "Errore nella generazione del quiz");
     } finally {
@@ -174,6 +174,11 @@ function QuizInner() {
         <div className="max-w-xl rounded-2xl bg-white p-6 text-slate-900 shadow-xl ring-1 ring-slate-200">
           <div className="text-lg font-semibold">Impossibile generare il quiz</div>
           <p className="mt-2 text-sm text-slate-600">{error || "Nessuna domanda disponibile."}</p>
+          {aiErrorInfo ? (
+            <p className="mt-2 text-xs text-rose-600">
+              Dettaglio AI: {aiErrorInfo}
+            </p>
+          ) : null}
           <div className="mt-4 flex gap-2">
             <button
               onClick={loadQuiz}
@@ -196,6 +201,12 @@ function QuizInner() {
               <p className="text-sm uppercase tracking-[0.12em] text-emerald-200">Quiz</p>
               <h1 className="text-2xl font-bold leading-7 text-white sm:text-3xl">{journeyTitle || "Allenamento"}</h1>
               <p className="text-sm text-slate-200">10 domande generate sugli eventi del journey.</p>
+              {fallbackInfo ? (
+                <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                  {fallbackInfo}
+                  {aiErrorInfo ? <span className="text-[11px] font-normal text-amber-800">({aiErrorInfo})</span> : null}
+                </p>
+              ) : null}
             </div>
             <div className="rounded-2xl bg-white/10 px-4 py-3 text-right shadow-inner ring-1 ring-white/15">
               <div className="text-xs text-slate-200">Punteggio</div>
