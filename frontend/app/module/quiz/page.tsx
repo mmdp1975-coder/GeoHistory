@@ -446,5 +446,10 @@ function QuizInner() {
 }
 
 export default function QuizPage() {
-  return <QuizInner />;
+  // Suspense richiesto per l'uso di useSearchParams (client-side)
+  return (
+    <Suspense fallback={<LoadingSkeleton lang="it" />}>
+      <QuizInner />
+    </Suspense>
+  );
 }
