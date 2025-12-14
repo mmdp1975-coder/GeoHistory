@@ -113,6 +113,45 @@ function buildFallbackQuestions(rows: any[]): { questions: any[]; note: string }
   return { questions: questions.slice(0, 10), note: "fallback" };
 }
 
+async function translateQuestions(
+  questions: any[],
+  targetLang: string | null,
+  openaiKey?: string | null,
+  keyPrefix?: string | null
+): Promise<any[]> {
+  if (!targetLang || targetLang === "it") return questions;
+  if (!openaiKey) return questions;
+  try {
+    const openai = new OpenAI({ apiKey: openaiKey });
+    const translation = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "Sei un traduttore. Ricevi una lista di domande/risposte multiple e devi restituire lo stesso JSON traducendo TUTTI i campi testuali nella lingua target indicata. Non aggiungere testo.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            target_lang: targetLang,
+            questions,
+          }),
+        },
+      ],
+    });
+    const parsed = JSON.parse(translation.choices[0]?.message?.content || "{}");
+    if (Array.isArray(parsed.questions) && parsed.questions.length) {
+      return parsed.questions;
+    }
+  } catch (e: any) {
+    console.error("[quiz] translation failed", { prefix: keyPrefix || null, message: e?.message });
+  }
+  return questions;
+}
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const parsed = RequestSchema.safeParse(body);
@@ -125,6 +164,10 @@ export async function POST(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKeyPrefix = openaiKey ? openaiKey.slice(0, 6) : null;
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[quiz] OPENAI key prefix", openaiKeyPrefix || "none");
+  }
 
   if (!supabaseUrl || !serviceKey) {
     return NextResponse.json({ error: "Supabase non configurato" }, { status: 500 });
@@ -134,28 +177,21 @@ export async function POST(req: Request) {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const lang2 = (preferredLang || "it").slice(0, 2).toLowerCase();
+
+  // Prima prova con la lingua utente (due lettere), poi fallback a qualsiasi lingua
+  const { data: dataPref, error: errPref } = await supabase
+    .from("v_journey")
+    .select("group_event_id, event_id, title, description, lang, year_from, year_to, era, journey_title")
+    .eq("group_event_id", gid)
+    .eq("lang", lang2)
+    .limit(200);
+
   let data: any[] | null = null;
   let error: any = null;
-
-  if (preferredLang) {
-    const { data: pref, error: prefErr } = await supabase
-      .from("v_journey")
-      .select("group_event_id, event_id, title, description, lang, year_from, year_to, era, journey_title")
-      .eq("group_event_id", gid)
-      .eq("lang", preferredLang)
-      .limit(200);
-    if (pref && pref.length) {
-      data = pref;
-      error = prefErr;
-    } else {
-      const { data: anyLang, error: anyErr } = await supabase
-        .from("v_journey")
-        .select("group_event_id, event_id, title, description, lang, year_from, year_to, era, journey_title")
-        .eq("group_event_id", gid)
-        .limit(200);
-      data = anyLang;
-      error = anyErr || prefErr;
-    }
+  if (dataPref && dataPref.length) {
+    data = dataPref;
+    error = errPref;
   } else {
     const { data: anyLang, error: anyErr } = await supabase
       .from("v_journey")
@@ -163,7 +199,7 @@ export async function POST(req: Request) {
       .eq("group_event_id", gid)
       .limit(200);
     data = anyLang;
-    error = anyErr;
+    error = anyErr || errPref;
   }
 
   if (error) {
@@ -173,10 +209,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Nessun journey trovato" }, { status: 404 });
   }
 
-  const journeyTitle = data[0]?.journey_title || "Journey";
-  const journeyDesc = data.find((d) => d.description)?.description || "";
+  const rows = data.map((r) => ({
+    ...r,
+    lang_norm: (r.lang || "").slice(0, 2).toLowerCase(),
+  }));
+  const preferredRows = rows.filter((r) => r.lang_norm === lang2 || (r.lang || "").toLowerCase().startsWith(lang2));
+  const chosenRows = preferredRows.length ? preferredRows : rows;
 
-  const eventsText = data
+  const journeyTitle = chosenRows[0]?.journey_title || data[0]?.journey_title || "Journey";
+  const journeyDesc = (chosenRows.find((d) => d.description)?.description || "").toString();
+
+  const eventsText = chosenRows
     .map((ev, idx) => {
       const parts = [
         `${idx + 1}. ${ev.title || "Evento"}`,
@@ -194,22 +237,23 @@ export async function POST(req: Request) {
   if (openaiKey) {
     const openai = new OpenAI({ apiKey: openaiKey });
 
+    const targetLang = lang2 || "it";
     const messages: ChatCompletionMessageParam[] = [
       {
         role: "system",
         content:
-          "Sei un generatore di quiz di storia. Dato un journey e i suoi eventi, crea 10 domande a scelta multipla (4 opzioni) nella lingua richiesta. Traduce/ri-esprimi titoli ed elementi testuali nella lingua richiesta (senza perdere i nomi propri) e rispondi solo in quella lingua. Le domande devono misurare comprensione di fatti, date, luoghi e contesto. Includi risposta esatta e breve spiegazione opzionale.",
+          "Sei un generatore di quiz di storia. Dato un journey e i suoi eventi, crea 10 domande a scelta multipla (4 opzioni) nella lingua target indicata. Devi restituire TUTTI i campi testuali nella lingua target (traduci se necessario, ma mantieni i nomi propri). Non usare altre lingue. Le domande devono misurare comprensione di fatti, date, luoghi e contesto. Includi risposta esatta e breve spiegazione opzionale.",
       },
       {
         role: "user",
-        content: `Lingua preferita: ${lang || "it"}
+        content: `Lingua target: ${targetLang}
 Titolo journey: ${journeyTitle}
 Descrizione journey: ${journeyDesc}
 
 Eventi:
 ${eventsText}
 
-Genera 10 domande a scelta multipla. Restituisci JSON con chiave "questions" e per ogni domanda: question, options (4), answer, explanation (breve opzionale).`,
+Genera 10 domande a scelta multipla. Restituisci JSON con chiave "questions" e per ogni domanda: question, options (4), answer, explanation (breve opzionale). Tutti i campi testuali DEVONO essere in ${targetLang}.`,
       },
     ];
 
@@ -224,7 +268,12 @@ Genera 10 domande a scelta multipla. Restituisci JSON con chiave "questions" e p
       const validated = QuizSchema.safeParse(parsedQuiz);
       aiQuestions = validated.success ? validated.data.questions : [];
     } catch (e: any) {
-      aiError = e?.message || "Errore AI";
+      // Non esporre la chiave: messaggio generico per il client, log minimale lato server.
+      aiError = "Errore AI: chiave non valida o non autorizzata";
+      console.error("[quiz] OpenAI error", {
+        prefix: openaiKeyPrefix,
+        message: e?.message,
+      });
     }
   } else {
     aiError = "OPENAI_API_KEY mancante";
@@ -239,15 +288,17 @@ Genera 10 domande a scelta multipla. Restituisci JSON con chiave "questions" e p
   }));
 
   if (trimmedAi.length >= 5) {
-    return NextResponse.json({ journeyTitle, questions: trimmedAi });
+    const translated = await translateQuestions(trimmedAi, lang2, openaiKey, openaiKeyPrefix);
+    return NextResponse.json({ journeyTitle, questions: translated });
   }
 
-  const fallback = buildFallbackQuestions(data);
+  const fallback = buildFallbackQuestions(chosenRows);
   if (fallback.questions.length) {
-    const normalized = fallback.questions.map((q, idx) => ({
+    const translatedFallback = await translateQuestions(fallback.questions, lang2, openaiKey, openaiKeyPrefix);
+    const normalized = translatedFallback.map((q, idx) => ({
       id: idx + 1,
       question: q.question,
-      options: q.options.slice(0, 4),
+      options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
       answer: q.answer,
       explanation: q.explanation ?? null,
     }));

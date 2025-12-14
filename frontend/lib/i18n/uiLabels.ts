@@ -317,6 +317,26 @@ const en: UIDictionary = {
   "build.messages.events_saved_prefix": "Events saved:",
   "build.messages.events_required": "Add at least one event before creating a journey.",
   "build.messages.no_profile": "Profile not available",
+
+  // QUIZ
+  "quiz.loading.message": "We are preparing your personalized quiz...",
+  "quiz.actions.confirm": "Confirm answer",
+  "quiz.actions.next": "Next question",
+  "quiz.actions.show_results": "Show results",
+  "quiz.status.correct": "Correct answer",
+  "quiz.status.wrong": "Wrong answer",
+  "quiz.status.select": "Select and confirm",
+  "quiz.restart": "Restart",
+  "quiz.regenerate": "Regenerate quiz",
+  "quiz.score": "Score",
+  "quiz.subtitle": "10 questions generated on this journey's events.",
+  "quiz.result.title": "Final result",
+  "quiz.result.subtitle": "Review the answers or start over.",
+  "quiz.question.progress": "Question {n} of {total}",
+  "quiz.review.your_answer": "Your answer:",
+  "quiz.review.not_answered": "Not answered",
+  "quiz.review.correct": "Correct:",
+  "quiz.review.note": "Note:",
 };
 
 const it: UIDictionary = {
@@ -633,6 +653,26 @@ const it: UIDictionary = {
   "build.messages.events_saved_prefix": "Eventi salvati:",
   "build.messages.events_required": "Aggiungi almeno un evento prima di creare il journey.",
   "build.messages.no_profile": "Profilo non disponibile",
+
+  // QUIZ
+  "quiz.loading.message": "Stiamo preparando il tuo quiz personalizzato...",
+  "quiz.actions.confirm": "Conferma risposta",
+  "quiz.actions.next": "Domanda successiva",
+  "quiz.actions.show_results": "Mostra risultati",
+  "quiz.status.correct": "Risposta corretta",
+  "quiz.status.wrong": "Risposta errata",
+  "quiz.status.select": "Seleziona e conferma",
+  "quiz.restart": "Riparti",
+  "quiz.regenerate": "Rigenera quiz",
+  "quiz.score": "Punteggio",
+  "quiz.subtitle": "10 domande generate sugli eventi del journey.",
+  "quiz.result.title": "Risultato finale",
+  "quiz.result.subtitle": "Rivedi le risposte oppure riparti da capo.",
+  "quiz.question.progress": "Domanda {n} di {total}",
+  "quiz.review.your_answer": "Tua risposta:",
+  "quiz.review.not_answered": "Non risposto",
+  "quiz.review.correct": "Corretto:",
+  "quiz.review.note": "Nota:",
 };
 
 const uiDictionaries: Record<SupportedUILang, UIDictionary> = {
