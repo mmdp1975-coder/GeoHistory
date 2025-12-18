@@ -22,6 +22,7 @@ import { tUI } from "@/lib/i18n/uiLabels";
 type Visibility = "private" | "public";
 
 const DEFAULT_LANGUAGE = "it";
+const DEFAULT_BASE_NAME = "storia";
 const DEFAULT_MAP_CENTER: [number, number] = [12.4964, 41.9028];
 const inferContinentFromCoords = (lat?: number | null, lng?: number | null): string | null => {
   if (lat == null || lng == null) return null;
@@ -40,6 +41,8 @@ type JourneySummary = {
   title: string | null;
   coverUrl: string | null;
   publishedAt: string | null;
+  slug?: string | null;
+  code?: string | null;
   eventsCount?: number | null;
   yearFrom?: number | null;
   yearTo?: number | null;
@@ -147,21 +150,45 @@ const hashString = (input: string) => {
   return hash;
 };
 
-const buildAutoSlug = (title?: string | null, description?: string | null) => {
-  const baseSource = title?.trim() || description?.trim() || "journey";
-  const baseSlug = slugifyTitle(baseSource).slice(0, 60);
-  const hashSource = `${title || ""}|${description || ""}`;
-  const hash = Math.abs(hashString(hashSource)).toString(36).slice(0, 4);
-  const uniquePart = hash ? `-${hash}` : "";
-  const slug = `${baseSlug || "journey"}${uniquePart}`;
+const buildAutoSlug = (title?: string | null, description?: string | null, yearHint?: number | null) => {
+  const baseSource = title?.trim() || description?.trim() || DEFAULT_BASE_NAME;
+  const baseSlug = slugifyTitle(baseSource).slice(0, 60) || DEFAULT_BASE_NAME;
+  const yearPart =
+    formatYearForCode(yearHint) ||
+    formatYearForCode(extractYearFromText(title)) ||
+    formatYearForCode(extractYearFromText(description));
+  const slug = yearPart ? `${baseSlug}_${yearPart}` : baseSlug;
   return slug.replace(/-+$/, "");
 };
 
-const buildAutoCode = (title?: string | null, description?: string | null) => {
-  const base = slugifyTitle(title) || "journey";
-  const hashSource = `${title || ""}|${description || ""}`;
-  const hash = Math.abs(hashString(hashSource)).toString(36).toUpperCase().slice(0, 4) || "AUTO";
-  return `${base.slice(0, 8).toUpperCase()}-${hash}`;
+const extractYearFromText = (text?: string | null): number | null => {
+  if (!text) return null;
+  const match = text.match(/\b(-?\d{3,4})\b/);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  if (!Number.isFinite(parsed) || parsed < -5000 || parsed > 3000) return null;
+  return parsed;
+};
+
+const formatYearForCode = (year?: number | null): string | null => {
+  if (year == null) return null;
+  return year < 0 ? `${Math.abs(year)}bc` : `${year}`;
+};
+
+const buildAutoCode = (title?: string | null, description?: string | null, yearHint?: number | null) => {
+  const base = slugifyTitle(title) || DEFAULT_BASE_NAME;
+  const yearPart =
+    formatYearForCode(yearHint) ||
+    formatYearForCode(extractYearFromText(title)) ||
+    formatYearForCode(extractYearFromText(description));
+  const main = yearPart ? `${base}_${yearPart}` : base;
+  // Se manca l'anno, aggiungiamo comunque una sigla breve per distinguerlo.
+  if (!yearPart) {
+    const hashSource = `${title || ""}|${description || ""}`;
+    const hash = Math.abs(hashString(hashSource)).toString(36).toUpperCase().slice(0, 3) || "A";
+    return `${main.slice(0, 12).toUpperCase()}-${hash}`;
+  }
+  return main.toUpperCase();
 };
 
 type JourneyEventSummary = {
@@ -446,6 +473,31 @@ export default function BuildJourneyPage() {
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
   const isItalian = (langCode || "").toLowerCase().startsWith("it");
+  const bestTitleForAuto = useMemo(() => {
+    const preferred =
+      translation.title?.trim() ||
+      translations.find((tr) => tr.lang === selectedTranslationLang && tr.title?.trim())?.title?.trim() ||
+      translations.find((tr) => tr.lang === "it" && tr.title?.trim())?.title?.trim() ||
+      translations.find((tr) => tr.lang === "en" && tr.title?.trim())?.title?.trim() ||
+      translations.find((tr) => tr.title?.trim())?.title?.trim() ||
+      "";
+    return preferred;
+  }, [translation.title, translations, selectedTranslationLang]);
+  const journeyYearHint = useMemo(() => {
+    const years: number[] = [];
+    journeyEvents.forEach((ev) => {
+      const yFrom = normalizeYearForEra(ev.event.year_from, ev.event.era);
+      const yTo = normalizeYearForEra(ev.event.year_to, ev.event.era);
+      if (yFrom != null) {
+        years.push(yFrom);
+      } else if (yTo != null) {
+        years.push(yTo);
+      }
+    });
+    if (!years.length) return null;
+    years.sort((a, b) => a - b);
+    return years[0];
+  }, [journeyEvents]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -714,11 +766,47 @@ export default function BuildJourneyPage() {
           });
         }
 
+        const translationsPayload = (() => {
+          const raw = (ev.translations_all && ev.translations_all.length ? ev.translations_all : [ev.translation]) || [];
+          const map = new Map<string, {
+            lang: string;
+            title?: string;
+            description_short?: string;
+            description?: string;
+            wikipedia_url?: string;
+            video_url?: string;
+          }>();
+          raw.forEach((tr) => {
+            const lang = (tr?.lang || DEFAULT_LANGUAGE).trim() || DEFAULT_LANGUAGE;
+            map.set(lang, {
+              ...tr,
+              lang,
+              title: tr?.title ?? "",
+              description: tr?.description ?? "",
+              description_short: tr?.description_short ?? tr?.description ?? "",
+              wikipedia_url: tr?.wikipedia_url ?? "",
+              video_url: tr?.video_url ?? undefined,
+            });
+          });
+          return Array.from(map.values());
+        })();
+        const activeTranslation =
+          translationsPayload.find((tr) => tr.lang === ev.activeLang) ||
+          translationsPayload[0] || {
+            lang: ev.activeLang || DEFAULT_LANGUAGE,
+            title: "",
+            description_short: "",
+            description: "",
+            wikipedia_url: "",
+            video_url: undefined,
+          };
+
         events.push({
           event_id: ev.event_id,
           added_by_user_ref: ev.added_by_user_ref ?? null,
           event: { ...ev.event },
-          translation: { ...ev.translation },
+          translation: { ...activeTranslation },
+          translations: translationsPayload,
           type_codes: typeCodes.map((code) => code?.trim()).filter(Boolean),
           correlations: ev.correlations
             .map((c) => ({
@@ -758,8 +846,8 @@ export default function BuildJourneyPage() {
 
   // Auto-popola slug e code in base a titolo e descrizione, mantenendo la possibilità di override manuale.
   useEffect(() => {
-    const autoSlug = buildAutoSlug(translation.title, ge.description);
-    const autoCode = buildAutoCode(translation.title, ge.description);
+    const autoSlug = buildAutoSlug(bestTitleForAuto, ge.description, journeyYearHint);
+    const autoCode = buildAutoCode(bestTitleForAuto, ge.description, journeyYearHint);
 
     setGe((prev) => {
       let next = prev;
@@ -777,7 +865,7 @@ export default function BuildJourneyPage() {
 
       return next;
     });
-  }, [translation.title, ge.description]);
+  }, [bestTitleForAuto, ge.description, journeyYearHint]);
 
   const handleNewJourney = () => {
     setSelectedJourneyId(null);
@@ -918,27 +1006,16 @@ export default function BuildJourneyPage() {
         if (coverMap[groupId]) return;
         if (row.public_url) coverMap[groupId] = row.public_url as string;
       });
-
-      setJourneys(
-        journeysFromView.map((journey) => ({
-          id: journey.journey_id,
-          title: journey.translation_title ?? null,
-          coverUrl: coverMap[journey.journey_id] ?? null,
-          publishedAt: journey.approved_at,
-          eventsCount: journey.events_count,
-          yearFrom: journey.year_from_min,
-          yearTo: journey.year_to_max,
-          owner_profile_id: profile.id,
-        }))
-      );
       const journeyIds = journeysFromView.map((journey) => journey.journey_id);
       const { data: visibilityRows, error: visibilityError } = await supabase
         .from("group_events")
-        .select("id,visibility,workflow_state")
+        .select("id,visibility,workflow_state,slug,code")
         .in("id", ownerIds);
       if (visibilityError) throw visibilityError;
       const visibilityMap: Record<string, Visibility> = {};
       const statusMap: Record<string, JourneyStatus> = {};
+      const slugMap: Record<string, string | null> = {};
+      const codeMap: Record<string, string | null> = {};
       (visibilityRows ?? []).forEach((row) => {
         if (row.id && (row.visibility === "private" || row.visibility === "public")) {
           visibilityMap[row.id] = row.visibility as Visibility;
@@ -950,10 +1027,26 @@ export default function BuildJourneyPage() {
           statusMap[row.id] = allowed.includes(normalized as JourneyStatus)
             ? (normalized as JourneyStatus)
             : "draft";
+          slugMap[row.id] = typeof row.slug === "string" ? row.slug : null;
+          codeMap[row.id] = typeof row.code === "string" ? row.code : null;
         }
       });
       setJourneyVisibilityMap(visibilityMap);
       setJourneyStatusMap(statusMap);
+      setJourneys(
+        journeysFromView.map((journey) => ({
+          id: journey.journey_id,
+          title: journey.translation_title ?? null,
+          coverUrl: coverMap[journey.journey_id] ?? null,
+          publishedAt: journey.approved_at,
+          slug: slugMap[journey.journey_id] ?? null,
+          code: codeMap[journey.journey_id] ?? null,
+          eventsCount: journey.events_count,
+          yearFrom: journey.year_from_min,
+          yearTo: journey.year_to_max,
+          owner_profile_id: profile.id,
+        }))
+      );
 
       const ratingMap: Record<string, JourneyRating> = {};
       if (journeyIds.length) {
@@ -1642,6 +1735,48 @@ export default function BuildJourneyPage() {
       return;
     }
 
+    const normalizedSlugInput = (ge.slug || "").trim();
+    const normalizedCodeInput = (ge.code || "").trim();
+    let resolvedSlug =
+      (normalizedSlugInput ? slugifyTitle(normalizedSlugInput).slice(0, 60) : "") ||
+      buildAutoSlug(bestTitleForAuto, ge.description, journeyYearHint);
+    let resolvedCode =
+      (normalizedCodeInput ? normalizedCodeInput.toUpperCase() : "") ||
+      buildAutoCode(bestTitleForAuto, ge.description, journeyYearHint);
+    if (!selectedJourneyId) {
+      const slugClash = journeys.some((j) => (j.slug || "") === resolvedSlug);
+      const codeClash = journeys.some((j) => (j.code || "") === resolvedCode);
+      if (slugClash) resolvedSlug = `${resolvedSlug}-${Math.random().toString(36).slice(2, 5)}`;
+      if (codeClash) resolvedCode = `${resolvedCode}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+      try {
+        const { data: dupSlugRow } = await supabase
+          .from("group_events")
+          .select("id")
+          .eq("slug", resolvedSlug)
+          .maybeSingle();
+        if (dupSlugRow) {
+          resolvedSlug = `${resolvedSlug}-${Math.random().toString(36).slice(2, 5)}`;
+        }
+      } catch {
+        // ignore slug check errors
+      }
+      try {
+        const { data: dupCodeRow } = await supabase
+          .from("group_events")
+          .select("id")
+          .eq("code", resolvedCode)
+          .maybeSingle();
+        if (dupCodeRow) {
+          resolvedCode = `${resolvedCode}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+        }
+      } catch {
+        // ignore code check errors
+      }
+      if (resolvedSlug !== ge.slug || resolvedCode !== ge.code) {
+        setGe((prev) => ({ ...prev, slug: resolvedSlug, code: resolvedCode }));
+      }
+    }
+
     const basePayload: SaveJourneyPayload = {
       group_event_id: selectedJourneyId ?? undefined,
       group_event: {
@@ -1649,8 +1784,8 @@ export default function BuildJourneyPage() {
         visibility: ge.visibility,
         description: ge.description || undefined,
         language: ge.language || DEFAULT_LANGUAGE,
-        slug: ge.slug || undefined,
-        code: ge.code || undefined,
+        slug: resolvedSlug || undefined,
+        code: resolvedCode || undefined,
         workflow_state: ge.workflow_state,
         owner_profile_id: ge.owner_profile_id || profile?.id || undefined,
         requested_approval_at: ge.requested_approval_at || undefined,
@@ -1674,14 +1809,16 @@ export default function BuildJourneyPage() {
 
     let attempt = 0;
     let completed = false;
+    // Manteniamo una copia mutabile per retry nello stesso tick (setState e' async)
+    let retryGe = { ...ge, slug: resolvedSlug, code: resolvedCode };
     while (attempt < 2 && !completed) {
       try {
         const payload: SaveJourneyPayload = {
           ...basePayload,
           group_event: {
             ...basePayload.group_event,
-            slug: ge.slug || basePayload.group_event.slug,
-            code: ge.code || basePayload.group_event.code,
+            slug: retryGe.slug || basePayload.group_event.slug,
+            code: retryGe.code || basePayload.group_event.code,
           },
         };
 
@@ -1716,22 +1853,32 @@ export default function BuildJourneyPage() {
         }
         completed = true;
       } catch (err: any) {
-        const errMsg = err?.message || tUI(langCode, "build.messages.save_error");
-        const dupCode = typeof errMsg === "string" && errMsg.includes("group_events_code_key");
-        const dupSlug = typeof errMsg === "string" && errMsg.includes("group_events_slug_key");
+        const errText = typeof err === "string" ? err : err?.message || "";
+        const errMsg = errText || tUI(langCode, "build.messages.save_error");
+        const dupCode = errText.includes("group_events_code_key");
+        const dupSlug = errText.includes("group_events_slug_key");
         if (attempt === 0 && (dupCode || dupSlug)) {
+          let bumpedGe = { ...retryGe };
           if (dupCode) {
-            const baseCode = buildAutoCode(translation.title, ge.description).replace(/-+$/, "").replace(/--+/g, "-");
+            const baseCode = buildAutoCode(bestTitleForAuto, retryGe.description ?? ge.description, journeyYearHint)
+              .replace(/-+$/, "")
+              .replace(/--+/g, "-");
             const bumped = `${baseCode}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-            setGe((prev) => ({ ...prev, code: bumped }));
+            bumpedGe = { ...bumpedGe, code: bumped };
           }
           if (dupSlug) {
-            const baseSlug = (ge.slug || buildAutoSlug(translation.title, ge.description) || "journey")
+            const baseSlug =
+              (retryGe.slug ||
+                ge.slug ||
+                buildAutoSlug(bestTitleForAuto, ge.description, journeyYearHint) ||
+                DEFAULT_BASE_NAME)
               .replace(/-+$/, "")
               .replace(/--+/g, "-");
             const bumped = `${baseSlug}-${Math.random().toString(36).slice(2, 5)}`;
-            setGe((prev) => ({ ...prev, slug: bumped }));
+            bumpedGe = { ...bumpedGe, slug: bumped };
           }
+          retryGe = bumpedGe;
+          setGe(bumpedGe); // aggiorna UI, ma il retry usa subito retryGe
           attempt += 1;
           continue; // retry automatically once
         }
@@ -1985,6 +2132,22 @@ export default function BuildJourneyPage() {
     const eventImageKeys = ["image", "image_url", "immagine"];
     const eventTypeKeys = ["event_type_id", "event_types_id", "tipo_evento", "type", "type_event", "type event"];
     const eventWikipediaKeys = ["wikipedia", "wikipedia_url"];
+    const importYearHint = (() => {
+      const years: number[] = [];
+      (importParsed.eventRows || []).forEach((row) => {
+        const yFrom = parseNumber(extract(row as Record<string, unknown>, eventYearFromKeys));
+        const yTo = parseNumber(extract(row as Record<string, unknown>, eventYearToKeys));
+        if (yFrom != null) {
+          years.push(yFrom);
+        } else if (yTo != null) {
+          years.push(yTo);
+        }
+      });
+      if (!years.length) return null;
+      years.sort((a, b) => a - b);
+      return years[0];
+    })();
+
 
     const buildTranslationsFromJourneyRow = (
       row: Record<string, unknown>,
@@ -2057,22 +2220,6 @@ export default function BuildJourneyPage() {
         : journeyVisibility === "private"
         ? "private"
         : ge.visibility;
-    const coverUrl = normalizeValue(extract(journeyRow, journeyCoverKeys) || "");
-    const slugFromSheet = normalizeValue(extract(journeyRow, ["slug"]) || "");
-    const codeFromSheet = normalizeValue(extract(journeyRow, ["code"]) || "");
-    const slug = slugFromSheet || buildAutoSlug(journeyTitle, journeyDescription);
-    const code = codeFromSheet || buildAutoCode(journeyTitle, journeyDescription);
-
-    setGe((prev) => ({
-      ...prev,
-      visibility,
-      cover_url: coverUrl || prev.cover_url,
-      description: journeyDescription || prev.description,
-      language: journeyLang || prev.language,
-      slug,
-      code,
-    }));
-
     const translationLang = journeyLang || DEFAULT_LANGUAGE;
     const sheetTranslations = buildTranslationsFromJourneyRow(journeyRow);
     const translationsToUse =
@@ -2095,6 +2242,33 @@ export default function BuildJourneyPage() {
     );
     setSelectedTranslationLang(primary.lang || translationLang);
     setImportActiveLang(primary.lang || translationLang);
+
+    const effectiveTitle =
+      journeyTitle ||
+      primary.title?.trim() ||
+      translationsToUse.find((tr) => tr.title?.trim())?.title?.trim() ||
+      "";
+    const coverUrl = normalizeValue(extract(journeyRow, journeyCoverKeys) || "");
+    const slugFromSheet = normalizeValue(extract(journeyRow, ["slug"]) || "");
+    const codeFromSheet = normalizeValue(extract(journeyRow, ["code"]) || "");
+    const slug = slugFromSheet || buildAutoSlug(effectiveTitle, journeyDescription, importYearHint);
+    const code = codeFromSheet || buildAutoCode(effectiveTitle, journeyDescription, importYearHint);
+
+    setGe((prev) => ({
+      ...prev,
+      visibility,
+      cover_url: coverUrl || prev.cover_url,
+      description: journeyDescription || prev.description,
+      language: journeyLang || prev.language,
+      slug,
+      code,
+    }));
+
+    if (!effectiveTitle) {
+      setImportError("Titolo non trovato nel file: aggiungi un titolo (IT o EN) per generare slug e codice.");
+    } else {
+      setImportError(null);
+    }
 
     const mappedEvents: JourneyEventEditor[] = (importParsed.eventRows || []).map((row) => {
       const ev = createEmptyEventEditor();
@@ -2155,12 +2329,13 @@ export default function BuildJourneyPage() {
       ev.event.image_url = normalizeValue(extract(row, eventImageKeys) || "") || null;
       const typeValueRaw = normalizeValue(extract(row, eventTypeKeys) || "") || "";
       const resolveType = (value: string) => {
-        if (!value) return undefined;
-        const matchById = availableEventTypes.find((opt) => opt.id === value)?.id;
+        const val = (value || "").trim();
+        if (!val) return undefined;
+        const matchById = availableEventTypes.find((opt) => opt.id === val)?.id;
         if (matchById) return matchById;
-        const matchByLabel = availableEventTypes.find((opt) => opt.label.toLowerCase() === value.toLowerCase())?.id;
+        const matchByLabel = availableEventTypes.find((opt) => opt.label.toLowerCase() === val.toLowerCase())?.id;
         if (matchByLabel) return matchByLabel;
-        return undefined; // ignore unknown to avoid FK errors
+        return val; // keep unknown code as provided to avoid losing type
       };
       const typeValue = resolveType(typeValueRaw);
       ev.event.event_types_id = typeValue || undefined;
@@ -2576,7 +2751,7 @@ export default function BuildJourneyPage() {
                       key={media.id ?? media.media_id ?? media.tempId ?? index}
                       className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
                     >
-                      <div className="grid gap-3 items-end md:grid-cols-[90px_minmax(200px,_2fr)_minmax(160px,_1fr)_150px]">
+                      <div className="grid gap-3 items-end md:grid-cols-2 xl:grid-cols-[80px_minmax(180px,_2fr)_minmax(150px,_1fr)_minmax(120px,_0.9fr)]">
                         <Input
                           label={tUI(langCode, "build.media.order")}
                           type="number"
@@ -3144,6 +3319,7 @@ export default function BuildJourneyPage() {
                         </div>
                         <Textarea
                           label={tUI(langCode, "build.events.description")}
+                          textareaClassName="min-h-[220px]"
                           value={ev.translation.description}
                           onChange={(value) => {
                             setJourneyEvents((prev) =>
@@ -3222,7 +3398,7 @@ export default function BuildJourneyPage() {
                               ev.media.map((m, mIdx) => {
                             return (
                               <div key={m.tempId} className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
-                                <div className="grid gap-4 items-end md:grid-cols-[90px_minmax(200px,_2fr)_minmax(160px,_1fr)_150px]">
+                                <div className="grid gap-4 items-end md:grid-cols-2 xl:grid-cols-[80px_minmax(180px,_2fr)_minmax(150px,_1fr)_minmax(120px,_0.9fr)]">
                                   <Input
                                     label={tUI(langCode, "build.media.order")}
                                     type="number"
@@ -3846,6 +4022,7 @@ function Textarea({
   className,
   disabled = false,
   readOnly = false,
+  textareaClassName,
 }: {
   label?: string;
   value?: string;
@@ -3854,12 +4031,13 @@ function Textarea({
   className?: string;
   disabled?: boolean;
   readOnly?: boolean;
+  textareaClassName?: string;
 }) {
   return (
     <div className={className}>
       {label && <label className="block text-sm font-medium mb-1">{label}</label>}
       <textarea
-        className="w-full min-h-[96px] rounded-xl border border-neutral-200 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500 disabled:shadow-none"
+        className={`w-full min-h-[96px] rounded-xl border border-neutral-200 bg-white/80 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-500 disabled:shadow-none ${textareaClassName ?? ""}`}
         value={value ?? ""}
         placeholder={placeholder}
         onChange={(e) => onChange?.(e.target.value)}
@@ -4046,4 +4224,3 @@ function MapPicker({
     </div>
   );
 }
-

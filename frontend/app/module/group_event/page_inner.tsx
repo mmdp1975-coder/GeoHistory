@@ -34,6 +34,7 @@ type EventCore = {
  exact_date?: string | null;
  location?: string | null;
  image_url?: string | null;
+ event_type_icon?: string | null;
 };
 
 type EventVM = EventCore & {
@@ -51,6 +52,7 @@ type CorrelatedJourney = {
  slug: string | null;
  title: string | null;
 };
+
 
 /* ===================== Util responsive ===================== */
 function useIsLg() {
@@ -129,6 +131,17 @@ function formatTimelineYearLabel(year: number) {
  if (rounded < 0) return `${Math.abs(rounded)} BC`;
  if (rounded === 0) return "0";
  return `${rounded} AD`;
+}
+
+function formatEventRange(ev: EventVM) {
+  const from = signedYear(ev.year_from, ev.era);
+  const to = signedYear(ev.year_to, ev.era);
+  const exact = parseExactDateYear(ev.exact_date);
+  if (from != null && to != null) {
+    return `${formatTimelineYearLabel(from)} - ${formatTimelineYearLabel(to)}`;
+  }
+  const single = from ?? to ?? exact;
+  return single != null ? formatTimelineYearLabel(single) : "n/a";
 }
 
 /** Tick “belli” e più densi per il timeframe sotto la barra */
@@ -484,6 +497,8 @@ function MediaBox({
  compact = false,
  hideHeader = false,
  height = "md",
+ hoverPreviewList = false,
+ hoverPreviewDirection = "vertical",
 }: {
  items: MediaItem[];
  firstPreview?: string | null;
@@ -491,15 +506,19 @@ function MediaBox({
  compact?: boolean;
  hideHeader?: boolean;
  height?: "xs" | "sm" | "md" | "lg";
+ hoverPreviewList?: boolean;
+ hoverPreviewDirection?: "vertical" | "horizontal";
 }) {
  const [index, setIndex] = useState(0);
+ const [hovering, setHovering] = useState(false);
 
- useEffect(() => {
- if (!items?.length) return;
- if (!firstPreview) { setIndex(0); return; }
- const i = items.findIndex((m) => (m.preview || m.url) === firstPreview);
- setIndex(i >= 0 ? i : 0);
- }, [items, firstPreview]);
+  useEffect(() => {
+    if (!items?.length) { setIndex(0); return; }
+    const maxIdx = items.length - 1;
+    if (!firstPreview) { setIndex((i) => Math.min(i, maxIdx)); return; }
+    const i = items.findIndex((m) => (m.preview || m.url) === firstPreview);
+    setIndex(i >= 0 ? i : (prev) => Math.min(prev, maxIdx));
+  }, [items, firstPreview]);
 
  // Se non ci sono media, mostra comunque un contenitore placeholder
  if (!items || items.length === 0) {
@@ -524,7 +543,8 @@ function MediaBox({
  );
  }
 
- const curr = items[index];
+  const safeIndex = Math.max(0, Math.min(index, items.length - 1));
+  const curr = items[safeIndex];
  const isVideo = curr?.type === "video" || /youtu\.?be|vimeo\.com/i.test(curr?.url || "");
  const videoPreview =
  getYouTubePreview(curr?.url) ||
@@ -536,65 +556,130 @@ function MediaBox({
  const goNext = () => setIndex((i) => (i + 1) % items.length);
 
  const heightClass =
- height === "xs" ? "h-24" :
- height === "sm" ? "h-32" :
- height === "lg" ? "h-56" :
- "h-40";
+  height === "xs" ? "h-24" :
+  height === "sm" ? "h-32" :
+  height === "lg" ? "h-56" :
+  "h-40";
+ const listVisible = hoverPreviewList && hovering && items.length > 1;
+ const baseHeightPx = height === "xs" ? 108 : height === "sm" ? 150 : height === "lg" ? 260 : 200;
 
  return (
- <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}>
+ <div
+   className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}
+   onMouseEnter={() => setHovering(true)}
+   onMouseLeave={() => setHovering(false)}
+ >
  {hideHeader ? (
  <div className="absolute left-2 top-2 z-[3] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white">
  {index + 1}/{items.length}
  </div>
  ) : null}
 
- <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}>
- {isVideo ? (
- <div className="relative h-full w-full overflow-hidden bg-slate-900">
- {videoPreview ? (
- <img src={videoPreview} alt="video preview" className="absolute inset-0 h-full w-full object-cover brightness-[0.9]" />
- ) : (
- <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-black" aria-hidden="true" />
- )}
- <div className="absolute inset-0 bg-black/35" aria-hidden="true" />
- <div className="absolute inset-0 flex items-center justify-center">
- <button
- onClick={() => onOpenOverlay(curr, { autoplay: true })}
- className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-blue-600 shadow-lg ring-1 ring-black/10 transition hover:bg-white hover:shadow-xl"
- title="Riproduci video"
- aria-label="Riproduci video"
+ <div
+  className={`relative ${heightClass} w-full rounded-xl ring-1 ring-black/10 bg-slate-100`}
+  style={{
+    height: `${baseHeightPx}px`,
+    minHeight: `${baseHeightPx}px`,
+    overflow: listVisible ? "visible" : "hidden",
+  }}
  >
- <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
- <path d="M9 7.5 17 12l-8 4.5Z" fill="currentColor" />
- </svg>
- </button>
- </div>
- </div>
+ {listVisible ? (
+    <div
+      className={`absolute z-30 ${hoverPreviewDirection === "vertical" ? "left-0 right-0 top-0 w-full" : "top-0 left-0 h-full"}`}
+      style={
+        hoverPreviewDirection === "vertical"
+          ? { maxHeight: "70vh", overflowY: "auto", padding: "8px", scrollbarWidth: "thin" }
+          : { maxWidth: "90vw", overflowX: "auto", padding: "8px", scrollbarWidth: "thin" }
+      }
+    >
+      <div className={hoverPreviewDirection === "vertical" ? "space-y-3" : "flex items-stretch gap-3"}>
+      {items.map((m, i) => {
+        const rawThumb = m.preview || m.url || "";
+        const ytThumb = getYouTubePreview(rawThumb) || getYouTubePreview(m.url || "") || getYouTubePreview(m.preview || "");
+        const normalizedThumb =
+          normalizeMediaUrl(rawThumb) ||
+          normalizeMediaUrl(m.url || "") ||
+          normalizeMediaUrl(m.preview || "") ||
+          "";
+        const thumb = ytThumb || normalizedThumb || m.url || m.preview || "";
+        const isSel = i === index;
+        const isVid = (m.type || "").toLowerCase() === "video" || /youtu\.?be|vimeo\.com/i.test(m.url || m.preview || "");
+        return (
+          <button
+            key={m.media_id || i}
+            onClick={() => {
+              setIndex(i);
+              onOpenOverlay(m, { autoplay: isVid });
+            }}
+            className={`overflow-hidden rounded-lg border transition ${isSel ? "border-amber-300 ring-1 ring-amber-200 bg-amber-50/80" : "border-slate-200 bg-white/95 hover:border-slate-300"}`}
+            style={{
+              padding: "0",
+              display: "block",
+              width: hoverPreviewDirection === "vertical" ? "100%" : "180px",
+              minWidth: hoverPreviewDirection === "vertical" ? "100%" : "180px",
+            }}
+          >
+            <div className={`w-full ${hoverPreviewDirection === "vertical" ? "h-40" : "h-32"} rounded-md bg-slate-100 overflow-hidden ring-1 ring-black/5`}>
+              {thumb ? (
+                <img src={thumb} alt={m.type || "media"} className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-[11px] text-slate-500">No preview</div>
+              )}
+            </div>
+          </button>
+        );
+      })}
+      </div>
+    </div>
  ) : (
- <button onClick={() => onOpenOverlay(curr)} className="block w-full h-full" title="Apri immagine">
- <img src={curr.preview || curr.url} alt="media" className="w-full h-full object-cover" />
- </button>
- )}
+   <>
+     {isVideo ? (
+       <div className="relative h-full w-full overflow-hidden bg-slate-900">
+         {videoPreview ? (
+           <img src={videoPreview} alt="video preview" className="absolute inset-0 h-full w-full object-contain bg-black brightness-[0.9]" />
+         ) : (
+           <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-black" aria-hidden="true" />
+         )}
+         <div className="absolute inset-0 bg-black/35" aria-hidden="true" />
+         <div className="absolute inset-0 flex items-center justify-center">
+           <button
+             onClick={() => onOpenOverlay(curr, { autoplay: true })}
+             className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/95 text-blue-600 shadow-lg ring-1 ring-black/10 transition hover:bg-white hover:shadow-xl"
+             title="Riproduci video"
+             aria-label="Riproduci video"
+           >
+             <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+               <path d="M9 7.5 17 12l-8 4.5Z" fill="currentColor" />
+             </svg>
+           </button>
+         </div>
+       </div>
+     ) : (
+       <button onClick={() => onOpenOverlay(curr)} className="block w-full h-full" title="Apri immagine">
+         <img src={curr.preview || curr.url} alt="media" className="w-full h-full object-cover" />
+       </button>
+     )}
 
- {items.length > 1 ? (
- <>
-        <button
-          onClick={goPrev}
-          className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
-          title="Precedente"
-        >
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button
-          onClick={goNext}
-          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
-          title="Successivo"
-        >
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
- </>
- ) : null}
+     {items.length > 1 ? (
+       <>
+         <button
+           onClick={goPrev}
+           className="absolute left-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
+           title="Precedente"
+         >
+           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+         </button>
+         <button
+           onClick={goNext}
+           className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/85 text-gray-800 shadow hover:bg-white"
+           title="Successivo"
+         >
+           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+         </button>
+       </>
+     ) : null}
+   </>
+ )}
  </div>
  </div>
  );
@@ -901,6 +986,7 @@ const closeQuiz = useCallback(() => setQuizOpen(false), []);
  /* ===== Mappa ===== */
  const mapRef = useRef<MapLibreMap | null>(null);
 const markersRef = useRef<MapLibreMarker[]>([]);
+const popupRef = useRef<maplibregl.Popup | null>(null);
 const [mapReady, setMapReady] = useState(false);
 const [mapLoaded, setMapLoaded] = useState(false);
  const [mapVersion, setMapVersion] = useState(0);
@@ -927,6 +1013,26 @@ const fitMapToRows = useCallback(() => {
   } catch {}
 }, [rows, mapReady]);
 
+const showPopup = useCallback((ev?: EventVM | null) => {
+  const map = mapRef.current as any;
+  if (popupRef.current) {
+    try { popupRef.current.remove(); } catch {}
+    popupRef.current = null;
+  }
+  if (!map || !mapReady || mapMode !== "fullscreen") return;
+  if (!ev || ev.latitude == null || ev.longitude == null) return;
+  const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 14 });
+  const rangeLabel = formatEventRange(ev);
+  popup
+    .setLngLat([ev.longitude, ev.latitude])
+    .setHTML(
+      `<div style="font-size:12px;font-weight:700;color:#0f172a;">${ev.title || "Evento"}</div>` +
+      `<div style="font-size:11px;color:#475569;margin-top:2px;">${rangeLabel}</div>`
+    )
+    .addTo(map);
+  popupRef.current = popup;
+}, [mapMode, mapReady]);
+
 // Lock scroll quando la mappa è full-screen
 useEffect(() => {
   if (mapMode !== "fullscreen") return;
@@ -950,6 +1056,17 @@ useEffect(() => {
   if (!mapReady || !mapLoaded) return;
   fitMapToRows();
 }, [fitMapToRows, mapReady, mapLoaded]);
+
+// Popup evento quando la mappa Š full-screen
+useEffect(() => {
+  if (mapMode !== "fullscreen") {
+    if (popupRef.current) { try { popupRef.current.remove(); } catch {} popupRef.current = null; }
+    return;
+  }
+  const ev = rows[selectedIndex];
+  if (!ev || !mapReady) return;
+  showPopup(ev);
+}, [mapMode, selectedIndex, rows, mapReady, showPopup]);
 
 // Reset cache/markers quando cambio journey
 useEffect(() => {
@@ -997,10 +1114,10 @@ useEffect(() => {
      return;
    }
 
-   const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-   const style = apiKey
-     ? `https://api.maptiler.com/maps/hybrid/style.json?key=${apiKey}`
-     : OSM_STYLE;
+ const apiKey = process.env.NEXT_PUBLIC_MAPTILER_KEY;
+ const style = apiKey
+   ? `https://api.maptiler.com/maps/hybrid/style.json?key=${apiKey}`
+   : OSM_STYLE;
 
    try {
      const map = new maplibregl.Map({
@@ -1041,6 +1158,7 @@ useEffect(() => {
  tick();
  return () => {
    cancelled = true;
+   if (popupRef.current) { try { popupRef.current.remove(); } catch {} popupRef.current = null; }
    if (mapRef.current) {
      try { (mapRef.current as any)._gehjCleanup?.(); } catch {}
      try { mapRef.current.remove(); } catch {}
@@ -1085,7 +1203,7 @@ useEffect(() => {
  .select(
  `event_id, group_event_id, description, lang, title, wikipedia_url,
  continent, country, era, exact_date, id, latitude, longitude, year_from, year_to,
- journey_title, journey_media, journey_media_first, event_media, event_media_first`
+ journey_title, journey_media, journey_media_first, event_media, event_media_first, event_type_icon`
  )
  .eq("group_event_id", gid);
  if (vjErr) throw vjErr;
@@ -1123,11 +1241,12 @@ useEffect(() => {
   latitude: typeof r.latitude === "number" ? r.latitude : null,
   longitude: typeof r.longitude === "number" ? r.longitude : null,
   era: r.era ?? null,
-  year_from: r.year_from ?? null,
-  year_to: r.year_to ?? null,
+ year_from: r.year_from ?? null,
+ year_to: r.year_to ?? null,
  exact_date: r.exact_date ?? null,
  location,
  image_url: fallbackImage,
+ event_type_icon: normalizeMediaUrl(r.event_type_icon ?? null) || r.event_type_icon || null,
  };
  // Build base event VM
  const ev: EventVM = {
@@ -1191,7 +1310,7 @@ const jmNormalized = jmOrdered.map((m, idx) => {
   const preview = normPreview || normalizeMediaUrl(normUrl || null) || m.preview || m.url || rawJourneyFirst || null;
   return { ...m, url: normUrl || m.url, preview: preview || null };
 });
-const jmFirst: string | null =
+ const jmFirst: string | null =
   normalizeMediaUrl(jmCover?.preview || jmCover?.url || null) ||
   normalizeMediaUrl(rawJourneyFirst || null) ||
   rawJourneyFirst ||
@@ -1407,7 +1526,7 @@ if (!map || !mapReady || !gid) return;
 
  const pts: [number, number][] = [];
 
- function makeMarkerEl(idx: number) {
+ function makeMarkerEl(ev: EventVM, idx: number) {
  const isSelected = idx === selectedIndex;
  const wrap = document.createElement("div");
  wrap.className =
@@ -1421,14 +1540,26 @@ if (!map || !mapReady || !gid) return;
  wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
  wrap.style.zIndex = "1000";
  }
- const holder = document.createElement("div");
- holder.innerHTML = MODERN_ICONS["pin"];
- const svg = holder.firstChild as SVGElement | null;
- if (svg) {
- svg.setAttribute("width", isSelected ? "28" : "22");
- svg.setAttribute("height", isSelected ? "28" : "22");
- (svg as any).style.color = "#111827";
- wrap.appendChild(svg);
+ const iconUrl = ev.event_type_icon ? normalizeMediaUrl(ev.event_type_icon) : null;
+ if (iconUrl) {
+   const img = document.createElement("img");
+   img.src = iconUrl;
+   img.alt = ev.title || "Evento";
+   img.style.width = isSelected ? "28px" : "22px";
+   img.style.height = isSelected ? "28px" : "22px";
+   img.style.objectFit = "contain";
+   img.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.15))";
+   wrap.appendChild(img);
+ } else {
+   const holder = document.createElement("div");
+   holder.innerHTML = MODERN_ICONS["pin"];
+   const svg = holder.firstChild as SVGElement | null;
+   if (svg) {
+     svg.setAttribute("width", isSelected ? "28" : "22");
+     svg.setAttribute("height", isSelected ? "28" : "22");
+     (svg as any).style.color = "#111827";
+     wrap.appendChild(svg);
+   }
  }
  return wrap;
  }
@@ -1436,7 +1567,7 @@ if (!map || !mapReady || !gid) return;
  rows.forEach((ev, idx) => {
  if (ev.latitude == null || ev.longitude == null) return;
 
- const el = makeMarkerEl(idx);
+ const el = makeMarkerEl(ev, idx);
  const pxOff = pixelOffsetById.get(ev.id) ?? [0, 0];
 
  const marker = new maplibregl.Marker({ element: el, offset: pxOff as any })
@@ -1445,7 +1576,10 @@ if (!map || !mapReady || !gid) return;
 
  try { (marker as any).setZIndex?.(idx === selectedIndex ? 1000 : 0); } catch {}
 
- el.addEventListener("click", () => setSelectedIndex(idx));
+ el.addEventListener("click", () => {
+   setSelectedIndex(idx);
+   if (mapMode === "fullscreen") showPopup(ev);
+ });
 
  markersRef.current.push(marker as any);
  pts.push([ev.longitude!, ev.latitude!]);
@@ -1458,7 +1592,7 @@ if (!map || !mapReady || !gid) return;
     (map as any).flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
   }
  } catch {}
- }, [rows, mapReady, selectedIndex]);
+ }, [rows, mapReady, selectedIndex, mapMode, showPopup]);
 
  useEffect(() => {
  const map = mapRef.current as any;
@@ -1895,7 +2029,7 @@ const mapTextureStyle: CSSProperties = {
  {/* Colonna sinistra: Location + Descrizione + Link */}
  <div className="min-w-0 rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
  {/* location removed above description as requested */}
- <div className="max-h-[40svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800" style={{ scrollbarWidth: 'thin' }}>
+ <div className="max-h-[40svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800 text-justify" style={{ scrollbarWidth: 'thin' }}>
  {selectedEvent?.description || "No description available."}
  </div>
  {/* Eventi contemporanei (MOBILE) - altri journey */}
@@ -1956,6 +2090,8 @@ const mapTextureStyle: CSSProperties = {
                     hideHeader
                     compact
                     height={isLg ? "xs" : "sm"}
+                    hoverPreviewList
+                    hoverPreviewDirection="horizontal"
                   />
                 </div>
 
@@ -2012,61 +2148,29 @@ const mapTextureStyle: CSSProperties = {
  </div>
 
  {/* [2] Media del Journey (ristretto) */}
- {isLg ? (
-   <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
-     <div className="flex-1 flex items-center justify-center">
-       {journeyMedia?.length ? (
-         <div className="w-full max-w-[260px]">
-           <MediaBox
-             items={journeyMedia}
-             firstPreview={journeyMediaFirst || undefined}
-             onOpenOverlay={openOverlay}
-             hideHeader
-             height={isLg ? "xs" : "sm"}
-             compact
-           />
-         </div>
-       ) : (
-         <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-           Nessun media del journey
-         </div>
-       )}
-     </div>
-   </div>
- ) : (
-   <Collapsible
-     title="Media del journey"
-     badge={journeyMedia?.length ? journeyMedia.length : undefined}
-     defaultOpen={false}
-     icon={(
-       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-         <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-         <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-       </svg>
-     )}
-   >
-     <div className="h-auto rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
-       <div className="flex-1 flex items-center justify-center">
-         {journeyMedia?.length ? (
-           <div className="w-full max-w-[260px]">
-             <MediaBox
-               items={journeyMedia}
-               firstPreview={journeyMediaFirst || undefined}
-               onOpenOverlay={openOverlay}
-               hideHeader
-               height="sm"
-               compact
-             />
-           </div>
-         ) : (
-           <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-             Nessun media del journey
-           </div>
-         )}
-       </div>
-     </div>
-   </Collapsible>
- )}
+  {isLg ? (
+    <div className="flex">
+      <div className="flex-1 flex items-center justify-center">
+        {journeyMedia?.length ? (
+          <div className="w-full max-w-[260px]">
+            <MediaBox
+              items={journeyMedia}
+              firstPreview={journeyMediaFirst || undefined}
+              onOpenOverlay={openOverlay}
+              hideHeader
+              height={isLg ? "xs" : "sm"}
+              compact
+              hoverPreviewList
+            />
+          </div>
+        ) : (
+          <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+            Nessun media del journey
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null}
 
       {/* [3] Timeline */}
       <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
@@ -2206,6 +2310,8 @@ const mapTextureStyle: CSSProperties = {
       onOpenOverlay={openOverlay}
       compact
       height="sm"
+      hoverPreviewList
+      hoverPreviewDirection="horizontal"
     />
   </Collapsible>
 
@@ -2281,7 +2387,7 @@ const mapTextureStyle: CSSProperties = {
     )}
   >
     <div
-      className="max-h-[36svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap"
+      className="max-h-[36svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap text-justify"
       style={{ scrollbarWidth: "thin" }}
     >
       {selectedEvent?.description || "No description available."}
@@ -2316,7 +2422,7 @@ const mapTextureStyle: CSSProperties = {
  </section>
 
  <section className="relative h-[40svh] min-h-[300px] border-t border-black/10">
- <div data-map="gehj" key={`map-mobile-${gid ?? "unknown"}`} className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+ <div data-map="gehj" key={`map-mobile-${gid ?? "unknown"}`} className="h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
  {!mapLoaded && (
  <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
  Inizializzazione mappa…
@@ -2329,26 +2435,26 @@ const mapTextureStyle: CSSProperties = {
 <div className="mx-auto hidden w-full max-w-[120rem] lg:block" style={mapTextureStyle}>
   <div className="grid grid-cols-[320px_minmax(0,0.75fr)_minmax(0,1.25fr)] gap-3 px-4 py-6">
     {/* Colonna 1: Player + controlli + link */}
-    <div className="flex flex-col gap-3">
-      <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)]">
-        <div className="flex h-32 items-center justify-center">
-          {selectedEvent?.event_media?.length ? (
-            <div className="w-full max-w-[320px]">
-              <MediaBox
-                items={selectedEvent.event_media}
-                firstPreview={selectedEvent.event_media_first || undefined}
-                onOpenOverlay={openOverlay}
-                hideHeader
-                compact
-                height={isLg ? "sm" : "sm"}
-              />
-            </div>
-          ) : (
-            <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-              Nessun media dell'evento
-            </div>
-          )}
-        </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-center">
+        {selectedEvent?.event_media?.length ? (
+          <div className="w-full max-w-[320px]">
+            <MediaBox
+              items={selectedEvent.event_media}
+              firstPreview={selectedEvent.event_media_first || undefined}
+              onOpenOverlay={openOverlay}
+              hideHeader
+              compact
+              height={isLg ? "sm" : "sm"}
+              hoverPreviewList
+              hoverPreviewDirection="horizontal"
+            />
+          </div>
+        ) : (
+          <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+            Nessun media dell'evento
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[150px] flex flex-col">
@@ -2379,7 +2485,7 @@ const mapTextureStyle: CSSProperties = {
         )}
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[130px] flex flex-col">
+      <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[100px] flex flex-col">
         <div className="text-[12px] font-semibold text-gray-800">connected Journey</div>
           {related?.length ? (
             <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
@@ -2471,7 +2577,7 @@ const mapTextureStyle: CSSProperties = {
             ) : null}
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap scroll-pr-2" style={{ scrollbarWidth: "thin" }}>
+        <div className="flex-1 overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap text-justify scroll-pr-2" style={{ scrollbarWidth: "thin" }}>
           {selectedEvent?.description || "No description available."}
         </div>
       </div>
@@ -2490,8 +2596,8 @@ const mapTextureStyle: CSSProperties = {
         key={`map-desktop-${gid ?? "unknown"}`}
         className={
           mapMode === "fullscreen"
-            ? "absolute inset-0"
-            : "h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+            ? "absolute inset-0 rounded-none overflow-hidden"
+            : "h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]"
         }
         aria-label="Map canvas"
       />

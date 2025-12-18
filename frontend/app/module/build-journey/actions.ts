@@ -530,6 +530,7 @@ export type JourneyEventEditPayload = {
     images_json?: any | null;
   };
   translation?: EventTranslationPayload | null;
+  translations?: EventTranslationPayload[];
   type_codes?: string[];
   media?: GroupEventMediaEntry[];
   correlations?: EventCorrelationPayload[];
