@@ -783,9 +783,46 @@ const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
 const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 const speechAutoAdvanceRef = useRef(false);
+const autoplayFallbackRef = useRef<number | null>(null);
 const normalizeLang = (v?: string | null) => (v ? v.slice(0, 2).toLowerCase() : "");
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
 const BRAND_BLUE = "#0f3c8c";
+const isMobile = !isLg;
+
+const pickBestVoice = useCallback(
+  (langHint?: string | null) => {
+    if (!voices.length) return null;
+    const target = normalizeLang(langHint || resolvedLang || desiredLang);
+    let best: SpeechSynthesisVoice | null = null;
+    let bestScore = -Infinity;
+    for (const v of voices) {
+      const vLang = normalizeLang(v.lang);
+      const name = (v.name || "").toLowerCase();
+      let score = 0;
+      if (target && vLang === target) score += 100;
+      else if (target && vLang.startsWith(target)) score += 70;
+      if (v.localService) score += 5;
+      if (target === "it") {
+        if (/elsa/.test(name)) score -= 40;
+        if (/alice|luca|federica|paola|giorgio|stefano/.test(name)) score += 20;
+        if (/siri|apple/.test(name)) score += 15;
+        if (/google/.test(name)) score += 12;
+        if (/microsoft|zira|david/.test(name)) score -= 5;
+      }
+      if (isMobile) {
+        if (/siri|apple/.test(name)) score += 6;
+        if (/google/.test(name)) score += 6;
+        if (/enhanced|premium|natural/.test(name)) score += 6;
+      }
+      if (score > bestScore) {
+        best = v;
+        bestScore = score;
+      }
+    }
+    return best;
+  },
+  [voices, resolvedLang, desiredLang, isMobile]
+);
 
 const toggleMapModeView = useCallback(() => {
   setMapMode((m) => (m === "normal" ? "fullscreen" : "normal"));
@@ -875,7 +912,7 @@ const speakEventDescription = useCallback(
     const langHint = (ev as any)?.lang || resolvedLang || desiredLang;
     const chosen =
       (selectedVoiceId && voices.find((v) => v.voiceURI === selectedVoiceId)) ||
-      voices.find((v) => normalizeLang(v.lang) === normalizeLang(langHint)) ||
+      pickBestVoice(langHint) ||
       voices[0] ||
       null;
     const utter = new SpeechSynthesisUtterance(text);
@@ -898,7 +935,7 @@ const speakEventDescription = useCallback(
     speechUtteranceRef.current = utter;
     window.speechSynthesis.speak(utter);
   },
-  [desiredLang, resolvedLang, selectedVoiceId, voices, rows.length, stopSpeech]
+  [desiredLang, resolvedLang, selectedVoiceId, voices, rows.length, stopSpeech, pickBestVoice]
 );
 
 useEffect(() => {
@@ -923,17 +960,36 @@ useEffect(() => {
   }
 }, [isPlaying, speechSupported, stopSpeech]);
 
+// Autoplay fallback for browsers without speech synthesis (common on mobile)
+useEffect(() => {
+  if (speechSupported || !isPlaying) {
+    if (autoplayFallbackRef.current) {
+      clearInterval(autoplayFallbackRef.current);
+      autoplayFallbackRef.current = null;
+    }
+    return;
+  }
+  if (typeof window === "undefined") return;
+  autoplayFallbackRef.current = window.setInterval(() => {
+    setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0));
+  }, 9000);
+  return () => {
+    if (autoplayFallbackRef.current) {
+      clearInterval(autoplayFallbackRef.current);
+      autoplayFallbackRef.current = null;
+    }
+  };
+}, [isPlaying, rows.length, speechSupported]);
+
 useEffect(() => {
   if (!speechSupported) return;
   if (selectedVoiceId) return;
-  const wantIt = normalizeLang(resolvedLang || desiredLang) === "it";
   const best =
-    (wantIt && voices.find((v) => normalizeLang(v.lang) === "it" && /elsa/i.test(v.name))) ||
-    voices.find((v) => normalizeLang(v.lang) === "it") ||
+    pickBestVoice(resolvedLang || desiredLang) ||
     voices.find((v) => normalizeLang(v.lang) === "en") ||
     voices[0];
   if (best) setSelectedVoiceId(best.voiceURI);
-}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang]);
+}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang, pickBestVoice]);
 
 // Stop speech on unmount
 useEffect(() => stopSpeech, [stopSpeech]);
@@ -2148,29 +2204,27 @@ const mapTextureStyle: CSSProperties = {
  </div>
 
  {/* [2] Media del Journey (ristretto) */}
-  {isLg ? (
-    <div className="flex">
-      <div className="flex-1 flex items-center justify-center">
-        {journeyMedia?.length ? (
-          <div className="w-full max-w-[260px]">
-            <MediaBox
-              items={journeyMedia}
-              firstPreview={journeyMediaFirst || undefined}
-              onOpenOverlay={openOverlay}
-              hideHeader
-              height={isLg ? "xs" : "sm"}
-              compact
-              hoverPreviewList
-            />
-          </div>
-        ) : (
-          <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-            Nessun media del journey
-          </div>
-        )}
-      </div>
+  <div className="flex">
+    <div className="flex-1 flex items-center justify-center">
+      {journeyMedia?.length ? (
+        <div className="w-full max-w-[260px]">
+          <MediaBox
+            items={journeyMedia}
+            firstPreview={journeyMediaFirst || undefined}
+            onOpenOverlay={openOverlay}
+            hideHeader
+            height={isLg ? "xs" : "sm"}
+            compact
+            hoverPreviewList
+          />
+        </div>
+      ) : (
+        <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+          Nessun media del journey
+        </div>
+      )}
     </div>
-  ) : null}
+  </div>
 
       {/* [3] Timeline */}
       <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
@@ -2257,52 +2311,6 @@ const mapTextureStyle: CSSProperties = {
         <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )}
-    actions={(
-      <div className="flex items-center gap-1">
-        <button
-          onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-          title="Previous"
-          aria-label="Evento precedente"
-        >
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <button
-          onClick={() => setIsPlaying((p) => !p)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-          title={isPlaying ? "Pause" : "Play"}
-          aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-        >
-          {isPlaying ? (
-            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          )}
-        </button>
-        <button
-          onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-xs text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-          title="Next"
-          aria-label="Evento successivo"
-        >
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        {voiceOptions.length > 1 && (
-          <select
-            value={selectedVoiceId ?? ""}
-            onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
-            className="ml-1 min-w-[70px] max-w-[120px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[9.5px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-            aria-label="Voce sintesi"
-          >
-            {voiceOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-    )}
   >
     <MediaBox
       items={selectedEvent?.event_media ?? []}
@@ -2316,12 +2324,12 @@ const mapTextureStyle: CSSProperties = {
   </Collapsible>
 
   <Collapsible
-    title="Approfondimenti"
+    title="connected Journey"
     badge={related?.length ? related.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M6.5 7h11a1.5 1.5 0 0 1 1.4 2.1l-3.2 8a1.5 1.5 0 0 1-1.4.9h-11a1.5 1.5 0 0 1-1.4-2.1l3.2-8a1.5 1.5 0 0 1 1.4-.9Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-        <path d="M9 10h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1.5 1.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6L13.5 17" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )}
   >
@@ -2421,13 +2429,96 @@ const mapTextureStyle: CSSProperties = {
  </div>
  </section>
 
- <section className="relative h-[40svh] min-h-[300px] border-t border-black/10">
- <div data-map="gehj" key={`map-mobile-${gid ?? "unknown"}`} className="h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]" aria-label="Map canvas" />
+
+ <section
+ className={
+ mapMode === "fullscreen"
+ ? "fixed inset-0 z-[5000] bg-white"
+ : "relative h-[40svh] min-h-[300px] border-t border-black/10"
+ }
+ >
+ <div
+ data-map="gehj"
+ key={`map-mobile-${gid ?? "unknown"}`}
+ className={
+ mapMode === "fullscreen"
+ ? "absolute inset-0 rounded-none overflow-hidden"
+ : "h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+ }
+ aria-label="Map canvas"
+ />
  {!mapLoaded && (
  <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
- Inizializzazione mappa…
+ Inizializzazione mappa?
  </div>
  )}
+ <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+ <button
+ onClick={toggleMapModeView}
+ className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+ title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+ aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ {mapMode === "fullscreen" ? (
+ <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ ) : (
+ <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ )}
+ </svg>
+ </button>
+ <button
+ onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+ className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label="Evento precedente"
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ </button>
+ <button
+ onClick={() => setIsPlaying((p) => !p)}
+ className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+ >
+ {isPlaying ? (
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+ <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+ </svg>
+ ) : (
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+ </svg>
+ )}
+ </button>
+ <button
+ onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+ className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label="Evento successivo"
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ </button>
+ {voiceOptions.length > 1 && (
+ <select
+ value={selectedVoiceId ?? ""}
+ onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
+ className="ml-1 min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+ aria-label="Voce sintesi"
+ >
+ {voiceOptions.map((opt) => (
+ <option key={opt.id} value={opt.id}>
+ {opt.label}
+ </option>
+ ))}
+ </select>
+ )}
+ </div>
  </section>
  </div>
 
