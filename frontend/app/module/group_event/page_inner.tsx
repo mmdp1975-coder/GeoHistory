@@ -2179,7 +2179,7 @@ const mapTextureStyle: CSSProperties = {
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
  title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
  >
- {label ? `${label} · ` : ""}{c.evTitle}
+ {label ? `${label} - ` : ""}{c.evTitle}
  </button>
  );
  })}
@@ -2196,7 +2196,7 @@ const mapTextureStyle: CSSProperties = {
  rel="noreferrer"
  className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
  >
- Wikipedia ??'
+ Wikipedia
  </a>
  ) : null}
  {selectedEvent?.video_url ? (
@@ -2207,7 +2207,7 @@ const mapTextureStyle: CSSProperties = {
  className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
  title="Guarda il video dell'evento"
  >
- ?-? Guarda il video
+ Guarda il video
  </a>
  ) : null}
  </div>
@@ -2231,7 +2231,7 @@ const mapTextureStyle: CSSProperties = {
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12.5px] text-slate-900 hover:bg-white shadow-sm"
  title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
  >
- {label ? `${label} · ` : ""}{c.evTitle}
+ {label ? `${label} - ` : ""}{c.evTitle}
  </button>
  );
  })}
@@ -2252,7 +2252,7 @@ const mapTextureStyle: CSSProperties = {
  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
  title={r.title ?? r.slug ?? "Open journey"}
  >
- ?Y"- {r.title ?? r.slug ?? "Journey"}
+ {r.title ?? r.slug ?? "Journey"}
  </button>
  ))}
  </div>
@@ -2266,7 +2266,6 @@ const mapTextureStyle: CSSProperties = {
  </div>
  </div>
  </div>
-
  </div>
  </div>
  </section>
@@ -2338,6 +2337,27 @@ const mapTextureStyle: CSSProperties = {
  <div className="mx-auto w-full max-w-[820px]">
 <div className={`${BOX_3D} flex flex-col gap-2`}>
   <Collapsible
+    title="Media evento"
+    defaultOpen={false}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )}
+  >
+    <MediaBox
+      items={selectedEvent?.event_media ?? []}
+      firstPreview={selectedEvent?.event_media_first || undefined}
+      onOpenOverlay={openOverlay}
+      compact
+      height="sm"
+      hoverPreviewList
+      hoverPreviewDirection="horizontal"
+    />
+  </Collapsible>
+
+  <Collapsible
     title={tUI(resolvedLang, "journey.related.title")}
     badge={related?.length ? related.length : undefined}
     icon={(
@@ -2369,7 +2389,7 @@ const mapTextureStyle: CSSProperties = {
   </Collapsible>
 
   <Collapsible
-    title="contemporary events"
+    title={resolvedLang?.toLowerCase?.().startsWith("en") ? "Contemporary events" : "Eventi contemporanei"}
     badge={concurrentOther?.length ? concurrentOther.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -2389,7 +2409,7 @@ const mapTextureStyle: CSSProperties = {
               className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
               title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
             >
-              {label ? `${label} · ` : ""}{c.evTitle}
+              {label ? `${label} - ` : ""}{c.evTitle}
             </button>
           );
         })}
@@ -2422,7 +2442,7 @@ const mapTextureStyle: CSSProperties = {
           rel="noreferrer"
           className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
         >
-          Wikipedia ?
+          Wikipedia
         </a>
       ) : null}
       {selectedEvent?.video_url ? (
@@ -2433,7 +2453,7 @@ const mapTextureStyle: CSSProperties = {
           className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
           title="Guarda il video dell'evento"
         >
-          ? Guarda il video
+          Guarda il video
         </a>
       ) : null}
     </div>
@@ -2461,11 +2481,11 @@ const mapTextureStyle: CSSProperties = {
  }
  aria-label="Map canvas"
  />
- {!mapLoaded && (
- <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
- Inizializzazione mappa?
+{!mapLoaded && (
+<div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
+ Inizializzazione mappa.
  </div>
- )}
+)}
  <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
  <button
  onClick={toggleMapModeView}
@@ -2543,11 +2563,78 @@ const mapTextureStyle: CSSProperties = {
  Nessuna voce disponibile in questo browser.
  </div>
  )}
- {showLowQualityWarning && (
- <div className="absolute left-3 top-24 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
- Voce mobile di bassa qualita disponibile.
- </div>
+{showLowQualityWarning && (
+<div className="absolute left-3 top-24 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
+Voce mobile di bassa qualita disponibile.
+</div>
+)}
+ <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+ <button
+ onClick={toggleMapModeView}
+ className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+ title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+ aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ {mapMode === "fullscreen" ? (
+ <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ ) : (
+ <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  )}
+ </svg>
+ </button>
+ <button
+ onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+ className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label="Evento precedente"
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ </button>
+ <button
+ onClick={() => setIsPlaying((p) => !p)}
+ className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+ >
+ {isPlaying ? (
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+ <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+ </svg>
+ ) : (
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+ </svg>
+ )}
+ </button>
+ <button
+ onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+ className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+ style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+ aria-label="Evento successivo"
+ >
+ <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+ <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+ </svg>
+ </button>
+ {voiceOptions.length > 1 && (
+ <select
+ value={selectedVoiceId ?? ""}
+ onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
+ className="ml-1 min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+ aria-label="Voce sintesi"
+ >
+ {voiceOptions.map((opt) => (
+ <option key={opt.id} value={opt.id}>
+ {opt.label}
+ </option>
+ ))}
+ </select>
+ )}
+ </div>
  </section>
  </div>
 
