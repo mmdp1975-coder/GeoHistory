@@ -782,10 +782,10 @@ function Scene({
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        rotateSpeed={0.8}
+        rotateSpeed={0.15}
         minDistance={1.25}
-        maxDistance={2.4}
-        zoomSpeed={0.8}
+        maxDistance={3.2}
+        zoomSpeed={0.35}
       />
     </>
   );

@@ -14,6 +14,7 @@ import {
   PlayCircle,
   X,
   Volume2,
+  Info,
 } from 'lucide-react';
 import { tUI } from '@/lib/i18n/uiLabels';
 
@@ -252,6 +253,17 @@ export default function TopBar() {
                   <span className="hidden md:inline">
                     {tUI(langCode, 'topbar.settings')}
                   </span>
+                </Link>
+
+
+                <Link
+                  href="/module/about"
+                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  aria-label="About"
+                  title="About"
+                >
+                  <Info className="w-5 h-5" />
+                  <span className="hidden md:inline">About</span>
                 </Link>
 
                 <button

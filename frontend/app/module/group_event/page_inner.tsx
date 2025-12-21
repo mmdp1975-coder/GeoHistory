@@ -527,6 +527,7 @@ function MediaBox({
  height === "sm" ? "h-32" :
  height === "lg" ? "h-56" :
  "h-40";
+ const baseHeightPx = height === "xs" ? 108 : height === "sm" ? 150 : height === "lg" ? 260 : 200;
  return (
  <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}>
  {hideHeader ? null : (
@@ -534,7 +535,10 @@ function MediaBox({
  0/0
  </div>
  )}
- <div className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}>
+ <div
+   className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}
+   style={{ height: `${baseHeightPx}px`, minHeight: `${baseHeightPx}px` }}
+ >
  <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
  Nessun media disponibile
  </div>
@@ -784,10 +788,24 @@ const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
 const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 const speechAutoAdvanceRef = useRef(false);
 const autoplayFallbackRef = useRef<number | null>(null);
+const voicePrefLoadedRef = useRef(false);
 const normalizeLang = (v?: string | null) => (v ? v.slice(0, 2).toLowerCase() : "");
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
 const BRAND_BLUE = "#0f3c8c";
 const isMobile = !isLg;
+const voicePrefKey = useMemo(() => {
+  if (typeof navigator === "undefined") return null;
+  const langKey = normalizeLang(resolvedLang || desiredLang) || "und";
+  const ua = navigator.userAgent || "";
+  const vendor = (navigator as any).vendor || "";
+  const platform = navigator.platform || "";
+  const seed = `${langKey}|${ua}|${vendor}|${platform}`;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return `tts_voice_pref:${langKey}:${Math.abs(hash)}`;
+}, [resolvedLang, desiredLang]);
 
 const pickBestVoice = useCallback(
   (langHint?: string | null) => {
@@ -798,21 +816,30 @@ const pickBestVoice = useCallback(
     for (const v of voices) {
       const vLang = normalizeLang(v.lang);
       const name = (v.name || "").toLowerCase();
+      const uri = (v.voiceURI || "").toLowerCase();
+      const highQuality =
+        /enhanced|premium|natural|neural|wavenet|online/.test(name) ||
+        /enhanced|premium|natural|neural|wavenet|online/.test(uri);
+      const lowQuality =
+        /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(name) ||
+        /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(uri);
       let score = 0;
       if (target && vLang === target) score += 100;
       else if (target && vLang.startsWith(target)) score += 70;
-      if (v.localService) score += 5;
+      if (highQuality) score += isMobile ? 22 : 8;
+      if (lowQuality) score -= isMobile ? 26 : 10;
+      if (v.localService) score += isMobile ? -2 : 5;
+      else score += isMobile ? 8 : 0;
       if (target === "it") {
         if (/elsa/.test(name)) score -= 40;
         if (/alice|luca|federica|paola|giorgio|stefano/.test(name)) score += 20;
-        if (/siri|apple/.test(name)) score += 15;
-        if (/google/.test(name)) score += 12;
+        if (/siri|apple/.test(name) || /com\.apple/.test(uri)) score += 18;
+        if (/google/.test(name) || /com\.google/.test(uri)) score += 16;
         if (/microsoft|zira|david/.test(name)) score -= 5;
       }
       if (isMobile) {
-        if (/siri|apple/.test(name)) score += 6;
-        if (/google/.test(name)) score += 6;
-        if (/enhanced|premium|natural/.test(name)) score += 6;
+        if (/siri|apple/.test(name) || /com\.apple/.test(uri)) score += 10;
+        if (/google/.test(name) || /com\.google/.test(uri)) score += 10;
       }
       if (score > bestScore) {
         best = v;
@@ -982,14 +1009,32 @@ useEffect(() => {
 }, [isPlaying, rows.length, speechSupported]);
 
 useEffect(() => {
-  if (!speechSupported) return;
+  if (!speechSupported || !voices.length || voicePrefLoadedRef.current) return;
+  voicePrefLoadedRef.current = true;
   if (selectedVoiceId) return;
+  if (voicePrefKey) {
+    try {
+      const saved = localStorage.getItem(voicePrefKey);
+      const match = saved ? voices.find((v) => v.voiceURI === saved) : null;
+      if (match) {
+        setSelectedVoiceId(match.voiceURI);
+        return;
+      }
+    } catch {}
+  }
   const best =
     pickBestVoice(resolvedLang || desiredLang) ||
     voices.find((v) => normalizeLang(v.lang) === "en") ||
     voices[0];
   if (best) setSelectedVoiceId(best.voiceURI);
-}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang, pickBestVoice]);
+}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang, pickBestVoice, voicePrefKey]);
+
+useEffect(() => {
+  if (!speechSupported || !selectedVoiceId || !voicePrefKey) return;
+  try {
+    localStorage.setItem(voicePrefKey, selectedVoiceId);
+  } catch {}
+}, [speechSupported, selectedVoiceId, voicePrefKey]);
 
 // Stop speech on unmount
 useEffect(() => stopSpeech, [stopSpeech]);
@@ -1002,6 +1047,29 @@ const voiceOptions = useMemo(() => {
     label: `${v.name}${v.localService ? " (local)" : ""} - ${v.lang || ""}`,
   }));
 }, [voices]);
+
+const voiceQualitySummary = useMemo(() => {
+  if (!voices.length) return { hasHighQuality: false, hasLowQuality: false };
+  let hasHighQuality = false;
+  let hasLowQuality = false;
+  for (const v of voices) {
+    const name = (v.name || "").toLowerCase();
+    const uri = (v.voiceURI || "").toLowerCase();
+    const high =
+      /enhanced|premium|natural|neural|wavenet|online/.test(name) ||
+      /enhanced|premium|natural|neural|wavenet|online/.test(uri);
+    const low =
+      /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(name) ||
+      /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(uri);
+    if (high) hasHighQuality = true;
+    if (low) hasLowQuality = true;
+  }
+  return { hasHighQuality, hasLowQuality };
+}, [voices]);
+
+const showLowQualityWarning =
+  speechSupported && isMobile && voices.length > 0 && !voiceQualitySummary.hasHighQuality;
+const showNoVoicesWarning = speechSupported && voices.length === 0;
 
 const [overlayOpen, setOverlayOpen] = useState(false);
 const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
@@ -2504,21 +2572,36 @@ const mapTextureStyle: CSSProperties = {
  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  </svg>
  </button>
- {voiceOptions.length > 1 && (
+ {speechSupported && (
  <select
  value={selectedVoiceId ?? ""}
  onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
  className="ml-1 min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
  aria-label="Voce sintesi"
+ disabled={!voiceOptions.length}
  >
- {voiceOptions.map((opt) => (
+ {voiceOptions.length ? (
+ voiceOptions.map((opt) => (
  <option key={opt.id} value={opt.id}>
  {opt.label}
  </option>
- ))}
+ ))
+ ) : (
+ <option value="">Nessuna voce</option>
+ )}
  </select>
  )}
  </div>
+ {showNoVoicesWarning && (
+ <div className="absolute left-3 top-14 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
+ Nessuna voce disponibile in questo browser.
+ </div>
+ )}
+ {showLowQualityWarning && (
+ <div className="absolute left-3 top-24 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
+ Voce mobile di bassa qualita disponibile.
+ </div>
+ )}
  </section>
  </div>
 
@@ -2528,24 +2611,18 @@ const mapTextureStyle: CSSProperties = {
     {/* Colonna 1: Player + controlli + link */}
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-center">
-        {selectedEvent?.event_media?.length ? (
-          <div className="w-full max-w-[320px]">
-            <MediaBox
-              items={selectedEvent.event_media}
-              firstPreview={selectedEvent.event_media_first || undefined}
-              onOpenOverlay={openOverlay}
-              hideHeader
-              compact
-              height={isLg ? "sm" : "sm"}
-              hoverPreviewList
-              hoverPreviewDirection="horizontal"
-            />
-          </div>
-        ) : (
-          <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-            Nessun media dell'evento
-          </div>
-        )}
+        <div className="w-full max-w-[320px]">
+          <MediaBox
+            items={selectedEvent?.event_media ?? []}
+            firstPreview={selectedEvent?.event_media_first || undefined}
+            onOpenOverlay={openOverlay}
+            hideHeader
+            compact
+            height={isLg ? "sm" : "sm"}
+            hoverPreviewList
+            hoverPreviewDirection="horizontal"
+          />
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[150px] flex flex-col">
@@ -2639,18 +2716,23 @@ const mapTextureStyle: CSSProperties = {
                 <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
-            {voiceOptions.length > 1 && (
+            {speechSupported && (
               <select
                 value={selectedVoiceId ?? ""}
                 onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
                 className="min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
                 aria-label="Voce sintesi"
+                disabled={!voiceOptions.length}
               >
-                {voiceOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
+                {voiceOptions.length ? (
+                  voiceOptions.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">Nessuna voce</option>
+                )}
               </select>
             )}
             {selectedEvent?.wiki_url ? (
@@ -2668,6 +2750,16 @@ const mapTextureStyle: CSSProperties = {
             ) : null}
           </div>
         </div>
+        {showNoVoicesWarning && (
+          <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
+            Nessuna voce disponibile in questo browser.
+          </div>
+        )}
+        {showLowQualityWarning && (
+          <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
+            Voce mobile di bassa qualita disponibile.
+          </div>
+        )}
         <div className="flex-1 overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap text-justify scroll-pr-2" style={{ scrollbarWidth: "thin" }}>
           {selectedEvent?.description || "No description available."}
         </div>

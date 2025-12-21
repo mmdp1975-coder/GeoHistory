@@ -137,6 +137,9 @@ type ImportPreview = {
 type ImportParsedData = {
   journeyRow: Record<string, unknown> | null;
   eventRows: Record<string, unknown>[];
+  eventHeaders?: string[];
+  eventRowsRaw?: unknown[][];
+  eventTypeIndex?: number;
 };
 
 const EXCEL_ALLOWED_EXTENSIONS = ["xlsx", "xls"];
@@ -207,6 +210,7 @@ type JourneyEventEditor = {
   tempId: string;
   event_id?: string;
   added_by_user_ref?: string | null;
+  import_type_raw?: string | null;
   activeLang: string;
   event: {
     era: "AD" | "BC" | null;
@@ -294,6 +298,7 @@ const createEmptyEventEditor = (): JourneyEventEditor => ({
   tempId: buildTempMediaId(),
   event_id: undefined,
   added_by_user_ref: null,
+  import_type_raw: null,
   activeLang: DEFAULT_LANGUAGE,
   event: {
     era: "AD",
@@ -441,7 +446,7 @@ export default function BuildJourneyPage() {
   const [journeyRatingMap, setJourneyRatingMap] = useState<Record<string, JourneyRating>>({});
   const [activeTab, setActiveTab] = useState<"group" | "events">("group");
   const [journeySubTab, setJourneySubTab] = useState<"general" | "translations" | "media">("general");
-  const [availableEventTypes, setAvailableEventTypes] = useState<{ id: string; label: string }[]>([]);
+  const [availableEventTypes, setAvailableEventTypes] = useState<{ id: string; label: string; aliases: string[] }[]>([]);
   const [journeyEvents, setJourneyEvents] = useState<JourneyEventEditor[]>([]);
   const [selectedEventTempId, setSelectedEventTempId] = useState<string | null>(null);
   const [deletedEventIds, setDeletedEventIds] = useState<string[]>([]);
@@ -467,7 +472,13 @@ export default function BuildJourneyPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importLoading, setImportLoading] = useState(false);
-  const [importParsed, setImportParsed] = useState<ImportParsedData>({ journeyRow: null, eventRows: [] });
+  const [importParsed, setImportParsed] = useState<ImportParsedData>({
+    journeyRow: null,
+    eventRows: [],
+    eventHeaders: [],
+    eventRowsRaw: [],
+    eventTypeIndex: -1,
+  });
   const [importAppliedMessage, setImportAppliedMessage] = useState<string | null>(null);
   const [importActiveLang, setImportActiveLang] = useState<string>(DEFAULT_LANGUAGE);
   const lastAutoSlugRef = useRef<string>("");
@@ -722,6 +733,8 @@ export default function BuildJourneyPage() {
             ? ev.type_codes
             : ev.event.event_types_id
             ? [ev.event.event_types_id]
+            : ev.import_type_raw
+            ? [ev.import_type_raw]
             : [];
 
         const media: GroupEventMediaEntry[] = [];
@@ -940,19 +953,43 @@ export default function BuildJourneyPage() {
 
   const loadEventTypes = useCallback(async () => {
     try {
-      const { data: typeRows } = await supabase.from("event_types").select("id");
+      const { data: typeRows } = await supabase.from("event_types").select("*");
       if (typeRows) {
         const codes = Array.from(
           new Map(
             typeRows
               .map((row: any) => {
                 const id = row?.id ? String(row.id).trim() : "";
-                const label = id;
-                return id ? [id, label] : null;
+                if (!id) return null;
+                const labelRaw =
+                  row?.label ??
+                  row?.name ??
+                  row?.title ??
+                  row?.code ??
+                  row?.slug ??
+                  id;
+                const label = String(labelRaw ?? id).trim() || id;
+                const aliasValues = [
+                  row?.code,
+                  row?.slug,
+                  row?.name,
+                  row?.label,
+                  row?.title,
+                  row?.type,
+                  row?.type_code,
+                  row?.event_type,
+                  row?.event_code,
+                  id,
+                ]
+                  .map((val) => (val == null ? "" : String(val).trim()))
+                  .filter(Boolean)
+                  .map((val) => val.toLowerCase());
+                const aliases = Array.from(new Set(aliasValues));
+                return [id, { id, label, aliases }] as const;
               })
-              .filter((entry): entry is [string, string] => Boolean(entry)),
+              .filter((entry): entry is [string, { id: string; label: string; aliases: string[] }] => Boolean(entry)),
           ).entries(),
-        ).map(([id, label]) => ({ id, label }));
+        ).map(([, value]) => value);
         setAvailableEventTypes(codes);
       }
     } catch {
@@ -1330,7 +1367,11 @@ export default function BuildJourneyPage() {
               }
             }),
           );
-          return Array.from(next.entries()).map(([id, label]) => ({ id, label }));
+          return Array.from(next.entries()).map(([id, label]) => ({
+            id,
+            label,
+            aliases: [id, label].map((value) => value.toLowerCase()),
+          }));
         });
         setEventTabMap((prev) => {
           const next = { ...prev };
@@ -1934,7 +1975,7 @@ export default function BuildJourneyPage() {
     setImportError(null);
     setImportPreview(null);
     setImportLoading(false);
-    setImportParsed({ journeyRow: null, eventRows: [] });
+    setImportParsed({ journeyRow: null, eventRows: [], eventHeaders: [], eventRowsRaw: [], eventTypeIndex: -1 });
     setImportAppliedMessage(null);
     setImportActiveLang(DEFAULT_LANGUAGE);
   }, []);
@@ -1975,6 +2016,67 @@ export default function BuildJourneyPage() {
     [handleImportFileChange],
   );
 
+  const parseImportFile = useCallback(async (file: File) => {
+    const XLSX = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const normalizedSheets = workbook.SheetNames.map((name) => name.trim().toLowerCase());
+    const journeySheetIndex = normalizedSheets.indexOf("journey");
+    const eventsSheetIndex = normalizedSheets.indexOf("events");
+
+    if (journeySheetIndex === -1 || eventsSheetIndex === -1) {
+      throw new Error("missing_sheets");
+    }
+
+    const journeySheetName = workbook.SheetNames[journeySheetIndex];
+    const eventsSheetName = workbook.SheetNames[eventsSheetIndex];
+    const journeyRows = XLSX.utils.sheet_to_json(workbook.Sheets[journeySheetName], { defval: "" }) as Record<
+      string,
+      unknown
+    >[];
+    const eventsSheet = workbook.Sheets[eventsSheetName];
+    const eventRowsAoA = XLSX.utils.sheet_to_json(eventsSheet, { defval: "", header: 1 }) as unknown[][];
+    const [eventHeaderRow, ...eventDataRows] = eventRowsAoA;
+    const eventHeaders = (eventHeaderRow || []).map((cell) => (cell == null ? "" : String(cell).trim()));
+    const normalizeHeader = (header: string) =>
+      header
+        .replace(/\u00a0/g, " ")
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const eventTypeHeaderIndex = eventHeaders.findIndex((header) => {
+      const key = normalizeHeader(header);
+      return (key.includes("type") && key.includes("event")) || (key.includes("tipo") && key.includes("evento"));
+    });
+    const eventRows = eventDataRows.map((row) => {
+      const record: Record<string, unknown> = {};
+      eventHeaders.forEach((header, idx) => {
+        if (!header) return;
+        record[header] = row?.[idx] ?? "";
+      });
+      if (eventTypeHeaderIndex >= 0) {
+        record.__event_type_value__ = row?.[eventTypeHeaderIndex] ?? "";
+      }
+      return record;
+    });
+
+    return {
+      preview: {
+        journeyRows: journeyRows.length,
+        eventRows: eventRows.length,
+        sheets: workbook.SheetNames,
+      },
+      parsed: {
+        journeyRow: journeyRows[0] ?? null,
+        eventRows,
+        eventHeaders,
+        eventRowsRaw: eventDataRows,
+        eventTypeIndex: eventTypeHeaderIndex,
+      },
+    };
+  }, []);
+
   const handleValidateImportFile = useCallback(async () => {
     if (!importFile) {
       setImportError(tUI(langCode, "build.import.error.missing_file"));
@@ -1989,47 +2091,24 @@ export default function BuildJourneyPage() {
 
     try {
       setImportLoading(true);
-      const XLSX = await import("xlsx");
-      const buffer = await importFile.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const normalizedSheets = workbook.SheetNames.map((name) => name.trim().toLowerCase());
-      const journeySheetIndex = normalizedSheets.indexOf("journey");
-      const eventsSheetIndex = normalizedSheets.indexOf("events");
-
-      if (journeySheetIndex === -1 || eventsSheetIndex === -1) {
-        setImportError(tUI(langCode, "build.import.error.missing_sheets"));
-        setImportPreview(null);
-        return;
-      }
-
-      const journeySheetName = workbook.SheetNames[journeySheetIndex];
-      const eventsSheetName = workbook.SheetNames[eventsSheetIndex];
-      const journeyRows = XLSX.utils.sheet_to_json(workbook.Sheets[journeySheetName], { defval: "" }) as Record<
-        string,
-        unknown
-      >[];
-      const eventRows = XLSX.utils.sheet_to_json(workbook.Sheets[eventsSheetName], { defval: "" }) as Record<
-        string,
-        unknown
-      >[];
-
-      setImportPreview({
-        journeyRows: journeyRows.length,
-        eventRows: eventRows.length,
-        sheets: workbook.SheetNames,
-      });
+      const { preview, parsed } = await parseImportFile(importFile);
+      setImportPreview(preview);
       setImportError(null);
-      setImportParsed({ journeyRow: journeyRows[0] ?? null, eventRows });
+      setImportParsed(parsed);
       setImportAppliedMessage(null);
-    } catch (err) {
+    } catch (err: any) {
+      const message =
+        err?.message === "missing_sheets"
+          ? tUI(langCode, "build.import.error.missing_sheets")
+          : tUI(langCode, "build.import.error.generic");
       console.error("[BuildJourney] Excel import error:", err);
-      setImportError(tUI(langCode, "build.import.error.generic"));
+      setImportError(message);
       setImportPreview(null);
-      setImportParsed({ journeyRow: null, eventRows: [] });
+      setImportParsed({ journeyRow: null, eventRows: [], eventHeaders: [], eventRowsRaw: [], eventTypeIndex: -1 });
     } finally {
       setImportLoading(false);
     }
-  }, [importFile, langCode]);
+  }, [importFile, langCode, parseImportFile]);
 
   const handleDownloadTemplate = useCallback(async () => {
     try {
@@ -2042,6 +2121,7 @@ export default function BuildJourneyPage() {
         "Era (AD|BC)",
         "From (year)",
         "To (year)",
+        "Event date (DD/MM/YYYY)",
         "Continent",
         "Country",
         "Location",
@@ -2070,14 +2150,47 @@ export default function BuildJourneyPage() {
     }
   }, [langCode]);
 
-  const handleApplyImportToForm = useCallback(() => {
-    if (!importParsed.journeyRow) {
-      setImportError(tUI(langCode, "build.import.error.missing_file"));
-      return;
+  const handleApplyImportToForm = useCallback(async () => {
+    let parsed = importParsed;
+    if (!parsed.journeyRow) {
+      if (!importFile) {
+        setImportError(tUI(langCode, "build.import.error.missing_file"));
+        return;
+      }
+      const ext = (importFile.name.split(".").pop() || "").toLowerCase();
+      if (!EXCEL_ALLOWED_EXTENSIONS.includes(ext)) {
+        setImportError(tUI(langCode, "build.import.error.invalid_type"));
+        return;
+      }
+      try {
+        setImportLoading(true);
+        const { preview, parsed: nextParsed } = await parseImportFile(importFile);
+        setImportPreview(preview);
+        setImportParsed(nextParsed);
+        parsed = nextParsed;
+      } catch (err: any) {
+        const message =
+          err?.message === "missing_sheets"
+            ? tUI(langCode, "build.import.error.missing_sheets")
+            : tUI(langCode, "build.import.error.generic");
+        setImportError(message);
+        setImportPreview(null);
+        setImportParsed({ journeyRow: null, eventRows: [], eventHeaders: [], eventRowsRaw: [], eventTypeIndex: -1 });
+        return;
+      } finally {
+        setImportLoading(false);
+      }
     }
 
-    const normalizeKey = (key: string) => key.trim().toLowerCase();
-    const normalizeValue = (value: unknown) => (value == null ? "" : String(value).trim());
+    const normalizeKey = (key: string) =>
+      key
+        .replace(/\u00a0/g, " ")
+        .toLowerCase()
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    const normalizeValue = (value: unknown) =>
+      value == null ? "" : String(value).replace(/\u00a0/g, " ").trim();
     const parseNumber = (value: unknown): number | null => {
       if (value == null) return null;
       if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -2097,6 +2210,26 @@ export default function BuildJourneyPage() {
       }
       return num;
     };
+    const parseExactDate = (value: unknown): string | null => {
+      if (value == null) return null;
+      if (typeof value === "number" && Number.isFinite(value)) {
+        const excelEpoch = Date.UTC(1899, 11, 30);
+        const ms = value * 86400 * 1000;
+        const parsed = new Date(excelEpoch + ms);
+        if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+      }
+      const str = normalizeValue(value);
+      if (!str) return null;
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      const match = str.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+      if (match) {
+        const day = match[1].padStart(2, "0");
+        const month = match[2].padStart(2, "0");
+        const year = match[3];
+        return `${year}-${month}-${day}`;
+      }
+      return null;
+    };
     const extract = (row: Record<string, unknown>, candidates: string[]): unknown => {
       const lowered = Object.fromEntries(
         Object.entries(row || {}).map(([k, v]) => [normalizeKey(k), v]),
@@ -2108,6 +2241,60 @@ export default function BuildJourneyPage() {
         }
       }
       return null;
+    };
+    const extractEventType = (row: Record<string, unknown>, candidates: string[]): unknown => {
+      const explicitColumn = row.__event_type_value__;
+      if (explicitColumn !== undefined && explicitColumn !== null && String(explicitColumn).trim() !== "") {
+        return explicitColumn;
+      }
+      const aggressiveKeyMatch = Object.entries(row || {}).find(([rawKey, rawVal]) => {
+        const signature = String(rawKey || "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "");
+        const isTypeEvent = signature.includes("typeevent") || signature.includes("tipoevento");
+        if (!isTypeEvent) return false;
+        return rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== "";
+      });
+      if (aggressiveKeyMatch) {
+        return aggressiveKeyMatch[1];
+      }
+      const direct = extract(row, candidates);
+      if (direct !== null && direct !== undefined && String(direct).trim() !== "") {
+        return direct;
+      }
+      for (const [rawKey, rawVal] of Object.entries(row || {})) {
+        const key = normalizeKey(rawKey);
+        if (!key) continue;
+        const hasTypeEvent = key.includes("type") && key.includes("event");
+        const hasTipoEvento = key.includes("tipo") && key.includes("evento");
+        if (hasTypeEvent || hasTipoEvento) {
+          if (rawVal !== undefined && rawVal !== null && String(rawVal).trim() !== "") {
+            return rawVal;
+          }
+        }
+      }
+      return null;
+    };
+    const guessEventTypeValue = (row: Record<string, unknown>, candidates: string[]): string => {
+      const explicit = normalizeValue(extractEventType(row, candidates) || "");
+      if (explicit) return explicit;
+      const values = Object.values(row || {})
+        .map((val) => normalizeValue(val))
+        .filter(Boolean);
+      if (availableEventTypes.length) {
+        for (const val of values) {
+          const normalized = val.toLowerCase();
+          const match = availableEventTypes.find(
+            (opt) =>
+              opt.id.toLowerCase() === normalized ||
+              opt.label.toLowerCase() === normalized ||
+              opt.aliases.includes(normalized),
+          );
+          if (match) return val;
+        }
+      }
+      const codeCandidate = values.find((val) => /^[a-z0-9_]+$/i.test(val) && val.includes("_"));
+      return codeCandidate || "";
     };
 
     // accept both EN/IT headings from the workbook
@@ -2123,18 +2310,27 @@ export default function BuildJourneyPage() {
     const eventEraKeys = ["era", "periodo"];
     const eventYearFromKeys = ["year_from", "from", "start_year", "anno_da", "inizio"];
     const eventYearToKeys = ["year_to", "to", "end_year", "anno_a", "fine"];
-    const eventExactDateKeys = ["exact_date", "date", "data"];
+    const eventExactDateKeys = ["exact_date", "date", "data", "event date", "event date (dd/mm/yyyy)", "data evento"];
     const eventContinentKeys = ["continent", "continente"];
     const eventCountryKeys = ["country", "paese", "nazione"];
     const eventLocationKeys = ["location", "place", "city", "luogo", "citta", "città"];
     const eventLatKeys = ["latitude", "lat", "latitudine"];
     const eventLngKeys = ["longitude", "lon", "lng", "longitudine"];
     const eventImageKeys = ["image", "image_url", "immagine"];
-    const eventTypeKeys = ["event_type_id", "event_types_id", "tipo_evento", "type", "type_event", "type event"];
+    const eventTypeKeys = [
+      "event_type_id",
+      "event_types_id",
+      "tipo_evento",
+      "type",
+      "type_event",
+      "type event",
+      "type_events",
+      "type events",
+    ];
     const eventWikipediaKeys = ["wikipedia", "wikipedia_url"];
     const importYearHint = (() => {
       const years: number[] = [];
-      (importParsed.eventRows || []).forEach((row) => {
+      (parsed.eventRows || []).forEach((row) => {
         const yFrom = parseNumber(extract(row as Record<string, unknown>, eventYearFromKeys));
         const yTo = parseNumber(extract(row as Record<string, unknown>, eventYearToKeys));
         if (yFrom != null) {
@@ -2209,7 +2405,7 @@ export default function BuildJourneyPage() {
       return Object.values(entries).filter((t) => t.title || t.description || t.wikipedia_url);
     };
 
-    const journeyRow = importParsed.journeyRow;
+    const journeyRow = parsed.journeyRow ?? {};
     const journeyTitle = normalizeValue(extract(journeyRow, journeyTitleKeys) || "");
     const journeyDescription = normalizeValue(extract(journeyRow, journeyDescriptionKeys) || "");
     const journeyLang = normalizeValue(extract(journeyRow, journeyLangKeys) || "") || DEFAULT_LANGUAGE;
@@ -2270,7 +2466,14 @@ export default function BuildJourneyPage() {
       setImportError(null);
     }
 
-    const mappedEvents: JourneyEventEditor[] = (importParsed.eventRows || []).map((row) => {
+    const eventTypeIndex =
+      typeof parsed.eventTypeIndex === "number" && parsed.eventTypeIndex >= 0
+        ? parsed.eventTypeIndex
+        : (parsed.eventHeaders || []).findIndex((header) => {
+            const key = normalizeKey(header || "");
+            return (key.includes("type") && key.includes("event")) || (key.includes("tipo") && key.includes("evento"));
+          });
+    const mappedEvents: JourneyEventEditor[] = (parsed.eventRows || []).map((row, rowIdx) => {
       const ev = createEmptyEventEditor();
       const title = normalizeValue(extract(row, eventTitleKeys) || "");
       const descShort = normalizeValue(extract(row, eventDescShortKeys) || "");
@@ -2320,26 +2523,76 @@ export default function BuildJourneyPage() {
       ev.event.era = era;
       ev.event.year_from = parseNumber(extract(row, eventYearFromKeys));
       ev.event.year_to = parseNumber(extract(row, eventYearToKeys));
-      ev.event.exact_date = normalizeValue(extract(row, eventExactDateKeys) || "") || null;
+      ev.event.exact_date = parseExactDate(extract(row, eventExactDateKeys)) || null;
       ev.event.continent = normalizeValue(extract(row, eventContinentKeys) || "") || null;
       ev.event.country = normalizeValue(extract(row, eventCountryKeys) || "") || null;
       ev.event.location = normalizeValue(extract(row, eventLocationKeys) || "") || null;
       ev.event.latitude = parseNumber(extract(row, eventLatKeys));
       ev.event.longitude = parseNumber(extract(row, eventLngKeys));
       ev.event.image_url = normalizeValue(extract(row, eventImageKeys) || "") || null;
-      const typeValueRaw = normalizeValue(extract(row, eventTypeKeys) || "") || "";
+      let typeValueRaw = "";
+      if (eventTypeIndex >= 0) {
+        const rawRow = parsed.eventRowsRaw?.[rowIdx];
+        const cellValue = Array.isArray(rawRow) ? rawRow[eventTypeIndex] : undefined;
+        typeValueRaw = normalizeValue(cellValue);
+      }
+      if (!typeValueRaw) {
+        const rawRow = parsed.eventRowsRaw?.[rowIdx];
+        const forcedIndex = 17;
+        const forcedValue = Array.isArray(rawRow) ? rawRow[forcedIndex] : undefined;
+        typeValueRaw = normalizeValue(forcedValue);
+      }
+      if (!typeValueRaw) {
+        const rawRow = parsed.eventRowsRaw?.[rowIdx];
+        const rawValues = Array.isArray(rawRow)
+          ? rawRow.map((val) => normalizeValue(val)).filter(Boolean)
+          : [];
+        if (rawValues.length && availableEventTypes.length) {
+          const match = rawValues.find((val) => {
+            const normalized = val.toLowerCase();
+            return availableEventTypes.some(
+              (opt) =>
+                opt.id.toLowerCase() === normalized ||
+                opt.label.toLowerCase() === normalized ||
+                opt.aliases.includes(normalized),
+            );
+          });
+          if (match) {
+            typeValueRaw = match;
+          }
+        }
+        if (!typeValueRaw && rawValues.length) {
+          const codeCandidate = rawValues.find(
+            (val) =>
+              /^[a-z]+(?:_[a-z]+)+$/i.test(val) &&
+              val.length <= 40 &&
+              !val.toLowerCase().includes("http"),
+          );
+          if (codeCandidate) {
+            typeValueRaw = codeCandidate;
+          }
+        }
+      }
+      if (!typeValueRaw) {
+        typeValueRaw = guessEventTypeValue(row, eventTypeKeys);
+      }
       const resolveType = (value: string) => {
         const val = (value || "").trim();
         if (!val) return undefined;
+        const normalized = val.toLowerCase();
         const matchById = availableEventTypes.find((opt) => opt.id === val)?.id;
         if (matchById) return matchById;
-        const matchByLabel = availableEventTypes.find((opt) => opt.label.toLowerCase() === val.toLowerCase())?.id;
+        const matchByLabel = availableEventTypes.find((opt) => opt.label.toLowerCase() === normalized)?.id;
         if (matchByLabel) return matchByLabel;
+        const matchByAlias = availableEventTypes.find((opt) => opt.aliases.includes(normalized))?.id;
+        if (matchByAlias) return matchByAlias;
         return val; // keep unknown code as provided to avoid losing type
       };
       const typeValue = resolveType(typeValueRaw);
-      ev.event.event_types_id = typeValue || undefined;
-      ev.type_codes = typeValue ? [typeValue] : [];
+      const finalType = typeValue || typeValueRaw || undefined;
+      ev.import_type_raw = typeValueRaw || null;
+      ev.event.event_types_id = finalType ?? null;
+      ev.type_codes = finalType ? [finalType] : [];
       return ev;
     }).filter((ev) => ev.translation.title || ev.event.year_from !== null || ev.event.year_to !== null);
 
@@ -2361,7 +2614,7 @@ export default function BuildJourneyPage() {
     setJourneySubTab("general");
     setImportAppliedMessage(tUI(langCode, "build.import.applied"));
     setImportModalOpen(false);
-  }, [ge.visibility, importParsed.eventRows, importParsed.journeyRow, langCode]);
+  }, [ge.visibility, importFile, importParsed, langCode, parseImportFile]);
 
 
   const renderGroupEventPage = () => {
@@ -3341,15 +3594,32 @@ export default function BuildJourneyPage() {
                         <div className="space-y-2">
                           <Select
                             label={tUI(langCode, "build.events.type")}
-                            value={ev.type_codes[0] || ""}
+                            value={ev.type_codes[0] || ev.event.event_types_id || ev.import_type_raw || ""}
                             onChange={(value) =>
                               setJourneyEvents((prev) =>
                                 prev.map((item) =>
-                                  item.tempId === ev.tempId ? { ...item, type_codes: value ? [value] : [] } : item,
+                                  item.tempId === ev.tempId
+                                    ? {
+                                        ...item,
+                                        type_codes: value ? [value] : [],
+                                        event: { ...item.event, event_types_id: value || null },
+                                        import_type_raw: value || null,
+                                      }
+                                    : item,
                                 ),
                               )
                             }
-                            options={[{ value: "", label: tUI(langCode, "build.events.type.placeholder") }, ...availableEventTypes.map((opt) => ({ value: opt.id, label: opt.label }))]}
+                            options={(() => {
+                              const baseOptions = [
+                                { value: "", label: tUI(langCode, "build.events.type.placeholder") },
+                                ...availableEventTypes.map((opt) => ({ value: opt.id, label: opt.label })),
+                              ];
+                              const current = ev.type_codes[0] || ev.event.event_types_id || ev.import_type_raw;
+                              if (current && !baseOptions.some((opt) => opt.value === current)) {
+                                return [...baseOptions, { value: current, label: current }];
+                              }
+                              return baseOptions;
+                            })()}
                           />
                         </div>
                         <div className="space-y-2">
