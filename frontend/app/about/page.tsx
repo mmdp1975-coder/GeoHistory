@@ -1,4 +1,4 @@
-// frontend/app/module/about/page.tsx
+// frontend/app/about/page.tsx
 import styles from "./page.module.css";
 
 export default function AboutPage() {

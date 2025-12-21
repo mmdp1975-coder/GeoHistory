@@ -257,7 +257,7 @@ export default function TopBar() {
 
 
                 <Link
-                  href="/module/about"
+                  href="/about"
                   className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
                   aria-label="About"
                   title="About"
