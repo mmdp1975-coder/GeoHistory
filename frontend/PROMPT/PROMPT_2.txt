@@ -1,0 +1,65 @@
+TARGET_AUDIENCE = <INSERISCI TARGET DALLA UI>
+STILE_NARRATIVO = <INSERISCI STILE DALLA UI>
+
+PROMPT 2 — EVENTI COMPLETI CON NARRAZIONE (OUTPUT STRUTTURATO)
+1.ISTRUZIONE CRITICA DI BLOCCO TOTALE
+1.1 Questo task è COMPLETATO solo se tutte le regole obbligatorie sono rispettate.
+1.2 Se anche UNA SOLA regola non può essere rispettata devi produrre SOLO:
+TASK FAILED
+1.3 In caso di TASK FAILED è vietato generare output parziali spiegazioni o commenti.
+2.INPUT
+2.1 In allegato a questo prompt è fornito ESCLUSIVAMENTE l’output JSON generato da PROMPT 1.
+2.2 Questo JSON costituisce VERITÀ ASSOLUTA per titoli eventi periodi e localizzazioni.
+3.OBIETTIVO
+3.1 Arricchire OGNI evento con una narrazione editoriale completa e specifica, adattata a TARGET_AUDIENCE e STILE_NARRATIVO.
+3.2 Copiare titoli ed eventi dal JSON di PROMPT 1 senza modificarli.
+3.3 L’output di questo prompt diventa la FONTE EDITORIALE UNICA per il Journey e gli eventi.
+4.OUTPUT CONSENTITO
+4.1 Restituisci ESCLUSIVAMENTE un oggetto strutturato in formato JSON valido.
+4.2 È vietato qualsiasi testo prima o dopo il JSON.
+5.SCHEMA JSON OBBLIGATORIO
+5.1 Il JSON deve avere ESATTAMENTE questa struttura:
+{
+  "journey_title_it": "<copiato da PROMPT 1>",
+  "journey_title_en": "<copiato da PROMPT 1>",
+  "journey_description_it": "",
+  "journey_description_en": "",
+  "target_audience": "<TARGET_AUDIENCE>",
+  "stile_narrativo": "<STILE_NARRATIVO>",
+  "events": [
+    {
+      "titolo_evento_it": "",
+      "title_event_en": "",
+      "era": "BC|AD",
+      "from": 0,
+      "to": 0,
+      "continent": "",
+      "country": "",
+      "location": "",
+      "descrizione_evento_it": "",
+      "description_event_en": ""
+    }
+  ]
+}
+6.REGOLA DI ITERAZIONE OBBLIGATORIA
+6.1 Per OGNI evento presente nell’input devi generare UNA e UNA SOLA voce nell’array events.
+6.2 Il numero di eventi in output deve essere IDENTICO a quello dell’input.
+6.3 Il valore Titolo evento IT deve essere COPIATO IDENTICO dall’input.
+6.4 È vietato accorpare fondere saltare rinominare o riordinare eventi.
+7.REGOLE NARRATIVE VINCOLANTI
+7.1 Adatta linguaggio ritmo e livello di approfondimento in base a TARGET_AUDIENCE (obbligatorio).
+7.2 Applica STILE_NARRATIVO come modalità di racconto principale (obbligatorio).
+7.3 Le descrizioni del Journey (IT/EN) devono riassumere l'intero Journey basandosi sugli eventi in input.
+7.4 Le descrizioni del Journey devono includere area geografica, periodo storico, popoli coinvolti, dinamiche politiche/economiche/sociali/religiose, innovazioni, commercio o diplomazia, guerre o crisi, ed eredità storica.
+7.5 Se qualche elemento manca, indica "Non disponibile" solo per quell'elemento nella descrizione (non omettere il campo).
+7.6 Ogni descrizione deve raccontare l’EVENTO SPECIFICO e non il periodo in generale.
+7.7 Devono emergere fatti concreti azioni decisioni attori e conseguenze storiche.
+7.8 Vietate frasi generiche introduttive strutture ripetitive o template identici.
+7.9 Ogni evento deve avere una narrazione chiaramente distinguibile dagli altri.
+8.LUNGHEZZA
+8.1 Descrizione evento IT composta da 6 a 9 frasi complete.
+8.2 Description event EN composta da 6 a 9 frasi riscrittura fluida NON letterale.
+9.LIMITI ESPLICITI
+9.1 È vietato includere URL Wikipedia coordinate type events journey di approfondimento o qualsiasi altro campo non elencato nello schema JSON del punto 5.
+9.2 Se viene incluso anche un solo campo extra devi produrre SOLO:
+TASK FAILED

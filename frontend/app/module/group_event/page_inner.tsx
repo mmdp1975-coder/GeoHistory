@@ -7,6 +7,7 @@ import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplib
 import "maplibre-gl/dist/maplibre-gl.css";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import RatingStars from "../../components/RatingStars";
+import { tUI } from "@/lib/i18n/uiLabels";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 
 /* ===================== Tipi ===================== */
@@ -75,6 +76,8 @@ const MODERN_ICONS: Record<string, string> = {
 
 const UUID_RE =
  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BOX_3D =
+ "rounded-2xl border border-slate-200 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-white/70";
 
 /* ===================== Util date/ordine ===================== */
 function normEra(era?: string | null): "BC" | "AD" {
@@ -130,7 +133,7 @@ function formatTimelineYearLabel(year: number) {
  const rounded = Math.round(year);
  if (rounded < 0) return `${Math.abs(rounded)} BC`;
  if (rounded === 0) return "0";
- return `${rounded} AD`;
+ return `${rounded}`;
 }
 
 function formatEventRange(ev: EventVM) {
@@ -499,15 +502,19 @@ function MediaBox({
  height = "md",
  hoverPreviewList = false,
  hoverPreviewDirection = "vertical",
+ alwaysShowList = false,
+ listMaxHeight,
 }: {
  items: MediaItem[];
  firstPreview?: string | null;
  onOpenOverlay: (item: MediaItem, opts?: { autoplay?: boolean }) => void;
  compact?: boolean;
  hideHeader?: boolean;
- height?: "xs" | "sm" | "md" | "lg";
+ height?: "xs" | "sm" | "md" | "lg" | "xl";
  hoverPreviewList?: boolean;
  hoverPreviewDirection?: "vertical" | "horizontal";
+ alwaysShowList?: boolean;
+ listMaxHeight?: string;
 }) {
  const [index, setIndex] = useState(0);
  const [hovering, setHovering] = useState(false);
@@ -529,9 +536,9 @@ function MediaBox({
  "h-40";
  const baseHeightPx = height === "xs" ? 108 : height === "sm" ? 150 : height === "lg" ? 260 : 200;
  return (
- <div className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}>
+ <div className={`${BOX_3D} ${compact ? "p-2" : "p-3"} relative`}>
  {hideHeader ? null : (
- <div className="absolute left-2 top-2 z-[3] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white">
+ <div className="absolute left-2 top-2 z-[50] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white backdrop-blur-sm">
  0/0
  </div>
  )}
@@ -562,19 +569,25 @@ function MediaBox({
  const heightClass =
   height === "xs" ? "h-24" :
   height === "sm" ? "h-32" :
+  height === "xl" ? "h-[260px]" :
   height === "lg" ? "h-56" :
   "h-40";
- const listVisible = hoverPreviewList && hovering && items.length > 1;
- const baseHeightPx = height === "xs" ? 108 : height === "sm" ? 150 : height === "lg" ? 260 : 200;
+ const listVisible = hoverPreviewList && (hovering || alwaysShowList) && items.length > 1;
+ const baseHeightPx =
+  height === "xs" ? 108 :
+  height === "sm" ? 150 :
+  height === "xl" ? 260 :
+  height === "lg" ? 260 :
+  200;
 
  return (
  <div
-   className={`rounded-2xl border border-slate-200 bg-white/90 shadow-sm ${compact ? "p-2" : "p-3"} relative`}
+   className={`${BOX_3D} ${compact ? "p-2" : "p-3"} relative`}
    onMouseEnter={() => setHovering(true)}
    onMouseLeave={() => setHovering(false)}
  >
  {hideHeader ? (
- <div className="absolute left-2 top-2 z-[3] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white">
+ <div className="absolute left-2 top-2 z-[50] rounded-full bg-black/70 px-2 py-[2px] text-[11px] text-white backdrop-blur-sm">
  {index + 1}/{items.length}
  </div>
  ) : null}
@@ -592,11 +605,11 @@ function MediaBox({
       className={`absolute z-30 ${hoverPreviewDirection === "vertical" ? "left-0 right-0 top-0 w-full" : "top-0 left-0 h-full"}`}
       style={
         hoverPreviewDirection === "vertical"
-          ? { maxHeight: "70vh", overflowY: "auto", padding: "8px", scrollbarWidth: "thin" }
+          ? { maxHeight: listMaxHeight ?? "70vh", overflowY: "auto", padding: "8px", scrollbarWidth: "thin" }
           : { maxWidth: "90vw", overflowX: "auto", padding: "8px", scrollbarWidth: "thin" }
       }
     >
-      <div className={hoverPreviewDirection === "vertical" ? "space-y-3" : "flex items-stretch gap-3"}>
+      <div className={hoverPreviewDirection === "vertical" ? "grid grid-cols-2 gap-2" : "flex items-stretch gap-3"}>
       {items.map((m, i) => {
         const rawThumb = m.preview || m.url || "";
         const ytThumb = getYouTubePreview(rawThumb) || getYouTubePreview(m.url || "") || getYouTubePreview(m.preview || "");
@@ -623,7 +636,7 @@ function MediaBox({
               minWidth: hoverPreviewDirection === "vertical" ? "100%" : "180px",
             }}
           >
-            <div className={`w-full ${hoverPreviewDirection === "vertical" ? "h-40" : "h-32"} rounded-md bg-slate-100 overflow-hidden ring-1 ring-black/5`}>
+            <div className={`w-full ${hoverPreviewDirection === "vertical" ? "h-28" : "h-32"} rounded-md bg-slate-100 overflow-hidden ring-1 ring-black/5`}>
               {thumb ? (
                 <img src={thumb} alt={m.type || "media"} className="h-full w-full object-cover" loading="lazy" />
               ) : (
@@ -708,7 +721,7 @@ function Collapsible({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm">
+    <div className={BOX_3D}>
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
@@ -777,6 +790,7 @@ const resolvedLang = useMemo(
 
 const [rows, setRows] = useState<EventVM[]>([]);
 const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
+const [journeyDescription, setJourneyDescription] = useState<string>("");
 const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
 const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
 const [selectedIndex, setSelectedIndex] = useState(0);
@@ -1078,8 +1092,6 @@ const [overlayAutoplay, setOverlayAutoplay] = useState<boolean>(false);
 const [quizOpen, setQuizOpen] = useState(false);
 const [quizUrl, setQuizUrl] = useState<string>("/module/quiz");
 const [concurrentOther, setConcurrentOther] = useState<Array<{ evId: string; geId: string; geTitle?: string | null; evTitle: string; startYear?: number }>>([]);
-const [relatedFrom, setRelatedFrom] = useState<CorrelatedJourney | null>(null);
-
 // Correlazioni: cache per event_id
 const [corrByEvent, setCorrByEvent] = useState<Record<string, CorrelatedJourney[]>>({});
 
@@ -1327,7 +1339,7 @@ useEffect(() => {
  .select(
  `event_id, group_event_id, description, lang, title, wikipedia_url,
  continent, country, era, exact_date, id, latitude, longitude, year_from, year_to,
- journey_title, journey_media, journey_media_first, event_media, event_media_first, event_type_icon`
+ journey_title, journey_description, journey_media, journey_media_first, event_media, event_media_first, event_type_icon`
  )
  .eq("group_event_id", gid);
  if (vjErr) throw vjErr;
@@ -1414,6 +1426,7 @@ useEffect(() => {
  vms.sort((a, b) => a.order_key - b.order_key);
 
 const j0 = (vjRows ?? [])[0] as any;
+  const journeyDesc = (j0?.journey_description ?? "").toString().trim();
 const jm: MediaItem[] = Array.isArray(j0?.journey_media)
   ? (j0.journey_media as any[]).map(coerceMediaItem).filter(Boolean) as MediaItem[]
   : [];
@@ -1448,6 +1461,7 @@ setGe(geData);
 setGeTr(geTrData);
 setRows(vms);
 setJourneyTitle(j0?.journey_title ?? null);
+setJourneyDescription(journeyDesc);
  setJourneyMedia(jmNormalized);
  setJourneyMediaFirst(jmFirst);
  if (eidParam) {
@@ -1536,36 +1550,6 @@ setJourneyTitle(j0?.journey_title ?? null);
  const { userId: _uid } = useCurrentUser();
  const [isFav, setIsFav] = useState<boolean>(false);
  const [savingFav, setSavingFav] = useState<boolean>(false);
-
- // Journey sorgente (from param) usato per mostrare un link di ritorno
- useEffect(() => {
-   const raw = sp.get("from") as any;
-   const val = typeof raw === "function" ? sp.get("from")?.trim() : sp.get("from");
-   const from = val?.trim();
-   if (!from || !UUID_RE.test(from) || from === gid) {
-     setRelatedFrom(null);
-     return;
-   }
-   let cancelled = false;
-   (async () => {
-     try {
-       const { data } = await supabase
-         .from("group_events")
-         .select("id, slug, group_event_translations!left(title, lang)")
-         .eq("id", from)
-         .limit(1)
-         .maybeSingle();
-       if (cancelled) return;
-       const title = (data as any)?.group_event_translations?.[0]?.title ?? data?.slug ?? null;
-       setRelatedFrom({ id: from, slug: data?.slug ?? null, title });
-     } catch {
-       if (!cancelled) setRelatedFrom({ id: from, slug: null, title: "Journey correlato" });
-     }
-   })();
-   return () => {
-     cancelled = true;
-   };
- }, [sp, gid, supabase]);
 
  useEffect(() => {
  (async () => {
@@ -1728,19 +1712,24 @@ if (!map || !mapReady || !gid) return;
  }
  }, [selectedIndex, rows, gid, mapReady]);
 
- /* ===== Refs per banda eventi ===== */
- const bandRef = useRef<HTMLDivElement | null>(null);
- const itemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+/* ===== Refs per elenchi eventi (mobile + desktop) ===== */
+const bandRef = useRef<HTMLDivElement | null>(null);
+const bandItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+const listRef = useRef<HTMLDivElement | null>(null);
+const listItemRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
- useEffect(() => {
+useEffect(() => {
  const ev = rows[selectedIndex];
  if (!ev) return;
- const el = itemRefs.current.get(ev.id);
- if (!el) return;
- if (bandRef.current && bandRef.current.contains(el)) {
- el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+ const bandEl = bandItemRefs.current.get(ev.id);
+ if (bandEl && bandRef.current?.contains(bandEl)) {
+ bandEl.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
  }
- }, [selectedIndex, rows]);
+ const listEl = listItemRefs.current.get(ev.id);
+ if (listEl && listRef.current?.contains(listEl)) {
+ listEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+ }
+}, [selectedIndex, rows]);
 
  function onBack() {
  if (typeof window !== "undefined" && window.history.length > 1) {
@@ -2014,6 +2003,20 @@ const translations = Array.isArray(evRow.event_translations) ? evRow.event_trans
  })();
 }, [rows, selectedIndex, gid, supabase, resolvedLang]);
 
+const selectedEvent = rows[selectedIndex];
+const related = (() => {
+ const sel = rows[selectedIndex];
+ return sel ? corrByEvent[sel.id] ?? [] : [];
+})();
+const journeyAndEventMedia = useMemo(() => {
+  const collected: MediaItem[] = [];
+  if (journeyMedia?.length) collected.push(...journeyMedia);
+  rows.forEach((ev) => {
+    if (ev?.event_media?.length) collected.push(...ev.event_media);
+  });
+  return collected;
+}, [journeyMedia, rows]);
+
  if (loading) {
  return (
  <div className="flex min-h-screen items-center justify-center bg-white">
@@ -2038,28 +2041,12 @@ const translations = Array.isArray(evRow.event_translations) ? evRow.event_trans
  );
  }
 
-const selectedEvent = rows[selectedIndex];
-const related = (() => {
- const sel = rows[selectedIndex];
- const base = sel ? corrByEvent[sel.id] ?? [] : [];
- if (relatedFrom && !base.some((r) => r.id === relatedFrom.id)) {
-   const withFrom: CorrelatedJourney = {
-     id: relatedFrom.id,
-     slug: relatedFrom.slug,
-     title: relatedFrom.title || "Journey di provenienza",
-   };
-   return [withFrom, ...base];
- }
- return base;
-})();
-
 const mapTextureStyle: CSSProperties = {
  backgroundImage: "url(/bg/login-map.jpg)",
  backgroundSize: "cover",
  backgroundPosition: "center",
  backgroundAttachment: "fixed",
  };
-
  /* ===================== RENDER ===================== */
  return (
  <div
@@ -2067,14 +2054,36 @@ const mapTextureStyle: CSSProperties = {
  style={mapTextureStyle}
  >
  {/* ===== HEADER (container allargato) ===== */}
- <section className="border-b border-slate-200 bg-white/95 shadow-sm" style={mapTextureStyle}>
+ <section className="border-b border-slate-200 bg-white/95 shadow-sm lg:hidden" style={mapTextureStyle}>
  <div className="mx-auto w-full max-w-[120rem] px-3 py-3 lg:px-8 lg:py-4">
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_2.6fr] gap-3 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-3 items-stretch">
  {/* [1] Titolo + Favourite */}
  <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-3 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex flex-col justify-between">
  <h1 className="text-base lg:text-xl font-semibold text-slate-900 leading-snug break-words whitespace-pre-line line-clamp-2">
  {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
  </h1>
+ <div className="mt-2">
+   <div className="w-full max-w-[260px]">
+     {journeyAndEventMedia?.length ? (
+       <MediaBox
+         items={journeyAndEventMedia}
+         firstPreview={journeyMediaFirst || undefined}
+         onOpenOverlay={openOverlay}
+         hideHeader
+         height={isLg ? "sm" : "sm"}
+         compact
+         hoverPreviewList
+         alwaysShowList
+         hoverPreviewDirection="vertical"
+         listMaxHeight="100%"
+       />
+     ) : (
+       <div className="h-[88px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+         Nessun media del journey
+       </div>
+     )}
+   </div>
+ </div>
  <div className="mt-2 flex items-center gap-2">
           <button
             onClick={toggleFavourite}
@@ -2151,7 +2160,7 @@ const mapTextureStyle: CSSProperties = {
 
  <div className="hidden grid grid-cols-2 gap-3 items-start">
  {/* Colonna sinistra: Location + Descrizione + Link */}
- <div className="min-w-0 rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+ <div className={`${BOX_3D} p-3`}>
  {/* location removed above description as requested */}
  <div className="max-h-[40svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800 text-justify" style={{ scrollbarWidth: 'thin' }}>
  {selectedEvent?.description || "No description available."}
@@ -2206,23 +2215,10 @@ const mapTextureStyle: CSSProperties = {
 
  {/* Colonna destra: Media evento + Eventi contemporanei + Related */}
  <div className="space-y-3">
-                <div className="hidden w-full max-w-[260px] mx-auto">
-                  <MediaBox
-                    items={selectedEvent?.event_media ?? []}
-                    firstPreview={selectedEvent?.event_media_first || undefined}
-                    onOpenOverlay={openOverlay}
-                    hideHeader
-                    compact
-                    height={isLg ? "xs" : "sm"}
-                    hoverPreviewList
-                    hoverPreviewDirection="horizontal"
-                  />
-                </div>
-
  {/* Rimosso elenco contemporanei dello stesso journey */}
 
           {/* Eventi contemporanei (altri journey) */}
-          <div className="hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm p-3 h-[220px]">
+          <div className={`hidden ${BOX_3D} p-3 h-[220px]`}>
             <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
             {concurrentOther && concurrentOther.length ? (
               <div className="h-[176px] overflow-y-auto pr-1 space-y-1.5">
@@ -2246,7 +2242,7 @@ const mapTextureStyle: CSSProperties = {
  </div>
 
  {related?.length ? (
- <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+ <div className={`${BOX_3D} p-3`}>
  <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
  <div className="flex flex-wrap gap-1.5 h-[150px] overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: 'thin' }}>
  {related.map((r) => (
@@ -2262,7 +2258,7 @@ const mapTextureStyle: CSSProperties = {
  </div>
  </div>
  ) : (
- <div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm p-3">
+ <div className={`${BOX_3D} p-3`}>
  <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
  <div className="text-[12.5px] text-gray-500">Nessun collegamento.</div>
  </div>
@@ -2271,41 +2267,12 @@ const mapTextureStyle: CSSProperties = {
  </div>
  </div>
 
- {/* [2] Media del Journey (ristretto) */}
-  <div className="flex">
-    <div className="flex-1 flex items-center justify-center">
-      {journeyMedia?.length ? (
-        <div className="w-full max-w-[260px]">
-          <MediaBox
-            items={journeyMedia}
-            firstPreview={journeyMediaFirst || undefined}
-            onOpenOverlay={openOverlay}
-            hideHeader
-            height={isLg ? "xs" : "sm"}
-            compact
-            hoverPreviewList
-          />
-        </div>
-      ) : (
-        <div className="w-full max-w-[260px] h-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-          Nessun media del journey
-        </div>
-      )}
-    </div>
-  </div>
-
-      {/* [3] Timeline */}
-      <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-2 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex">
-        <div className="flex-1">
-          <Timeline3D />
-        </div>
-      </div>
  </div>
  </div>
  </section>
 
  {/* ===== BANDA EVENTI (container allargato) ===== */}
- <section className="border-b border-black/10 bg-white">
+ <section className="border-b border-black/10 bg-white lg:hidden">
  <div className="mx-auto w-full max-w-[120rem] px-4 py-2" ref={bandRef}>
  <div className="flex items-center justify-between mb-1.5">
  <div className="text-[13px] font-medium text-gray-900">Eventi</div>
@@ -2328,9 +2295,9 @@ const mapTextureStyle: CSSProperties = {
   return (
   <button
   key={ev.id}
-  ref={(el) => { if (el) itemRefs.current.set(ev.id, el); }}
+  ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
   onClick={() => setSelectedIndex(idx)}
-  className={`shrink-0 w-[60vw] md:w-[280px] max-w-[320px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
+  className={`shrink-0 w-[52vw] md:w-[220px] max-w-[260px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
   active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
   }`}
   style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
@@ -2369,30 +2336,9 @@ const mapTextureStyle: CSSProperties = {
  <section className="bg-white/70 backdrop-blur" style={mapTextureStyle}>
  <div className="px-4 py-2">
  <div className="mx-auto w-full max-w-[820px]">
-<div className="rounded-2xl border border-black/10 bg-white/95 shadow-sm flex flex-col gap-2">
+<div className={`${BOX_3D} flex flex-col gap-2`}>
   <Collapsible
-    title="Media evento"
-    defaultOpen={false}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )}
-  >
-    <MediaBox
-      items={selectedEvent?.event_media ?? []}
-      firstPreview={selectedEvent?.event_media_first || undefined}
-      onOpenOverlay={openOverlay}
-      compact
-      height="sm"
-      hoverPreviewList
-      hoverPreviewDirection="horizontal"
-    />
-  </Collapsible>
-
-  <Collapsible
-    title="connected Journey"
+    title={tUI(resolvedLang, "journey.related.title")}
     badge={related?.length ? related.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -2607,25 +2553,140 @@ const mapTextureStyle: CSSProperties = {
 
    {/* ===== DESKTOP (container allargato) ===== */
 <div className="mx-auto hidden w-full max-w-[120rem] lg:block" style={mapTextureStyle}>
-  <div className="grid grid-cols-[320px_minmax(0,0.75fr)_minmax(0,1.25fr)] gap-3 px-4 py-6">
-    {/* Colonna 1: Player + controlli + link */}
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-center">
-        <div className="w-full max-w-[320px]">
-          <MediaBox
-            items={selectedEvent?.event_media ?? []}
-            firstPreview={selectedEvent?.event_media_first || undefined}
-            onOpenOverlay={openOverlay}
-            hideHeader
-            compact
-            height={isLg ? "sm" : "sm"}
-            hoverPreviewList
-            hoverPreviewDirection="horizontal"
-          />
+  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)] gap-3 px-4 py-6 items-stretch">
+    {/* Sinistra: Titolo + Media Journey */}
+    <div className="flex flex-col gap-3 h-full">
+      <div className={`${BOX_3D} p-3 flex flex-col gap-2 h-[440px] overflow-hidden`}>
+        <h1 className="text-base lg:text-xl font-semibold text-slate-900 leading-snug break-words whitespace-pre-line line-clamp-2">
+          {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
+        </h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleFavourite}
+            disabled={!group_event_id || savingFav}
+            aria-pressed={isFav}
+            className={`inline-flex items-center justify-center rounded-full p-1.5 text-2xl transition focus:outline-none focus:ring-2 focus:ring-rose-300/60 ${
+              isFav ? "text-rose-600 hover:text-rose-700" : "text-slate-400 hover:text-slate-600"
+            }`}
+            aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+          >
+            <span className="sr-only">{isFav ? "Rimuovi dai preferiti" : "Aggiungi dai preferiti"}</span>
+            <span aria-hidden className="inline-flex h-7 w-7 items-center justify-center">
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                aria-hidden="true"
+                className="transition-colors"
+              >
+                <path
+                  d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z"
+                  fill={isFav ? "currentColor" : "none"}
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+              </svg>
+            </span>
+          </button>
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+          <button
+            onClick={openQuiz}
+            className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(15,60,140,0.35)] ring-1 ring-white/15 transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_rgba(15,60,140,0.42)] focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            title="Apri il quiz"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className="drop-shadow-sm">
+              <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
+              <path d="M12 16.5v.2" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
+              <path d="M9.75 9.4c0-1.3 1.1-2.35 2.45-2.35 1.2 0 2.3.85 2.3 2.05 0 1.6-1.85 1.95-2.3 3.1-.14.36-.2.78-.2 1.2" stroke="currentColor" strokeWidth="1.9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Quiz</span>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto text-[12.5px] leading-5 text-gray-700 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
+          {journeyDescription || "Nessuna descrizione disponibile."}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-sm h-[150px] flex flex-col">
+      <div className="flex-[0.6]">
+        {journeyAndEventMedia?.length ? (
+          <MediaBox
+            items={journeyAndEventMedia}
+            firstPreview={journeyMediaFirst || undefined}
+            onOpenOverlay={openOverlay}
+            hideHeader
+            height="xl"
+            compact
+            hoverPreviewList
+            alwaysShowList
+            hoverPreviewDirection="vertical"
+            listMaxHeight="100%"
+          />
+        ) : (
+          <div className="h-full min-h-[220px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
+            Nessun media del journey
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Centro: Eventi verticali + Contemporanei + Connected */}
+    <div className="flex flex-col gap-3 h-full">
+      <div className={`${BOX_3D} p-3 flex flex-col h-[380px]`}>
+        <div className="flex items-center justify-between">
+          <div className="text-[12px] font-semibold text-gray-800">Eventi</div>
+          {rows.length ? (
+            <div className="text-[11.5px] text-gray-600">
+              Evento <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span>
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-2" style={{ scrollbarWidth: "thin" }} ref={listRef}>
+          {rows.map((ev, idx) => {
+            const active = idx === selectedIndex;
+            const fromY = signedYear(ev.year_from, ev.era);
+            const toY = signedYear(ev.year_to, ev.era);
+            const fromLabel = fromY != null ? formatTimelineYearLabel(fromY) : "";
+            const toLabel = toY != null ? formatTimelineYearLabel(toY) : "";
+            const info = [fromLabel, toLabel, ev.location || ""].filter(Boolean).join(" - ");
+            return (
+              <button
+                key={ev.id}
+                ref={(el) => { if (el) listItemRefs.current.set(ev.id, el); }}
+                onClick={() => setSelectedIndex(idx)}
+                className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+                  active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
+                }`}
+                style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
+                title={ev.title}
+              >
+                <div className="flex items-start gap-2">
+                  <div
+                    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
+                    style={
+                      active
+                        ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
+                        : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
+                    }
+                  >
+                    {idx + 1}
+                  </div>
+                  <div className="min-w-0 leading-tight">
+                    <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+                      {ev.title}
+                    </div>
+                    <div className={`truncate text-[11.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
+                      {info}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className={`${BOX_3D} p-3 h-[180px] flex flex-col`}>
         <div className="text-[12px] font-semibold text-slate-800">
           {resolvedLang?.toLowerCase?.().startsWith("en") ? "Contemporary events" : "Eventi contemporanei"}
         </div>
@@ -2640,57 +2701,62 @@ const mapTextureStyle: CSSProperties = {
                   className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white px-3 py-2 text-[12.5px] text-slate-900 hover:bg-slate-50 shadow-sm"
                   title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
                 >
-                  {label ? `${label} · ` : ""}
+                  {label ? `${label} - ` : ""}
                   {c.evTitle}
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="mt-2 flex flex-1 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
-            Nessun evento contemporaneo.
-          </div>
+ <div className="mt-2 flex flex-1 items-start justify-start rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+  {tUI(resolvedLang, "journey.concurrent.none")}
+ </div>
         )}
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-white/95 p-3 shadow-sm h-[100px] flex flex-col">
-        <div className="text-[12px] font-semibold text-gray-800">connected Journey</div>
-          {related?.length ? (
-            <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
-              {related.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => router.push(geUrl(r.id))}
-                  className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
-                  title={r.title ?? r.slug ?? "Open journey"}
-                >
-                  {r.title ?? r.slug ?? "Journey"}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-gray-500">Nessun collegamento.</p>
+      <div className={`${BOX_3D} p-3 h-[145px] flex flex-col`}>
+      <div className="text-[12px] font-semibold text-gray-800">
+        {tUI(resolvedLang, "journey.related.title")}
+      </div>
+        {related?.length ? (
+          <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
+            {related.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => router.push(geUrl(r.id))}
+                className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
+                title={r.title ?? r.slug ?? "Open journey"}
+              >
+                {r.title ?? r.slug ?? "Journey"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-slate-500">Nessun collegamento.</p>
         )}
       </div>
     </div>
 
-    {/* Colonna 2: Descrizione */}
-    <section className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm h-[52svh] min-h-[440px] max-h-[560px] overflow-hidden">
-      <div className="flex h-full flex-col">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+    {/* Destra: Timeline + Descrizione + Mappa */}
+    <section className={`${BOX_3D} p-3 flex flex-col gap-2 h-[730px]`}>
+      <div className="p-2 shrink-0">
+        <Timeline3D />
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 -mt-1">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
             style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
             aria-label="Evento precedente"
           >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button
-              onClick={() => setIsPlaying((p) => !p)}
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setIsPlaying((p) => !p)}
             className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_3px_12px_rgba(15,60,140,0.35)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
             style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
             aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
@@ -2706,50 +2772,52 @@ const mapTextureStyle: CSSProperties = {
               </svg>
             )}
           </button>
-            <button
-              onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+          <button
+            onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
             style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
             aria-label="Evento successivo"
           >
-              <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {speechSupported && (
+            <select
+              value={selectedVoiceId ?? ""}
+              onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
+              className="min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              aria-label="Voce sintesi"
+              disabled={!voiceOptions.length}
+            >
+              {voiceOptions.length ? (
+                voiceOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))
+              ) : (
+                <option value="">Nessuna voce</option>
+              )}
+            </select>
+          )}
+          {selectedEvent?.wiki_url ? (
+            <a
+              href={selectedEvent.wiki_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-50"
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-            </button>
-            {speechSupported && (
-              <select
-                value={selectedVoiceId ?? ""}
-                onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
-                className="min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-                aria-label="Voce sintesi"
-                disabled={!voiceOptions.length}
-              >
-                {voiceOptions.length ? (
-                  voiceOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">Nessuna voce</option>
-                )}
-              </select>
-            )}
-            {selectedEvent?.wiki_url ? (
-              <a
-                href={selectedEvent.wiki_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-50"
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                  <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                Wiki
-              </a>
-            ) : null}
-          </div>
+              Wiki
+            </a>
+          ) : null}
         </div>
+      </div>
+
+      <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
         {showNoVoicesWarning && (
           <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
             Nessuna voce disponibile in questo browser.
@@ -2760,100 +2828,99 @@ const mapTextureStyle: CSSProperties = {
             Voce mobile di bassa qualita disponibile.
           </div>
         )}
-        <div className="flex-1 overflow-y-auto pr-2 text-[13.5px] leading-6 text-gray-800 whitespace-pre-wrap text-justify scroll-pr-2" style={{ scrollbarWidth: "thin" }}>
+        <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
           {selectedEvent?.description || "No description available."}
         </div>
       </div>
-    </section>
 
-    {/* Colonna 3: Mappa */}
-    <section
-      className={
-        mapMode === "fullscreen"
-          ? "fixed inset-0 z-[5000] bg-white"
-          : "relative h-[52svh] min-h-[400px] max-h-[560px]"
-      }
-    >
-      <div
-        data-map="gehj"
-        key={`map-desktop-${gid ?? "unknown"}`}
+      <section
         className={
           mapMode === "fullscreen"
-            ? "absolute inset-0 rounded-none overflow-hidden"
-            : "h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+            ? "fixed inset-0 z-[5000] bg-white"
+            : `${BOX_3D} relative flex-[1.9] min-h-[420px] overflow-hidden`
         }
-        aria-label="Map canvas"
-      />
-      {!mapLoaded && (
-        <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
-          Inizializzazione mappa.
-        </div>
-      )}
-      <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
-        <button
-          onClick={toggleMapModeView}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-          title={
-            mapMode === "normal"
-              ? "Schermo intero"
-              : "Riduci mappa"
+      >
+        <div
+          data-map="gehj"
+          key={`map-desktop-${gid ?? "unknown"}`}
+          className={
+            mapMode === "fullscreen"
+              ? "absolute inset-0 rounded-none overflow-hidden"
+              : "h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
           }
-          aria-label={
-            mapMode === "normal"
-              ? "Schermo intero"
-              : "Riduci mappa"
-          }
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-            {mapMode === "fullscreen" ? (
-              <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            ) : (
-              <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            )}
-          </svg>
-        </button>
-      </div>
-      {mapMode === "fullscreen" && (
-        <div className="absolute left-3 top-14 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+          aria-label="Map canvas"
+        />
+        {!mapLoaded && (
+          <div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
+            Inizializzazione mappa.
+          </div>
+        )}
+        <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
           <button
-            onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label="Evento precedente"
+            onClick={toggleMapModeView}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            title={
+              mapMode === "normal"
+                ? "Schermo intero"
+                : "Riduci mappa"
+            }
+            aria-label={
+              mapMode === "normal"
+                ? "Schermo intero"
+                : "Riduci mappa"
+            }
           >
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setIsPlaying((p) => !p)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-          >
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
-              </svg>
-            )}
-          </button>
-          <button
-            onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label="Evento successivo"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              {mapMode === "fullscreen" ? (
+                <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              ) : (
+                <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              )}
             </svg>
           </button>
         </div>
-      )}
+        {mapMode === "fullscreen" && (
+          <div className="absolute left-3 top-14 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+            <button
+              onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label="Evento precedente"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setIsPlaying((p) => !p)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+            >
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label="Evento successivo"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </section>
     </section>
   </div>
 </div>

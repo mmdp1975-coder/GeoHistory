@@ -105,6 +105,37 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
   { value: "other", label: "Altro" },
 ];
 
+const NEW_JOURNEY_TARGET_OPTIONS = [
+  "Bambini (8-11 anni)",
+  "Ragazzi (12-15 anni)",
+  "Studenti (16-18 anni)",
+  "Pubblico generale",
+  "Famiglie (lettura condivisa)",
+  "Appassionati di storia",
+  "Studenti universitari",
+  "Storici / ricercatori",
+  "Insegnanti / divulgatori",
+  "Accessibilita semplificata",
+];
+
+const NEW_JOURNEY_STYLE_OPTIONS = [
+  "Documentaristico coinvolgente",
+  "Cronaca storica",
+  "Narrativo immersivo",
+  "Analitico-interpretativo",
+  "Socio-culturale",
+  "Politico-istituzionale",
+  "Economico-commerciale",
+  "Militare-strategico",
+  "Urbano-territoriale",
+  "Tecnologico-innovativo",
+  "Crisi e collasso",
+  "Transizione storica",
+  "Comparativo implicito",
+  "Sintetico editoriale",
+  "Story-driven (light)",
+];
+
 const DEFAULT_MEDIA_ROLES = ["gallery", "cover", "poster", "context"];
 
 const buildRoleOptions = (items: GroupEventMediaItem[]) => {
@@ -412,7 +443,7 @@ const formatYearWithEra = (year?: number | null, era?: "AD" | "BC" | null): stri
 
 export default function BuildJourneyPage() {
   const supabase = useMemo(() => createClient(), []);
-  const { profile, checking, error: profileError } = useCurrentUser();
+  const { profile, checking, error: profileError, personaCode } = useCurrentUser();
 
   const [langCode, setLangCode] = useState<string>("en");
 
@@ -481,8 +512,39 @@ export default function BuildJourneyPage() {
   });
   const [importAppliedMessage, setImportAppliedMessage] = useState<string | null>(null);
   const [importActiveLang, setImportActiveLang] = useState<string>(DEFAULT_LANGUAGE);
+  const [newJourneyOpen, setNewJourneyOpen] = useState(false);
+  const [newJourneyTitle, setNewJourneyTitle] = useState("");
+  const [newJourneyAudience, setNewJourneyAudience] = useState("Appassionati di storia");
+  const [newJourneyStyle, setNewJourneyStyle] = useState("Narrativo immersivo");
+  const [newJourneyRunning, setNewJourneyRunning] = useState(false);
+  const [newJourneyJobId, setNewJourneyJobId] = useState<string | null>(null);
+  const [newJourneyError, setNewJourneyError] = useState<string | null>(null);
+  const [newJourneyResult, setNewJourneyResult] = useState<{ message: string; filePath?: string | null } | null>(null);
+  const [newJourneyStage, setNewJourneyStage] = useState<
+    "idle" | "prompt_1" | "prompt_2" | "prompt_3" | "json" | "done"
+  >("idle");
+  const [newJourneyCompletedStep, setNewJourneyCompletedStep] = useState<number>(0);
+  const [newJourneySummary, setNewJourneySummary] = useState<string>("");
+  const [newJourneyElapsed, setNewJourneyElapsed] = useState(0);
+  const [newJourneyTotalElapsed, setNewJourneyTotalElapsed] = useState(0);
+  const [newJourneyStepDurations, setNewJourneyStepDurations] = useState<Record<string, number>>({});
+  const [newJourneyLogOpen, setNewJourneyLogOpen] = useState(false);
+  const [newJourneyLog, setNewJourneyLog] = useState("");
+  const [newJourneyPendingPayload, setNewJourneyPendingPayload] = useState<any | null>(null);
+  const [newJourneyCopyMessage, setNewJourneyCopyMessage] = useState<string | null>(null);
+  const newJourneyPollRef = useRef<number | null>(null);
+  const newJourneyTokenRef = useRef<string | null>(null);
+  const newJourneyRefreshRef = useRef<number | null>(null);
+  const newJourneyStepRef = useRef<"1" | "2" | "3" | null>(null);
+  const newJourneyTimerRef = useRef<number | null>(null);
+  const newJourneyTotalTimerRef = useRef<number | null>(null);
+  const newJourneyTotalStartRef = useRef<number | null>(null);
+  const newJourneyStepStartRef = useRef<number | null>(null);
+  const newJourneyTotalAccumRef = useRef<number>(0);
+  const newJourneyCanRun = !!newJourneyTitle.trim() && !!newJourneyAudience && !!newJourneyStyle && !newJourneyRunning;
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
+  const isAdminProfile = personaCode.startsWith("ADMIN");
   const isItalian = (langCode || "").toLowerCase().startsWith("it");
   const bestTitleForAuto = useMemo(() => {
     const preferred =
@@ -2150,38 +2212,8 @@ export default function BuildJourneyPage() {
     }
   }, [langCode]);
 
-  const handleApplyImportToForm = useCallback(async () => {
-    let parsed = importParsed;
-    if (!parsed.journeyRow) {
-      if (!importFile) {
-        setImportError(tUI(langCode, "build.import.error.missing_file"));
-        return;
-      }
-      const ext = (importFile.name.split(".").pop() || "").toLowerCase();
-      if (!EXCEL_ALLOWED_EXTENSIONS.includes(ext)) {
-        setImportError(tUI(langCode, "build.import.error.invalid_type"));
-        return;
-      }
-      try {
-        setImportLoading(true);
-        const { preview, parsed: nextParsed } = await parseImportFile(importFile);
-        setImportPreview(preview);
-        setImportParsed(nextParsed);
-        parsed = nextParsed;
-      } catch (err: any) {
-        const message =
-          err?.message === "missing_sheets"
-            ? tUI(langCode, "build.import.error.missing_sheets")
-            : tUI(langCode, "build.import.error.generic");
-        setImportError(message);
-        setImportPreview(null);
-        setImportParsed({ journeyRow: null, eventRows: [], eventHeaders: [], eventRowsRaw: [], eventTypeIndex: -1 });
-        return;
-      } finally {
-        setImportLoading(false);
-      }
-    }
 
+  const applyParsedImport = (parsed: ImportParsedData) => {
     const normalizeKey = (key: string) =>
       key
         .replace(/\u00a0/g, " ")
@@ -2308,14 +2340,14 @@ export default function BuildJourneyPage() {
     const eventDescShortKeys = ["description_short", "summary", "descrizione_breve"];
     const eventDescKeys = ["description", "details", "descrizione"];
     const eventEraKeys = ["era", "periodo"];
-    const eventYearFromKeys = ["year_from", "from", "start_year", "anno_da", "inizio"];
-    const eventYearToKeys = ["year_to", "to", "end_year", "anno_a", "fine"];
+    const eventYearFromKeys = ["year_from", "from", "from (year)", "start_year", "anno_da", "inizio"];
+    const eventYearToKeys = ["year_to", "to", "to (year)", "end_year", "anno_a", "fine"];
     const eventExactDateKeys = ["exact_date", "date", "data", "event date", "event date (dd/mm/yyyy)", "data evento"];
     const eventContinentKeys = ["continent", "continente"];
     const eventCountryKeys = ["country", "paese", "nazione"];
     const eventLocationKeys = ["location", "place", "city", "luogo", "citta", "città"];
-    const eventLatKeys = ["latitude", "lat", "latitudine"];
-    const eventLngKeys = ["longitude", "lon", "lng", "longitudine"];
+    const eventLatKeys = ["latitude", "lat", "lat (text, dot decimal)", "latitudine"];
+    const eventLngKeys = ["longitude", "lon", "lng", "lon (text, dot decimal)", "longitudine"];
     const eventImageKeys = ["image", "image_url", "immagine"];
     const eventTypeKeys = [
       "event_type_id",
@@ -2614,8 +2646,577 @@ export default function BuildJourneyPage() {
     setJourneySubTab("general");
     setImportAppliedMessage(tUI(langCode, "build.import.applied"));
     setImportModalOpen(false);
-  }, [ge.visibility, importFile, importParsed, langCode, parseImportFile]);
+  };
 
+  const handleApplyImportToForm = useCallback(async () => {
+    let parsed = importParsed;
+    if (!parsed.journeyRow) {
+      if (!importFile) {
+        setImportError(tUI(langCode, "build.import.error.missing_file"));
+        return;
+      }
+      const ext = (importFile.name.split(".").pop() || "").toLowerCase();
+      if (!EXCEL_ALLOWED_EXTENSIONS.includes(ext)) {
+        setImportError(tUI(langCode, "build.import.error.invalid_type"));
+        return;
+      }
+      try {
+        setImportLoading(true);
+        const { preview, parsed: nextParsed } = await parseImportFile(importFile);
+        setImportPreview(preview);
+        setImportParsed(nextParsed);
+        parsed = nextParsed;
+      } catch (err: any) {
+        const message =
+          err?.message === "missing_sheets"
+            ? tUI(langCode, "build.import.error.missing_sheets")
+            : tUI(langCode, "build.import.error.generic");
+        setImportError(message);
+        setImportPreview(null);
+        setImportParsed({ journeyRow: null, eventRows: [], eventHeaders: [], eventRowsRaw: [], eventTypeIndex: -1 });
+        return;
+      } finally {
+        setImportLoading(false);
+      }
+    }
+
+    applyParsedImport(parsed);
+  }, [applyParsedImport, ge.visibility, importFile, importParsed, langCode, parseImportFile]);
+
+
+  const normalizeNewJourneyStage = (value?: string | null) => {
+    if (!value) return null;
+    const key = value.toLowerCase();
+    if (key.includes("prompt_1")) return "prompt_1";
+    if (key.includes("prompt_2")) return "prompt_2";
+    if (key.includes("prompt_3")) return "prompt_3";
+    if (key.includes("json")) return "json";
+    if (key.includes("done")) return "done";
+    return null;
+  };
+
+  const buildNewJourneyLog = (payload?: { error?: string; stdout?: string; stderr?: string }) => {
+    if (!payload) return "";
+    const parts: string[] = [];
+    if (payload.error) parts.push(`ERROR:\n${payload.error}`);
+    if (payload.stdout) parts.push(`STDOUT:\n${payload.stdout}`);
+    if (payload.stderr) parts.push(`STDERR:\n${payload.stderr}`);
+    return parts.join("\n\n").trim();
+  };
+
+  const buildParsedFromPrompt3 = (payload: any): ImportParsedData => {
+    const journeySource = Array.isArray(payload?.journey) ? payload.journey[0] : payload?.journey ?? {};
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const readValue = (source: any, keys: string[]) => {
+      for (const key of keys) {
+        if (source && source[key] != null) return source[key];
+      }
+      return "";
+    };
+    const journeyRow: Record<string, unknown> = {
+      "Titolo IT": readValue(journeySource, ["Titolo IT", "title_it", "journey_title_it", "titleIT"]),
+      "Descrizione IT": readValue(journeySource, ["Descrizione IT", "description_it", "journey_description_it"]),
+      "Title EN": readValue(journeySource, ["Title EN", "title_en", "journey_title_en", "titleEN"]),
+      "Description EN": readValue(journeySource, ["Description EN", "description_en", "journey_description_en"]),
+    };
+    const eventHeaders = [
+      "Journey IT",
+      "Journey EN",
+      "Era (AD|BC)",
+      "From (year)",
+      "To (year)",
+      "Event date (DD/MM/YYYY)",
+      "Continent",
+      "Country",
+      "Location",
+      "Lat (text, dot decimal)",
+      "Lon (text, dot decimal)",
+      "Titolo evento IT",
+      "wikipedia URL evento IT",
+      "Descrizione evento IT",
+      "Title event EN",
+      "wikipedia URL event EN",
+      "Description event EN",
+      "Type event",
+      "Journey approfondimento 1",
+      "Journey approfondimento 2",
+      "Journey approfondimento 3",
+    ];
+    const eventRows: Record<string, string>[] = events.map((event: any) => ({
+      "Journey IT": readValue(event, ["Journey IT", "journey_it", "journeyIT"]),
+      "Journey EN": readValue(event, ["Journey EN", "journey_en", "journeyEN"]),
+      "Era (AD|BC)": readValue(event, ["Era", "era"]),
+      "From (year)": readValue(event, ["From", "from"]),
+      "To (year)": readValue(event, ["To", "to"]),
+      "Event date (DD/MM/YYYY)": readValue(event, ["Event date", "event_date", "eventDate"]),
+      "Continent": readValue(event, ["Continent", "continent"]),
+      "Country": readValue(event, ["Country", "country"]),
+      "Location": readValue(event, ["Location", "location"]),
+      "Lat (text, dot decimal)": readValue(event, ["Lat", "lat"]),
+      "Lon (text, dot decimal)": readValue(event, ["Lon", "lon"]),
+      "Titolo evento IT": readValue(event, ["Titolo evento IT", "titolo_evento_it", "title_it"]),
+      "wikipedia URL evento IT": readValue(event, ["Wikipedia URL evento IT", "wikipedia_url_it"]),
+      "Descrizione evento IT": readValue(event, ["Descrizione evento IT", "descrizione_evento_it", "description_it"]),
+      "Title event EN": readValue(event, ["Title event EN", "title_event_en", "title_en"]),
+      "wikipedia URL event EN": readValue(event, ["Wikipedia URL event EN", "wikipedia_url_en"]),
+      "Description event EN": readValue(event, ["Description event EN", "description_event_en", "description_en"]),
+      "Type event": readValue(event, ["Type events", "Type event", "type_events", "type_event"]),
+      "Journey approfondimento 1": readValue(event, ["Journey approfondimento 1", "approfondimento_1"]),
+      "Journey approfondimento 2": readValue(event, ["Journey approfondimento 2", "approfondimento_2"]),
+      "Journey approfondimento 3": readValue(event, ["Journey approfondimento 3", "approfondimento_3"]),
+    }));
+    const eventRowsRaw = eventRows.map((row: Record<string, string>) =>
+      eventHeaders.map((header) => row[header] ?? ""),
+    );
+    const eventTypeIndex = eventHeaders.findIndex((header) =>
+      header.toLowerCase().includes("type"),
+    );
+    return {
+      journeyRow,
+      eventRows,
+      eventHeaders,
+      eventRowsRaw,
+      eventTypeIndex,
+    };
+  };
+
+  const buildReadableSummary = (payload: any) => {
+    const journeyTitleIt =
+      payload?.journey?.title_it || payload?.journey_title_it || payload?.journey?.titleIT || "";
+    const journeyTitleEn =
+      payload?.journey?.title_en || payload?.journey_title_en || payload?.journey?.titleEN || "";
+    const journeyDescIt =
+      payload?.journey?.description_it || payload?.journey_description_it || "";
+    const journeyDescEn =
+      payload?.journey?.description_en || payload?.journey_description_en || "";
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const eventLines = events.map((event: any, idx: number) => {
+      const titleIt = event?.title_it || event?.titolo_evento_it || event?.titleIT || "";
+      const titleEn = event?.title_en || event?.title_event_en || event?.titleEN || "";
+      const era = event?.era || "";
+      const from = event?.from ?? "";
+      const to = event?.to ?? "";
+      const location = event?.location || event?.country || "";
+      const title = titleIt || titleEn || "(senza titolo)";
+      const years = from || to ? `${from}${to ? `-${to}` : ""}` : "";
+      const eraText = era ? `${era} ` : "";
+      const place = location ? ` - ${location}` : "";
+      return `${idx + 1}. ${title} ${eraText}${years}${place}`.trim();
+    });
+    const lines: string[] = [];
+    if (journeyTitleIt || journeyTitleEn) {
+      lines.push(`Journey: ${journeyTitleIt || journeyTitleEn}`);
+    }
+    if (journeyTitleIt && journeyTitleEn) {
+      lines.push(`EN: ${journeyTitleEn}`);
+    }
+    if (journeyDescIt) {
+      lines.push(`Descrizione IT: ${journeyDescIt}`);
+    }
+    if (journeyDescEn) {
+      lines.push(`Descrizione EN: ${journeyDescEn}`);
+    }
+    lines.push(`Eventi: ${events.length}`);
+    if (eventLines.length) {
+      lines.push("Eventi:");
+      lines.push(...eventLines);
+    }
+    return lines.join("\n");
+  };
+
+  const formatElapsed = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const clearNewJourneyPolling = () => {
+    if (newJourneyPollRef.current) {
+      window.clearInterval(newJourneyPollRef.current);
+      newJourneyPollRef.current = null;
+    }
+  };
+
+  const clearNewJourneyRefresh = () => {
+    if (newJourneyRefreshRef.current) {
+      window.clearInterval(newJourneyRefreshRef.current);
+      newJourneyRefreshRef.current = null;
+    }
+  };
+
+  const clearNewJourneyTimer = () => {
+    if (newJourneyTimerRef.current) {
+      window.clearInterval(newJourneyTimerRef.current);
+      newJourneyTimerRef.current = null;
+    }
+  };
+
+  const clearNewJourneyTotalTimer = () => {
+    if (newJourneyTotalTimerRef.current) {
+      window.clearInterval(newJourneyTotalTimerRef.current);
+      newJourneyTotalTimerRef.current = null;
+    }
+  };
+
+  const pauseNewJourneyTotalTimer = () => {
+    if (newJourneyTotalStartRef.current) {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - newJourneyTotalStartRef.current) / 1000));
+      newJourneyTotalAccumRef.current += elapsedSeconds;
+      newJourneyTotalStartRef.current = null;
+      setNewJourneyTotalElapsed(newJourneyTotalAccumRef.current);
+    }
+    clearNewJourneyTotalTimer();
+  };
+
+  const startNewJourneyTotalTimer = () => {
+    if (newJourneyTotalStartRef.current) return;
+    newJourneyTotalStartRef.current = Date.now();
+    clearNewJourneyTotalTimer();
+    newJourneyTotalTimerRef.current = window.setInterval(() => {
+      const startedAt = newJourneyTotalStartRef.current;
+      if (!startedAt) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      setNewJourneyTotalElapsed(newJourneyTotalAccumRef.current + elapsedSeconds);
+    }, 1000);
+  };
+
+  useEffect(() => () => {
+    clearNewJourneyPolling();
+    clearNewJourneyRefresh();
+    clearNewJourneyTimer();
+    clearNewJourneyTotalTimer();
+  }, []);
+
+  const refreshNewJourneySession = async () => {
+    try {
+      await supabase.auth.refreshSession();
+    } catch {
+      // Best-effort refresh; fallback to current session.
+    }
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token ?? null;
+    if (token) {
+      newJourneyTokenRef.current = token;
+    }
+    return token;
+  };
+
+  useEffect(() => {
+    if (!newJourneyRunning || !newJourneyJobId) {
+      clearNewJourneyRefresh();
+      return;
+    }
+    refreshNewJourneySession();
+    newJourneyRefreshRef.current = window.setInterval(() => {
+      refreshNewJourneySession();
+    }, 5 * 60 * 1000);
+    return () => {
+      clearNewJourneyRefresh();
+    };
+  }, [newJourneyRunning, newJourneyJobId]);
+
+  const pollNewJourneyStatus = async (jobId: string) => {
+    try {
+      let token = newJourneyTokenRef.current;
+      if (!token) {
+        token = await refreshNewJourneySession();
+        if (!token) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          token = sessionData?.session?.access_token ?? null;
+        }
+        newJourneyTokenRef.current = token;
+      }
+      if (!token) {
+        throw new Error("Auth session missing!");
+      }
+      let response = await fetch(`/api/prompt/new-journey?jobId=${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.status === 401 || response.status === 403) {
+        const { data: refreshed } = await supabase.auth.getSession();
+        const freshToken = refreshed?.session?.access_token ?? null;
+        if (freshToken) {
+          newJourneyTokenRef.current = freshToken;
+          response = await fetch(`/api/prompt/new-journey?jobId=${jobId}`, {
+            headers: { Authorization: `Bearer ${freshToken}` },
+          });
+        }
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Errore durante il polling.");
+      }
+      const stage = normalizeNewJourneyStage(data?.stage);
+      if (stage) {
+        setNewJourneyStage(stage);
+      }
+      const logText = buildNewJourneyLog({
+        error: data?.error,
+        stdout: data?.stdout,
+        stderr: data?.stderr,
+      });
+      if (logText) setNewJourneyLog(logText);
+
+      if (data?.status === "error") {
+        setNewJourneyError(data?.error || "Errore durante l'avvio.");
+        setNewJourneyRunning(false);
+        setNewJourneyLogOpen(true);
+        newJourneyStepStartRef.current = null;
+        clearNewJourneyPolling();
+        clearNewJourneyRefresh();
+        clearNewJourneyTimer();
+        return;
+      }
+
+      if (data?.status === "done") {
+        if (data?.payload) {
+          const summary = buildReadableSummary(data.payload);
+          setNewJourneySummary(summary);
+          const step = newJourneyStepRef.current;
+          if (step) {
+            setNewJourneyCompletedStep((prev) => Math.max(prev, Number(step)));
+            const startedAt = newJourneyStepStartRef.current;
+            if (startedAt) {
+              const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+              const stepKey = step === "1" ? "prompt_1" : step === "2" ? "prompt_2" : "prompt_3";
+              setNewJourneyStepDurations((prev) => ({
+                ...prev,
+                [stepKey]: elapsedSeconds,
+              }));
+            }
+            newJourneyStepStartRef.current = null;
+          }
+          if (step === "3") {
+            setNewJourneyPendingPayload(data.payload);
+          }
+        }
+        setNewJourneyResult({
+          message: data?.message || "Output pronto per la validazione.",
+        });
+        const step = newJourneyStepRef.current;
+        if (step === "1") {
+          setNewJourneyStage("prompt_1");
+        } else if (step === "2") {
+          setNewJourneyStage("prompt_2");
+        } else if (step === "3") {
+          setNewJourneyStage("prompt_3");
+        } else {
+          setNewJourneyStage("done");
+        }
+        setNewJourneyRunning(false);
+        clearNewJourneyPolling();
+        clearNewJourneyRefresh();
+        clearNewJourneyTimer();
+        if (step === "1") {
+          pauseNewJourneyTotalTimer();
+        }
+        if (step === "2") {
+          window.setTimeout(() => {
+            handleRunNewJourney("3");
+          }, 0);
+        }
+        if (step === "3") {
+          if (data?.payload) {
+            window.setTimeout(() => {
+              handleApplyNewJourneyImport(data.payload);
+            }, 0);
+          } else {
+            setNewJourneyError("Output di Prompt 3 mancante.");
+            setNewJourneyLogOpen(true);
+          }
+        }
+        return;
+      }
+    } catch (err: any) {
+      setNewJourneyError(err?.message || "Errore durante il polling.");
+      setNewJourneyRunning(false);
+      setNewJourneyLogOpen(true);
+      newJourneyStepStartRef.current = null;
+      clearNewJourneyPolling();
+      clearNewJourneyRefresh();
+      clearNewJourneyTimer();
+    }
+  };
+
+  const startNewJourneyPolling = (jobId: string) => {
+    clearNewJourneyPolling();
+    pollNewJourneyStatus(jobId);
+    newJourneyPollRef.current = window.setInterval(() => {
+      pollNewJourneyStatus(jobId);
+    }, 1500);
+  };
+
+  const handleCopyNewJourneyLog = async () => {
+    if (!newJourneyLog) return;
+    try {
+      await navigator.clipboard.writeText(newJourneyLog);
+      setNewJourneyCopyMessage("Copiato");
+    } catch {
+      setNewJourneyCopyMessage("Copia non riuscita");
+    }
+    window.setTimeout(() => setNewJourneyCopyMessage(null), 2000);
+  };
+
+  const openNewJourneyModal = () => {
+    if (!isAdminProfile) return;
+    setNewJourneyOpen(true);
+    setNewJourneyError(null);
+    setNewJourneyResult(null);
+    setNewJourneyStage("idle");
+    setNewJourneyLog("");
+    setNewJourneyLogOpen(false);
+    setNewJourneyCopyMessage(null);
+    setNewJourneyJobId(null);
+    setNewJourneyCompletedStep(0);
+    setNewJourneySummary("");
+    setNewJourneyElapsed(0);
+    setNewJourneyTotalElapsed(0);
+    setNewJourneyStepDurations({});
+    setNewJourneyPendingPayload(null);
+    newJourneyTokenRef.current = null;
+    newJourneyStepRef.current = null;
+    newJourneyStepStartRef.current = null;
+    newJourneyTotalStartRef.current = null;
+    newJourneyTotalAccumRef.current = 0;
+    clearNewJourneyPolling();
+    clearNewJourneyRefresh();
+    clearNewJourneyTimer();
+    clearNewJourneyTotalTimer();
+  };
+
+  const closeNewJourneyModal = () => {
+    if (newJourneyRunning) return;
+    setNewJourneyOpen(false);
+    setNewJourneyStage("idle");
+    setNewJourneyLogOpen(false);
+    setNewJourneyCopyMessage(null);
+    setNewJourneyJobId(null);
+    setNewJourneySummary("");
+    setNewJourneyElapsed(0);
+    setNewJourneyTotalElapsed(0);
+    setNewJourneyStepDurations({});
+    setNewJourneyPendingPayload(null);
+    newJourneyTokenRef.current = null;
+    newJourneyStepRef.current = null;
+    newJourneyStepStartRef.current = null;
+    newJourneyTotalStartRef.current = null;
+    newJourneyTotalAccumRef.current = 0;
+    clearNewJourneyPolling();
+    clearNewJourneyRefresh();
+    clearNewJourneyTimer();
+    clearNewJourneyTotalTimer();
+  };
+
+  const handleRunNewJourney = async (step: "1" | "2" | "3") => {
+    if (!newJourneyCanRun) return;
+    setNewJourneyRunning(true);
+    setNewJourneyError(null);
+    setNewJourneyResult(null);
+    setNewJourneyLog("");
+    setNewJourneyLogOpen(false);
+    setNewJourneyCopyMessage(null);
+    setNewJourneyStage(step === "1" ? "prompt_1" : step === "2" ? "prompt_2" : "prompt_3");
+    setNewJourneyJobId(null);
+    newJourneyTokenRef.current = null;
+    newJourneyStepRef.current = step;
+    setNewJourneyPendingPayload(null);
+    setNewJourneyElapsed(0);
+    newJourneyStepStartRef.current = Date.now();
+    startNewJourneyTotalTimer();
+    clearNewJourneyTimer();
+    newJourneyTimerRef.current = window.setInterval(() => {
+      setNewJourneyElapsed((prev) => prev + 1);
+    }, 1000);
+    clearNewJourneyPolling();
+    clearNewJourneyRefresh();
+    try {
+      const refreshedToken = await refreshNewJourneySession();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = refreshedToken || sessionData?.session?.access_token || null;
+      if (sessionError || !accessToken) {
+        throw new Error("Auth session missing!");
+      }
+      const response = await fetch("/api/prompt/new-journey", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          title: newJourneyTitle.trim(),
+          audience: newJourneyAudience,
+          style: newJourneyStyle,
+          step,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const logText = buildNewJourneyLog({
+          error: data?.error,
+          stdout: data?.stdout,
+          stderr: data?.stderr,
+        });
+        if (logText) setNewJourneyLog(logText);
+        setNewJourneyError(data?.error || "Errore durante l'avvio.");
+        setNewJourneyLogOpen(true);
+        setNewJourneyRunning(false);
+        newJourneyStepStartRef.current = null;
+        clearNewJourneyTimer();
+        return;
+      }
+      if (!data?.jobId) {
+        throw new Error("Job ID mancante.");
+      }
+      newJourneyTokenRef.current = accessToken;
+      setNewJourneyJobId(data.jobId);
+      startNewJourneyPolling(data.jobId);
+    } catch (err: any) {
+      setNewJourneyError(err?.message || "Errore durante l'avvio.");
+      const logText = buildNewJourneyLog({ error: err?.message || "" });
+      if (logText) setNewJourneyLog(logText);
+      setNewJourneyLogOpen(true);
+      setNewJourneyRunning(false);
+      newJourneyStepStartRef.current = null;
+      clearNewJourneyTimer();
+    }
+  };
+
+  const handleApplyNewJourneyImport = (payload?: any) => {
+    if (newJourneyRunning) return;
+    const payloadToImport = payload ?? newJourneyPendingPayload;
+    if (!payloadToImport) {
+      setNewJourneyError("Nessun output da importare.");
+      return;
+    }
+    setNewJourneyRunning(true);
+    setNewJourneyError(null);
+    setNewJourneyResult(null);
+    setNewJourneyStage("json");
+    newJourneyStepStartRef.current = Date.now();
+    try {
+      const parsed = buildParsedFromPrompt3(payloadToImport);
+      applyParsedImport(parsed);
+      const startedAt = newJourneyStepStartRef.current;
+      if (startedAt) {
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+        setNewJourneyStepDurations((prev) => ({
+          ...prev,
+          json: elapsedSeconds,
+        }));
+      }
+      newJourneyStepStartRef.current = null;
+      setNewJourneyResult({ message: "Import completato nel builder." });
+      setNewJourneyCompletedStep((prev) => Math.max(prev, 4));
+      setNewJourneyStage("done");
+      setNewJourneyPendingPayload(null);
+      pauseNewJourneyTotalTimer();
+    } catch (err: any) {
+      setNewJourneyError(err?.message || "Errore durante l'import.");
+      setNewJourneyLogOpen(true);
+    } finally {
+      setNewJourneyRunning(false);
+    }
+  };
 
   const renderGroupEventPage = () => {
     const allowFlags: { key: AllowFlagKey; label: string }[] = [
@@ -2739,6 +3340,15 @@ export default function BuildJourneyPage() {
             )}
           </div>
           <div className="order-1 ml-auto flex w-full flex-wrap items-center gap-2 justify-start sm:order-2 sm:w-auto sm:flex-nowrap sm:justify-end">
+            {isAdminProfile && (
+              <button
+                type="button"
+                className="h-8 w-full sm:w-28 rounded-full border border-emerald-200 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
+                onClick={openNewJourneyModal}
+              >
+                New Journey
+              </button>
+            )}
             <button
               type="button"
               className="h-8 w-full sm:w-24 rounded-full border border-sky-200 bg-white px-2.5 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
@@ -3869,6 +4479,249 @@ export default function BuildJourneyPage() {
     );
   };
 
+  const renderNewJourneyModal = () => {
+    if (!newJourneyOpen || !isAdminProfile) return null;
+
+    const audienceOptions = [
+      { value: "", label: "Seleziona un target" },
+      ...NEW_JOURNEY_TARGET_OPTIONS.map((option) => ({ value: option, label: option })),
+    ];
+    const styleOptions = [
+      { value: "", label: "Seleziona uno stile" },
+      ...NEW_JOURNEY_STYLE_OPTIONS.map((option) => ({ value: option, label: option })),
+    ];
+
+    const steps = [
+      { id: "prompt_1", label: "Prompt 1: input base" },
+      { id: "prompt_2", label: "Prompt 2: outline" },
+      { id: "prompt_3", label: "Prompt 3: JSON" },
+      { id: "json", label: "Importa nel builder" },
+    ];
+    const isDone = newJourneyStage === "done";
+    const stageIndex = steps.findIndex((step) => step.id === newJourneyStage);
+    const lastStepLabel = isDone
+      ? steps[steps.length - 1].label
+      : stageIndex >= 0
+      ? steps[stageIndex].label
+      : "Non avviato";
+    const isFinalized = newJourneyCompletedStep >= 4;
+    const nextAction = newJourneyCompletedStep === 0 ? "1" : "2";
+    const actionLabel = newJourneyRunning
+      ? "In corso..."
+      : newJourneyCompletedStep === 0
+      ? "Avvia Prompt 1"
+      : newJourneyCompletedStep === 1
+      ? "Approva e avvia Prompt 2"
+      : isFinalized
+      ? "Completato"
+      : "In corso...";
+    const actionClass =
+      newJourneyCompletedStep === 0
+        ? "bg-sky-600 text-white hover:bg-sky-500"
+        : newJourneyCompletedStep === 1
+        ? "bg-amber-600 text-white hover:bg-amber-500"
+        : "bg-emerald-700 text-white hover:bg-emerald-600";
+    const actionDisabled =
+      isFinalized || newJourneyRunning || !newJourneyCanRun || newJourneyCompletedStep >= 2;
+
+    return (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 py-6">
+        <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="space-y-4 px-6 py-5">
+            <Input
+              label="Titolo del Journey"
+              value={newJourneyTitle}
+              onChange={setNewJourneyTitle}
+              placeholder="Inserisci il titolo"
+            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+              <Select
+                label="Target audience"
+                value={newJourneyAudience}
+                onChange={setNewJourneyAudience}
+                options={audienceOptions}
+                className="sm:max-w-[240px] w-full"
+              />
+              <Select
+                label="Stile narrativo"
+                value={newJourneyStyle}
+                onChange={setNewJourneyStyle}
+                options={styleOptions}
+                className="sm:max-w-[240px] w-full"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 text-xs text-neutral-600">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
+                  Stato avanzamento
+                </p>
+                <p className="text-[11px] font-semibold text-neutral-500">
+                  Tempo trascorso: {formatElapsed(newJourneyTotalElapsed)}
+                </p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {steps.map((step, index) => {
+                  const isComplete = isDone || (stageIndex !== -1 && index < stageIndex);
+                  const isActive =
+                    !isDone && index === stageIndex && (newJourneyRunning || newJourneyError || newJourneyResult);
+                  const durationSeconds = newJourneyStepDurations[step.id];
+                  const durationLabel =
+                    isActive && newJourneyRunning
+                      ? formatElapsed(newJourneyElapsed)
+                      : durationSeconds != null
+                      ? formatElapsed(durationSeconds)
+                      : null;
+                  return (
+                    <div
+                      key={step.id}
+                      className={`flex items-center justify-between rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                        isComplete
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : isActive
+                          ? "border-sky-200 bg-sky-50 text-sky-700"
+                          : "border-neutral-200 bg-neutral-100 text-neutral-500"
+                      }`}
+                    >
+                      <span>
+                        {step.label}
+                        {durationLabel ? ` · ${durationLabel}` : ""}
+                      </span>
+                      {isComplete && <span>OK</span>}
+                      {isActive && !isComplete && <span>...</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {newJourneyRunning && (
+                  <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-[11px] font-semibold text-sky-700">
+                    In corso
+                  </span>
+                )}
+                {!newJourneyRunning && newJourneyStage === "done" && !newJourneyError && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                    Completato
+                  </span>
+                )}
+                {newJourneyError && (
+                  <span className="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-[11px] font-semibold text-red-700">
+                    Errore
+                  </span>
+                )}
+                <span className="text-[11px] text-neutral-500">
+                  Ultimo step: {lastStepLabel}
+                </span>
+              </div>
+            </div>
+
+            {newJourneySummary && (
+              <div className="max-h-48 overflow-auto rounded-2xl border border-neutral-200 bg-neutral-50/80 p-4 text-xs text-neutral-700 whitespace-pre-wrap">
+                {newJourneySummary}
+              </div>
+            )}
+
+            {newJourneyError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="flex items-start justify-between gap-3">
+                  <span>{newJourneyError}</span>
+                  <button
+                    type="button"
+                    className="rounded-full border border-red-200 bg-white px-2 py-1 text-xs font-semibold text-red-700 shadow-sm hover:border-red-300"
+                    onClick={() => setNewJourneyLogOpen(true)}
+                  >
+                    Apri log
+                  </button>
+                </div>
+              </div>
+            )}
+            {newJourneyResult && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-800">
+                <p className="font-semibold">{newJourneyResult.message}</p>
+                {newJourneyResult.filePath && <p className="mt-1 break-all">{newJourneyResult.filePath}</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 px-6 py-4">
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 shadow-sm hover:border-neutral-400 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={closeNewJourneyModal}
+              disabled={newJourneyRunning}
+            >
+              Annulla
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {isFinalized && (
+                <button
+                  type="button"
+                  className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+                  onClick={closeNewJourneyModal}
+                >
+                  Chiudi
+                </button>
+              )}
+              <button
+                type="button"
+                className={`rounded-full px-4 py-2 text-xs font-semibold shadow-md transition ${
+                  !actionDisabled ? actionClass : "bg-neutral-200 text-neutral-500 cursor-not-allowed"
+                }`}
+                onClick={() => handleRunNewJourney(nextAction)}
+                disabled={actionDisabled}
+              >
+                {actionLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderNewJourneyLogDrawer = () => {
+    if (!newJourneyLogOpen) return null;
+    const logText = newJourneyLog || "Nessun log disponibile.";
+
+    return (
+      <div className="fixed inset-0 z-[80] flex justify-end bg-black/30">
+        <div className="flex h-full w-full max-w-[520px] flex-col bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b border-neutral-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-neutral-900">Log dettagliato</p>
+              <p className="text-xs text-neutral-500">Copia e incolla l'output completo.</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+              onClick={() => setNewJourneyLogOpen(false)}
+            >
+              Chiudi
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto px-4 py-4">
+            <textarea
+              className="h-full min-h-[50vh] w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-700"
+              value={logText}
+              readOnly
+            />
+          </div>
+          <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-3">
+            <span className="text-xs text-neutral-500">{newJourneyCopyMessage ?? ""}</span>
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-4 py-2 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleCopyNewJourneyLog}
+              disabled={!newJourneyLog}
+            >
+              Copia log
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderImportModal = () => {
     if (!importModalOpen) return null;
 
@@ -3999,6 +4852,8 @@ export default function BuildJourneyPage() {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-sky-50 to-neutral-50 text-neutral-900 lg:flex">
+      {renderNewJourneyModal()}
+      {renderNewJourneyLogDrawer()}
       {renderImportModal()}
       {mapOverlayEventId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">

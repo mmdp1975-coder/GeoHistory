@@ -1,0 +1,276 @@
+{
+  "journey_title_it": "Impero persiano: dagli Achemenidi ai Sasanidi",
+  "journey_title_en": "The Persian Empire: from the Achaemenids to the Sasanians",
+  "events": [
+    {
+      "titolo_evento_it": "Ciro il Grande conquista Ecbatana e rovescia i Medi",
+      "title_event_en": "Cyrus the Great captures Ecbatana and topples the Medes",
+      "era": "BC",
+      "from": 550,
+      "to": 550,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Ecbatana"
+    },
+    {
+      "titolo_evento_it": "Caduta della Lidia: presa di Sardi",
+      "title_event_en": "Fall of Lydia: Capture of Sardis",
+      "era": "BC",
+      "from": 546,
+      "to": 546,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Sardis"
+    },
+    {
+      "titolo_evento_it": "Fondazione e sviluppo di Pasargadae",
+      "title_event_en": "Founding and development of Pasargadae",
+      "era": "BC",
+      "from": 546,
+      "to": 530,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Pasargadae"
+    },
+    {
+      "titolo_evento_it": "Presa di Babilonia da parte di Ciro",
+      "title_event_en": "Capture of Babylon by Cyrus",
+      "era": "BC",
+      "from": 539,
+      "to": 539,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Babylon"
+    },
+    {
+      "titolo_evento_it": "Cambise II conquista l’Egitto alla battaglia di Pelusio",
+      "title_event_en": "Cambyses II conquers Egypt at the Battle of Pelusium",
+      "era": "BC",
+      "from": 525,
+      "to": 525,
+      "continent": "Africa",
+      "country": "Egitto",
+      "location": "Pelusium"
+    },
+    {
+      "titolo_evento_it": "Dario I istituisce le satrapie e riorganizza l’impero",
+      "title_event_en": "Darius I establishes satrapies and reorganizes the empire",
+      "era": "BC",
+      "from": 522,
+      "to": 486,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Susa"
+    },
+    {
+      "titolo_evento_it": "Persepoli: avvio e fioritura del complesso palaziale achemenide",
+      "title_event_en": "Persepolis: inception and flourishing of the Achaemenid palace complex",
+      "era": "BC",
+      "from": 518,
+      "to": 470,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Persepolis"
+    },
+    {
+      "titolo_evento_it": "Rivolta ionica contro il dominio persiano",
+      "title_event_en": "Ionian Revolt against Persian rule",
+      "era": "BC",
+      "from": 499,
+      "to": 493,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Miletus"
+    },
+    {
+      "titolo_evento_it": "Prima guerra persiana: sconfitta a Maratona",
+      "title_event_en": "First Persian War: defeat at Marathon",
+      "era": "BC",
+      "from": 490,
+      "to": 490,
+      "continent": "Europe",
+      "country": "Grecia",
+      "location": "Marathon"
+    },
+    {
+      "titolo_evento_it": "Seconda guerra persiana: le Termopili",
+      "title_event_en": "Second Persian War: Thermopylae",
+      "era": "BC",
+      "from": 480,
+      "to": 480,
+      "continent": "Europe",
+      "country": "Grecia",
+      "location": "Thermopylae"
+    },
+    {
+      "titolo_evento_it": "Svolta navale a Salamina",
+      "title_event_en": "Naval turning point at Salamis",
+      "era": "BC",
+      "from": 480,
+      "to": 480,
+      "continent": "Europe",
+      "country": "Grecia",
+      "location": "Salamis"
+    },
+    {
+      "titolo_evento_it": "Crollo dell’offensiva persiana a Platea",
+      "title_event_en": "Collapse of the Persian offensive at Plataea",
+      "era": "BC",
+      "from": 479,
+      "to": 479,
+      "continent": "Europe",
+      "country": "Grecia",
+      "location": "Plataea"
+    },
+    {
+      "titolo_evento_it": "Rivolta di Inaro e crisi persiana in Egitto",
+      "title_event_en": "Inaros’ revolt and Persian crisis in Egypt",
+      "era": "BC",
+      "from": 460,
+      "to": 454,
+      "continent": "Africa",
+      "country": "Egitto",
+      "location": "Memphis"
+    },
+    {
+      "titolo_evento_it": "Cunassa e l’Anabasi dei Diecimila",
+      "title_event_en": "Cunaxa and the Anabasis of the Ten Thousand",
+      "era": "BC",
+      "from": 401,
+      "to": 401,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Cunaxa"
+    },
+    {
+      "titolo_evento_it": "La Grande rivolta dei satrapi",
+      "title_event_en": "The Great Satraps' Revolt",
+      "era": "BC",
+      "from": 366,
+      "to": 360,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Sardis"
+    },
+    {
+      "titolo_evento_it": "Alessandro entra in Asia: vittoria al Granico",
+      "title_event_en": "Alexander enters Asia: victory at the Granicus",
+      "era": "BC",
+      "from": 334,
+      "to": 334,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Granicus River"
+    },
+    {
+      "titolo_evento_it": "Schiacciante successo macedone a Isso",
+      "title_event_en": "Decisive Macedonian victory at Issus",
+      "era": "BC",
+      "from": 333,
+      "to": 333,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Issus"
+    },
+    {
+      "titolo_evento_it": "Gaugamela: fine del potere achemenide",
+      "title_event_en": "Gaugamela: end of Achaemenid power",
+      "era": "BC",
+      "from": 331,
+      "to": 331,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Gaugamela"
+    },
+    {
+      "titolo_evento_it": "Incendio e saccheggio di Persepoli",
+      "title_event_en": "Burning and sack of Persepolis",
+      "era": "BC",
+      "from": 330,
+      "to": 330,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Persepolis"
+    },
+    {
+      "titolo_evento_it": "Nascita del potere partico: Arsacidi indipendenti",
+      "title_event_en": "Rise of Parthian power: Arsacids gain independence",
+      "era": "BC",
+      "from": 247,
+      "to": 224,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Hecatompylos"
+    },
+    {
+      "titolo_evento_it": "Ardashir I sconfigge i Parti a Hormozdgan e fonda i Sasanidi",
+      "title_event_en": "Ardashir I defeats the Parthians at Hormozdgan and founds the Sasanians",
+      "era": "AD",
+      "from": 224,
+      "to": 224,
+      "continent": "Asia",
+      "country": "Iran",
+      "location": "Hormozdgan"
+    },
+    {
+      "titolo_evento_it": "Shapur I cattura l’imperatore Valeriano a Edessa",
+      "title_event_en": "Shapur I captures Emperor Valerian at Edessa",
+      "era": "AD",
+      "from": 260,
+      "to": 260,
+      "continent": "Asia",
+      "country": "Turchia",
+      "location": "Edessa"
+    },
+    {
+      "titolo_evento_it": "Riforme e rinascita sotto Cosroe I",
+      "title_event_en": "Reforms and renewal under Khosrow I",
+      "era": "AD",
+      "from": 531,
+      "to": 579,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Ctesiphon"
+    },
+    {
+      "titolo_evento_it": "Guerra bizantino-sasanide: apogeo e crisi dell’impero",
+      "title_event_en": "Byzantine–Sasanian War: zenith and crisis of the empire",
+      "era": "AD",
+      "from": 602,
+      "to": 628,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Ctesiphon"
+    },
+    {
+      "titolo_evento_it": "Al-Qadisiyya: svolta della conquista araba della Persia",
+      "title_event_en": "Al-Qadisiyyah: turning point in the Arab conquest of Persia",
+      "era": "AD",
+      "from": 636,
+      "to": 636,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Al-Qadisiyyah"
+    },
+    {
+      "titolo_evento_it": "Caduta di Ctesifonte in mano araba",
+      "title_event_en": "Fall of Ctesiphon to the Arabs",
+      "era": "AD",
+      "from": 637,
+      "to": 637,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Ctesiphon"
+    },
+    {
+      "titolo_evento_it": "Morte di Yazdegerd III a Merv e fine dell’impero sasanide",
+      "title_event_en": "Death of Yazdegerd III at Merv and the end of the Sasanian Empire",
+      "era": "AD",
+      "from": 651,
+      "to": 651,
+      "continent": "Asia",
+      "country": "Turkmenistan",
+      "location": "Merv"
+    }
+  ]
+}

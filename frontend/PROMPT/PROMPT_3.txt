@@ -1,0 +1,90 @@
+PROMPT 3 — PUBBLICAZIONE FINALE JOURNEY (FORMATTER EXCEL DEFINITIVO)
+1.ISTRUZIONE CRITICA DI BLOCCO TOTALE
+1.1 Questo task è COMPLETATO solo se tutte le regole obbligatorie sono rispettate.
+1.2 Se anche UNA SOLA regola non può essere rispettata devi produrre SOLO:
+TASK FAILED: <ID_REGOLA>
+1.3 In caso di TASK FAILED ? vietato generare output parziali spiegazioni o commenti. Usa l'ID regola (es. 6.3, 8.6).
+2.INPUT
+2.1 In allegato a questo prompt è fornito ESCLUSIVAMENTE l’output JSON generato da PROMPT 2.
+2.2 Questo JSON costituisce VERITÀ ASSOLUTA UNICA.
+3.OBIETTIVO
+3.1 Trasformare il JSON di input nel JSON di output richiesto per il builder (schema in 4.3).
+4.OUTPUT CONSENTITO
+4.1 Se e solo se tutte le regole sono rispettate restituisci ESCLUSIVAMENTE il JSON nello schema indicato.
+4.2 ? vietato qualsiasi altro testo nel messaggio.
+4.3 Nessun output extra oltre al JSON.
+5.STRUTTURA JSON
+5.1 Il JSON deve contenere ESATTAMENTE due sezioni chiamate journey ed events.
+6.SEZIONE JOURNEY
+6.1 journey deve contenere UNA SOLA entry con i campi indicati.
+6.2 Campi in ordine ESATTO:
+Titolo IT
+Descrizione IT
+Title EN
+Description EN
+6.3 Le descrizioni (IT/EN) DEVONO essere quelle già presenti nel JSON di input (PROMPT 2), copiate senza riscriverle.
+6.4 Se il JSON contiene campi aggiuntivi richiesti dallo schema, assemblali copiando i valori gi? presenti nel JSON. Non creare nuove descrizioni.
+7.SEZIONE EVENTS
+7.1 events deve contenere UN oggetto per OGNI evento presente nel JSON di input.
+7.2 Il numero di oggetti deve essere IDENTICO al numero di eventi di input.
+7.3 Campi obbligatori in ogni evento (chiavi JSON):
+Journey IT
+Journey EN
+Era
+From
+To
+Event date
+Continent
+Country
+Location
+Lat
+Lon
+Titolo evento IT
+Wikipedia URL evento IT
+Descrizione evento IT
+Title event EN
+Wikipedia URL event EN
+Description event EN
+Type events
+Journey approfondimento 1
+Journey approfondimento 2
+Journey approfondimento 3
+8.REGOLE DI COMPILAZIONE EVENTS
+8.1 I campi Journey IT Journey EN Era From To Continent Country Location Titolo evento IT Title event EN Descrizione evento IT Description event EN devono essere copiati dal JSON di input senza modificarne il contenuto semantico.
+8.2 Event date NON è obbligatoria e deve essere compilata SOLO se una data precisa è esplicitamente indicata nel titolo dell’evento con formato DD/MM/YYYY come testo semplice.
+8.3 Lat e Lon DEVONO essere numeri decimali con PUNTO come UNICO separatore decimale.
+8.4 È VIETATO usare la virgola come separatore decimale in Lat e Lon.
+8.5 Lat e Lon DEVONO avere da 3 a 6 cifre decimali ed essere coerenti con la Location.
+8.6 Se anche UNA SOLA coordinata Lat o Lon contiene una virgola devi produrre SOLO:
+TASK FAILED: 8.6
+8.7 Wikipedia URL evento IT e Wikipedia URL event EN devono puntare a pagine storicamente pertinenti e consolidate coerenti con l’evento.
+8.8 Ogni evento deve avere UNO E UN SOLO Type events.
+8.9 Valori ammessi Type events:
+colonialism
+culture_society
+demographics
+diplomacy
+economy
+environment
+exploration_expansion
+health
+humanrights
+independence_reform
+law_justice
+other
+politics
+revolts
+science_technology
+treaties_agreements
+war_conflict
+8.10 Se il Type events dominante non è determinabile con certezza, usa "other".
+9.JOURNEY DI APPROFONDIMENTO
+9.1 Ogni evento può avere da zero a tre Journey di approfondimento.
+9.2 Devono essere titoli specifici storicamente riconoscibili coerenti con periodo area e natura dell’evento.
+9.3 È vietato usare titoli generici vaghi o inventati.
+9.4 Se non pertinenti lasciare le celle vuote.
+10.FORMATO DATI
+10.1 È vietato usare grassetto colori bordi formule wrap text freeze panes larghezze colonna personalizzate o formati data o numero forzati.
+11.CONDIZIONE FINALE
+11.1 Se UNA SOLA regola non può essere rispettata devi produrre ESCLUSIVAMENTE:
+TASK FAILED: <ID_REGOLA>

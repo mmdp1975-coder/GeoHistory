@@ -1,0 +1,63 @@
+CREA IL JOURNEY: <INSERISCI TITOLO DEL JOURNEY>
+
+PROMPT 1 — SELEZIONE EDITORIALE EVENTI (OUTPUT STRUTTURATO)
+1.ISTRUZIONE CRITICA DI BLOCCO TOTALE
+1.1 Questo task è COMPLETATO solo se tutte le regole obbligatorie sono rispettate.
+1.2 Se anche UNA SOLA regola non può essere rispettata devi produrre SOLO:
+TASK FAILED
+1.3 In caso di TASK FAILED è vietato generare output parziali spiegazioni o commenti.
+2.OBIETTIVO
+2.1 Generare ESCLUSIVAMENTE la struttura editoriale degli eventi che compongono il Journey.
+2.2 Questo prompt NON deve generare descrizioni narrative URL Wikipedia coordinate type events o altri dati tecnici.
+3.OUTPUT CONSENTITO
+3.1 Restituisci ESCLUSIVAMENTE un oggetto strutturato in formato JSON valido.
+3.2 È vietato qualsiasi testo prima o dopo il JSON.
+4.SCHEMA JSON OBBLIGATORIO
+4.1 Il JSON deve avere ESATTAMENTE questa struttura:
+{
+  "journey_title_it": "<titolo in italiano>",
+  "journey_title_en": "<titolo in inglese>",
+  "events": [
+    {
+      "titolo_evento_it": "",
+      "title_event_en": "",
+      "era": "BC|AD",
+      "from": 0,
+      "to": 0,
+      "continent": "",
+      "country": "",
+      "location": ""
+    }
+  ]
+}
+5.NUMERO EVENTI
+5.1 Devi generare da 15 a 30 eventi.
+5.2 Se non riesci a generare almeno 15 eventi coerenti devi produrre SOLO:
+TASK FAILED
+6.PRINCIPIO NARRATIVO OBBLIGATORIO
+6.1 Gli eventi devono avere contiguità logica e narrativa.
+6.2 Gli eventi devono essere scelti come se raccontassero una storia con un inizio uno sviluppo e una chiusura o apertura verso una fase successiva.
+6.3 È vietato assemblare eventi indipendenti o a elenco.
+7.REGOLE EVENTI BLOCCO TOTALE
+7.1 Gli eventi devono essere storici reali riconoscibili e verificabili.
+7.2 Vietato inventare eventi titoli luoghi o processi storici.
+7.3 Ogni Titolo evento IT deve essere UNICO.
+7.4 Ogni Title event EN deve essere UNICO.
+7.5 Ogni titolo deve avere senso se letto isolatamente.
+7.6 Vietato riempire per arrivare al numero minimo.
+8.REGOLE TEMPORALI BLOCCO TOTALE
+8.1 Era può essere SOLO BC oppure AD.
+8.2 From e To devono essere numeri interi positivi senza testo aggiuntivo.
+8.3 È vietato qualsiasi valore negativo.
+8.4 Gli anni BC sono indicati solo tramite Era = BC.
+8.5 From e To devono rappresentare l’intervallo reale dell’evento o del processo.
+9.REGOLE DI LOCALIZZAZIONE BLOCCO TOTALE
+9.1 Continent coerente con il Journey.
+9.2 Country specifico e realistico.
+9.3 Location sempre specifica città storica sito archeologico o area geografica chiaramente identificabile.
+9.4 Eventi diversi possono condividere la stessa Location se storicamente corretto.
+9.5 Vietate location fittizie generiche o non verificabili.
+10.LIMITI ESPLICITI
+10.1 È vietato includere qualsiasi campo non elencato nello schema JSON del punto 4.
+10.2 Se viene incluso anche un solo campo extra devi produrre SOLO:
+TASK FAILED
