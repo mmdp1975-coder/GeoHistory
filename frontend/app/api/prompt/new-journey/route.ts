@@ -41,6 +41,30 @@ const parseStage = (stdout?: string | null) => {
   return null;
 };
 
+const parseJsonResult = (stdout?: string | null) => {
+  if (!stdout) return { payload: null as Record<string, unknown> | null };
+  const marker = "JSON_RESULT:";
+  const markerIndex = stdout.lastIndexOf(marker);
+  if (markerIndex === -1) return { payload: null as Record<string, unknown> | null };
+  const raw = stdout.slice(markerIndex + marker.length).trim();
+  if (!raw) return { payload: null as Record<string, unknown> | null };
+  const tryParse = (text: string) => JSON.parse(text) as Record<string, unknown>;
+  try {
+    return { payload: tryParse(raw) };
+  } catch {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return { payload: tryParse(raw.slice(start, end + 1)) };
+      } catch {
+        // fall through to error below
+      }
+    }
+    return { payload: null as Record<string, unknown> | null, error: "Invalid JSON_RESULT payload." };
+  }
+};
+
 const updateJobStatus = (jobId: string, patch: Partial<JobStatus>) => {
   const prev = jobStatusStore.get(jobId) ?? { status: "running" };
   const next = { ...prev, ...patch, updatedAt: new Date().toISOString() } as JobStatus;
@@ -118,21 +142,16 @@ export async function POST(req: Request) {
       });
       return;
     }
-    const jsonMatch = stdout.match(/JSON_RESULT:(.+)$/m);
-    let payload: Record<string, unknown> | null = null;
-    if (jsonMatch?.[1]) {
-      try {
-        payload = JSON.parse(jsonMatch[1]);
-      } catch (err) {
-        updateJobStatus(jobId, {
-          status: "error",
-          error: "Invalid JSON_RESULT payload.",
-          stage: parseStage(stdout),
-          stdout,
-          stderr,
-        });
-        return;
-      }
+    const { payload, error } = parseJsonResult(stdout);
+    if (error) {
+      updateJobStatus(jobId, {
+        status: "error",
+        error,
+        stage: parseStage(stdout),
+        stdout,
+        stderr,
+      });
+      return;
     }
     updateJobStatus(jobId, {
       status: "done",

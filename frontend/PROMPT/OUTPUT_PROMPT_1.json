@@ -1,276 +1,306 @@
 {
-  "journey_title_it": "Impero persiano: dagli Achemenidi ai Sasanidi",
-  "journey_title_en": "The Persian Empire: from the Achaemenids to the Sasanians",
+  "journey_title_it": "L'Impero Ottomano",
+  "journey_title_en": "The Ottoman Empire",
   "events": [
     {
-      "titolo_evento_it": "Ciro il Grande conquista Ecbatana e rovescia i Medi",
-      "title_event_en": "Cyrus the Great captures Ecbatana and topples the Medes",
-      "era": "BC",
-      "from": 550,
-      "to": 550,
+      "titolo_evento_it": "Fondazione del beylik ottomano a Söğüt",
+      "title_event_en": "Foundation of the Ottoman beylik at Söğüt",
+      "era": "AD",
+      "from": 1299,
+      "to": 1299,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Söğüt"
+    },
+    {
+      "titolo_evento_it": "Vittoria a Bafeo contro i Bizantini",
+      "title_event_en": "Victory at Bapheus against the Byzantines",
+      "era": "AD",
+      "from": 1302,
+      "to": 1302,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Nicomedia (İzmit)"
+    },
+    {
+      "titolo_evento_it": "Conquista di Bursa",
+      "title_event_en": "Conquest of Bursa",
+      "era": "AD",
+      "from": 1326,
+      "to": 1326,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Bursa"
+    },
+    {
+      "titolo_evento_it": "Sbarco e presa di Gallipoli",
+      "title_event_en": "Landing and seizure of Gallipoli",
+      "era": "AD",
+      "from": 1354,
+      "to": 1354,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Gallipoli"
+    },
+    {
+      "titolo_evento_it": "Battaglia del Kosovo",
+      "title_event_en": "Battle of Kosovo",
+      "era": "AD",
+      "from": 1389,
+      "to": 1389,
+      "continent": "Europe",
+      "country": "Kosovo",
+      "location": "Kosovo Polje (Pristina)"
+    },
+    {
+      "titolo_evento_it": "Battaglia di Nicopoli",
+      "title_event_en": "Battle of Nicopolis",
+      "era": "AD",
+      "from": 1396,
+      "to": 1396,
+      "continent": "Europe",
+      "country": "Bulgaria",
+      "location": "Nikopol"
+    },
+    {
+      "titolo_evento_it": "Interregno ottomano dopo Ankara",
+      "title_event_en": "Ottoman Interregnum after Ankara",
+      "era": "AD",
+      "from": 1402,
+      "to": 1413,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Ankara"
+    },
+    {
+      "titolo_evento_it": "Caduta di Costantinopoli",
+      "title_event_en": "Fall of Constantinople",
+      "era": "AD",
+      "from": 1453,
+      "to": 1453,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Constantinople (Istanbul)"
+    },
+    {
+      "titolo_evento_it": "Conquista della Bosnia",
+      "title_event_en": "Conquest of Bosnia",
+      "era": "AD",
+      "from": 1463,
+      "to": 1463,
+      "continent": "Europe",
+      "country": "Bosnia and Herzegovina",
+      "location": "Jajce"
+    },
+    {
+      "titolo_evento_it": "Battaglia di Çaldıran",
+      "title_event_en": "Battle of Chaldiran",
+      "era": "AD",
+      "from": 1514,
+      "to": 1514,
       "continent": "Asia",
       "country": "Iran",
-      "location": "Ecbatana"
+      "location": "Chaldiran"
     },
     {
-      "titolo_evento_it": "Caduta della Lidia: presa di Sardi",
-      "title_event_en": "Fall of Lydia: Capture of Sardis",
-      "era": "BC",
-      "from": 546,
-      "to": 546,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Sardis"
-    },
-    {
-      "titolo_evento_it": "Fondazione e sviluppo di Pasargadae",
-      "title_event_en": "Founding and development of Pasargadae",
-      "era": "BC",
-      "from": 546,
-      "to": 530,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Pasargadae"
-    },
-    {
-      "titolo_evento_it": "Presa di Babilonia da parte di Ciro",
-      "title_event_en": "Capture of Babylon by Cyrus",
-      "era": "BC",
-      "from": 539,
-      "to": 539,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Babylon"
-    },
-    {
-      "titolo_evento_it": "Cambise II conquista l’Egitto alla battaglia di Pelusio",
-      "title_event_en": "Cambyses II conquers Egypt at the Battle of Pelusium",
-      "era": "BC",
-      "from": 525,
-      "to": 525,
+      "titolo_evento_it": "Sconfitta dei Mamelucchi e conquista di Siria ed Egitto",
+      "title_event_en": "Defeat of the Mamluks and the conquest of Syria and Egypt",
+      "era": "AD",
+      "from": 1516,
+      "to": 1517,
       "continent": "Africa",
-      "country": "Egitto",
-      "location": "Pelusium"
+      "country": "Egypt",
+      "location": "Cairo"
     },
     {
-      "titolo_evento_it": "Dario I istituisce le satrapie e riorganizza l’impero",
-      "title_event_en": "Darius I establishes satrapies and reorganizes the empire",
-      "era": "BC",
-      "from": 522,
-      "to": 486,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Susa"
-    },
-    {
-      "titolo_evento_it": "Persepoli: avvio e fioritura del complesso palaziale achemenide",
-      "title_event_en": "Persepolis: inception and flourishing of the Achaemenid palace complex",
-      "era": "BC",
-      "from": 518,
-      "to": 470,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Persepolis"
-    },
-    {
-      "titolo_evento_it": "Rivolta ionica contro il dominio persiano",
-      "title_event_en": "Ionian Revolt against Persian rule",
-      "era": "BC",
-      "from": 499,
-      "to": 493,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Miletus"
-    },
-    {
-      "titolo_evento_it": "Prima guerra persiana: sconfitta a Maratona",
-      "title_event_en": "First Persian War: defeat at Marathon",
-      "era": "BC",
-      "from": 490,
-      "to": 490,
+      "titolo_evento_it": "Apogeo sotto Solimano il Magnifico",
+      "title_event_en": "Apex under Suleiman the Magnificent",
+      "era": "AD",
+      "from": 1520,
+      "to": 1566,
       "continent": "Europe",
-      "country": "Grecia",
-      "location": "Marathon"
+      "country": "Turkey",
+      "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Seconda guerra persiana: le Termopili",
-      "title_event_en": "Second Persian War: Thermopylae",
-      "era": "BC",
-      "from": 480,
-      "to": 480,
+      "titolo_evento_it": "Primo assedio di Vienna",
+      "title_event_en": "First Siege of Vienna",
+      "era": "AD",
+      "from": 1529,
+      "to": 1529,
       "continent": "Europe",
-      "country": "Grecia",
-      "location": "Thermopylae"
+      "country": "Austria",
+      "location": "Vienna"
     },
     {
-      "titolo_evento_it": "Svolta navale a Salamina",
-      "title_event_en": "Naval turning point at Salamis",
-      "era": "BC",
-      "from": 480,
-      "to": 480,
+      "titolo_evento_it": "Capitolazioni con la Francia",
+      "title_event_en": "Capitulations with France",
+      "era": "AD",
+      "from": 1536,
+      "to": 1536,
       "continent": "Europe",
-      "country": "Grecia",
-      "location": "Salamis"
+      "country": "Turkey",
+      "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Crollo dell’offensiva persiana a Platea",
-      "title_event_en": "Collapse of the Persian offensive at Plataea",
-      "era": "BC",
-      "from": 479,
-      "to": 479,
+      "titolo_evento_it": "Battaglia di Lepanto",
+      "title_event_en": "Battle of Lepanto",
+      "era": "AD",
+      "from": 1571,
+      "to": 1571,
       "continent": "Europe",
-      "country": "Grecia",
-      "location": "Plataea"
+      "country": "Greece",
+      "location": "Lepanto (Nafpaktos)"
     },
     {
-      "titolo_evento_it": "Rivolta di Inaro e crisi persiana in Egitto",
-      "title_event_en": "Inaros’ revolt and Persian crisis in Egypt",
-      "era": "BC",
-      "from": 460,
-      "to": 454,
-      "continent": "Africa",
-      "country": "Egitto",
-      "location": "Memphis"
-    },
-    {
-      "titolo_evento_it": "Cunassa e l’Anabasi dei Diecimila",
-      "title_event_en": "Cunaxa and the Anabasis of the Ten Thousand",
-      "era": "BC",
-      "from": 401,
-      "to": 401,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Cunaxa"
-    },
-    {
-      "titolo_evento_it": "La Grande rivolta dei satrapi",
-      "title_event_en": "The Great Satraps' Revolt",
-      "era": "BC",
-      "from": 366,
-      "to": 360,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Sardis"
-    },
-    {
-      "titolo_evento_it": "Alessandro entra in Asia: vittoria al Granico",
-      "title_event_en": "Alexander enters Asia: victory at the Granicus",
-      "era": "BC",
-      "from": 334,
-      "to": 334,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Granicus River"
-    },
-    {
-      "titolo_evento_it": "Schiacciante successo macedone a Isso",
-      "title_event_en": "Decisive Macedonian victory at Issus",
-      "era": "BC",
-      "from": 333,
-      "to": 333,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Issus"
-    },
-    {
-      "titolo_evento_it": "Gaugamela: fine del potere achemenide",
-      "title_event_en": "Gaugamela: end of Achaemenid power",
-      "era": "BC",
-      "from": 331,
-      "to": 331,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Gaugamela"
-    },
-    {
-      "titolo_evento_it": "Incendio e saccheggio di Persepoli",
-      "title_event_en": "Burning and sack of Persepolis",
-      "era": "BC",
-      "from": 330,
-      "to": 330,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Persepolis"
-    },
-    {
-      "titolo_evento_it": "Nascita del potere partico: Arsacidi indipendenti",
-      "title_event_en": "Rise of Parthian power: Arsacids gain independence",
-      "era": "BC",
-      "from": 247,
-      "to": 224,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Hecatompylos"
-    },
-    {
-      "titolo_evento_it": "Ardashir I sconfigge i Parti a Hormozdgan e fonda i Sasanidi",
-      "title_event_en": "Ardashir I defeats the Parthians at Hormozdgan and founds the Sasanians",
+      "titolo_evento_it": "Lunga guerra contro gli Asburgo",
+      "title_event_en": "Long Turkish War against the Habsburgs",
       "era": "AD",
-      "from": 224,
-      "to": 224,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Hormozdgan"
+      "from": 1593,
+      "to": 1606,
+      "continent": "Europe",
+      "country": "Hungary",
+      "location": "Eger"
     },
     {
-      "titolo_evento_it": "Shapur I cattura l’imperatore Valeriano a Edessa",
-      "title_event_en": "Shapur I captures Emperor Valerian at Edessa",
+      "titolo_evento_it": "Trattato di Karlowitz",
+      "title_event_en": "Treaty of Karlowitz",
       "era": "AD",
-      "from": 260,
-      "to": 260,
-      "continent": "Asia",
-      "country": "Turchia",
-      "location": "Edessa"
+      "from": 1699,
+      "to": 1699,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Sremski Karlovci"
     },
     {
-      "titolo_evento_it": "Riforme e rinascita sotto Cosroe I",
-      "title_event_en": "Reforms and renewal under Khosrow I",
+      "titolo_evento_it": "Età dei Tulipani",
+      "title_event_en": "Tulip Era",
       "era": "AD",
-      "from": 531,
-      "to": 579,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Ctesiphon"
+      "from": 1718,
+      "to": 1730,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Guerra bizantino-sasanide: apogeo e crisi dell’impero",
-      "title_event_en": "Byzantine–Sasanian War: zenith and crisis of the empire",
+      "titolo_evento_it": "Trattato di Küçük Kaynarca",
+      "title_event_en": "Treaty of Küçük Kaynarca",
       "era": "AD",
-      "from": 602,
-      "to": 628,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Ctesiphon"
+      "from": 1774,
+      "to": 1774,
+      "continent": "Europe",
+      "country": "Bulgaria",
+      "location": "Küçük Kaynarca"
     },
     {
-      "titolo_evento_it": "Al-Qadisiyya: svolta della conquista araba della Persia",
-      "title_event_en": "Al-Qadisiyyah: turning point in the Arab conquest of Persia",
+      "titolo_evento_it": "Riforme del Tanzimat",
+      "title_event_en": "Tanzimat reforms",
       "era": "AD",
-      "from": 636,
-      "to": 636,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Al-Qadisiyyah"
+      "from": 1839,
+      "to": 1876,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Gülhane Park, Istanbul"
     },
     {
-      "titolo_evento_it": "Caduta di Ctesifonte in mano araba",
-      "title_event_en": "Fall of Ctesiphon to the Arabs",
+      "titolo_evento_it": "Guerra di Crimea",
+      "title_event_en": "Crimean War",
       "era": "AD",
-      "from": 637,
-      "to": 637,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Ctesiphon"
+      "from": 1853,
+      "to": 1856,
+      "continent": "Europe",
+      "country": "Ukraine",
+      "location": "Sevastopol"
     },
     {
-      "titolo_evento_it": "Morte di Yazdegerd III a Merv e fine dell’impero sasanide",
-      "title_event_en": "Death of Yazdegerd III at Merv and the end of the Sasanian Empire",
+      "titolo_evento_it": "Guerra russo-turca",
+      "title_event_en": "Russo-Turkish War",
       "era": "AD",
-      "from": 651,
-      "to": 651,
+      "from": 1877,
+      "to": 1878,
+      "continent": "Europe",
+      "country": "Bulgaria",
+      "location": "Pleven"
+    },
+    {
+      "titolo_evento_it": "Congresso di Berlino",
+      "title_event_en": "Congress of Berlin",
+      "era": "AD",
+      "from": 1878,
+      "to": 1878,
+      "continent": "Europe",
+      "country": "Germany",
+      "location": "Berlin"
+    },
+    {
+      "titolo_evento_it": "Rivoluzione dei Giovani Turchi",
+      "title_event_en": "Young Turk Revolution",
+      "era": "AD",
+      "from": 1908,
+      "to": 1908,
+      "continent": "Europe",
+      "country": "Greece",
+      "location": "Salonika (Thessaloniki)"
+    },
+    {
+      "titolo_evento_it": "Guerre balcaniche e perdite territoriali",
+      "title_event_en": "Balkan Wars and territorial losses",
+      "era": "AD",
+      "from": 1912,
+      "to": 1913,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Edirne (Adrianople)"
+    },
+    {
+      "titolo_evento_it": "Campagna di Gallipoli",
+      "title_event_en": "Gallipoli Campaign",
+      "era": "AD",
+      "from": 1915,
+      "to": 1916,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Gallipoli Peninsula"
+    },
+    {
+      "titolo_evento_it": "Rivolta araba nel Hijaz",
+      "title_event_en": "Arab Revolt in the Hejaz",
+      "era": "AD",
+      "from": 1916,
+      "to": 1918,
       "continent": "Asia",
-      "country": "Turkmenistan",
-      "location": "Merv"
+      "country": "Saudi Arabia",
+      "location": "Mecca"
+    },
+    {
+      "titolo_evento_it": "Armistizio di Mudros",
+      "title_event_en": "Armistice of Mudros",
+      "era": "AD",
+      "from": 1918,
+      "to": 1918,
+      "continent": "Europe",
+      "country": "Greece",
+      "location": "Mudros (Lemnos)"
+    },
+    {
+      "titolo_evento_it": "Abolizione del sultanato ottomano",
+      "title_event_en": "Abolition of the Ottoman sultanate",
+      "era": "AD",
+      "from": 1922,
+      "to": 1922,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Ankara"
+    },
+    {
+      "titolo_evento_it": "Trattato di Losanna e fine dell’Impero",
+      "title_event_en": "Treaty of Lausanne and the end of the Empire",
+      "era": "AD",
+      "from": 1923,
+      "to": 1923,
+      "continent": "Europe",
+      "country": "Switzerland",
+      "location": "Lausanne"
     }
   ]
 }

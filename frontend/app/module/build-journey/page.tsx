@@ -2339,7 +2339,7 @@ export default function BuildJourneyPage() {
     const eventTitleKeys = ["title", "name", "titolo"];
     const eventDescShortKeys = ["description_short", "summary", "descrizione_breve"];
     const eventDescKeys = ["description", "details", "descrizione"];
-    const eventEraKeys = ["era", "periodo"];
+    const eventEraKeys = ["era", "periodo", "era (ad|bc)", "era ad/bc", "era ad bc"];
     const eventYearFromKeys = ["year_from", "from", "from (year)", "start_year", "anno_da", "inizio"];
     const eventYearToKeys = ["year_to", "to", "to (year)", "end_year", "anno_a", "fine"];
     const eventExactDateKeys = ["exact_date", "date", "data", "event date", "event date (dd/mm/yyyy)", "data evento"];
@@ -3340,35 +3340,42 @@ export default function BuildJourneyPage() {
             )}
           </div>
           <div className="order-1 ml-auto flex w-full flex-wrap items-center gap-2 justify-start sm:order-2 sm:w-auto sm:flex-nowrap sm:justify-end">
-            {isAdminProfile && (
-              <button
-                type="button"
-                className="h-8 w-full sm:w-28 rounded-full border border-emerald-200 bg-white px-2.5 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
-                onClick={openNewJourneyModal}
-              >
-                New Journey
-              </button>
-            )}
+            <div className="flex w-full flex-col gap-1.5 rounded-2xl border border-neutral-200 bg-white/80 px-3 py-1.5 shadow-sm sm:w-auto">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-neutral-500">
+                {tUI(langCode, "build.actions.create_journey_group")}
+              </p>
+              <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+                {isAdminProfile && (
+                  <button
+                    type="button"
+                    className="h-8 w-full sm:w-[78px] rounded-full border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
+                    onClick={openNewJourneyModal}
+                  >
+                    AI
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="h-8 w-full sm:w-[70px] rounded-full border border-sky-200 bg-white px-2 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
+                  onClick={handleNewJourney}
+                >
+                  {tUI(langCode, "build.actions.new")}
+                </button>
+                <button
+                  type="button"
+                  className="h-8 w-full sm:w-[70px] rounded-full border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 shadow-sm hover:border-amber-300 hover:bg-amber-50 text-center"
+                  onClick={() => {
+                    resetImportState();
+                    setImportModalOpen(true);
+                  }}
+                >
+                  {tUI(langCode, "build.actions.import")}
+                </button>
+              </div>
+            </div>
             <button
               type="button"
-              className="h-8 w-full sm:w-24 rounded-full border border-sky-200 bg-white px-2.5 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
-              onClick={handleNewJourney}
-            >
-              {tUI(langCode, "build.actions.new")}
-            </button>
-            <button
-              type="button"
-              className="h-8 w-full sm:w-24 rounded-full border border-amber-200 bg-white px-2.5 text-[11px] font-semibold text-amber-700 shadow-sm hover:border-amber-300 hover:bg-amber-50 text-center"
-              onClick={() => {
-                resetImportState();
-                setImportModalOpen(true);
-              }}
-            >
-              {tUI(langCode, "build.actions.import")}
-            </button>
-            <button
-              type="button"
-              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className={`h-8 w-full sm:w-20 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 canSaveJourney && !saving
                   ? "bg-gradient-to-r from-sky-600 to-sky-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -3380,7 +3387,7 @@ export default function BuildJourneyPage() {
             </button>
             <button
               type="button"
-              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className={`h-8 w-full sm:w-20 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 selectedJourneyId && !approvalSaving
                   ? "bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -3392,7 +3399,7 @@ export default function BuildJourneyPage() {
             </button>
             <button
               type="button"
-              className={`h-8 w-full sm:w-24 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
+              className={`h-8 w-full sm:w-20 rounded-full px-2.5 text-[11px] font-semibold shadow-md transition text-center ${
                 selectedJourneyId && !deleting
                   ? "bg-gradient-to-r from-red-600 to-rose-500 text-white hover:shadow-lg"
                   : "bg-neutral-200 text-neutral-500"
@@ -3614,110 +3621,8 @@ export default function BuildJourneyPage() {
                       key={media.id ?? media.media_id ?? media.tempId ?? index}
                       className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4"
                     >
-                      <div className="grid gap-3 items-end md:grid-cols-2 xl:grid-cols-[80px_minmax(180px,_2fr)_minmax(150px,_1fr)_minmax(120px,_0.9fr)]">
-                        <Input
-                          label={tUI(langCode, "build.media.order")}
-                          type="number"
-                          className="w-20"
-                          value={(media.sort_order ?? position).toString()}
-                          onChange={(value) =>
-                            updateMediaItemField(safeIndex, "sort_order", value ? Number(value) : undefined)
-                          }
-                        />
-                        <Input
-                          label={tUI(langCode, "build.media.title")}
-                          value={media.title}
-                          onChange={(value) => updateMediaItemField(safeIndex, "title", value)}
-                          placeholder={tUI(langCode, "build.media.title.placeholder")}
-                        />
-                        <Select
-                          label={isItalian ? "Ruolo" : "Role"}
-                          value={media.role ?? ""}
-                          onChange={(value) => updateMediaItemField(safeIndex, "role", value)}
-                          options={mediaRoleOptions}
-                        />
-                        <Select
-                          label={tUI(langCode, "build.media.type")}
-                          value={media.kind}
-                          onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
-                          options={mediaKindOptions}
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-red-600 ml-auto"
-                          onClick={() => removeMediaItem(safeIndex)}
-                        >
-                          {tUI(langCode, "build.media.delete")}
-                        </button>
-                      </div>
-                      <div className="grid gap-4 md:grid-cols-[1.5fr_minmax(220px,_1fr)] items-start">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-neutral-600">
-                            {isItalian ? "Sorgente" : "Source"}
-                          </span>
-                          {(["url", "file"] as const).map((mode) => {
-                            const active = (media.sourceType || "url") === mode;
-                            return (
-                              <button
-                                key={mode}
-                                type="button"
-                                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                                  active
-                                    ? "border-sky-500 bg-sky-50 text-sky-700"
-                                    : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
-                                }`}
-                                onClick={() =>
-                                  updateMediaItemField(safeIndex, "sourceType", mode as "url" | "file")
-                                }
-                              >
-                                {mode === "url" ? "URL" : isItalian ? "File locale" : "Upload file"}
-                              </button>
-                            );
-                          })}
-                          {media.role === "cover" && (
-                            <span className="text-[11px] text-neutral-500">
-                              {isItalian ? "Solo immagini" : "Images only"}
-                            </span>
-                          )}
-                          {(media.sourceType || "url") === "url" ? (
-                            <div className="flex-1">
-                              <Input
-                                label={tUI(langCode, "build.media.public_url")}
-                                value={media.public_url || media.source_url || ""}
-                                onChange={(value) =>
-                                  setGroupEventMedia((prev) =>
-                                    prev.map((item, idx) =>
-                                      idx === safeIndex
-                                        ? { ...item, public_url: value, source_url: value }
-                                        : item,
-                                    ),
-                                  )
-                                }
-                                placeholder={tUI(langCode, "build.media.url.placeholder")}
-                              />
-                            </div>
-                          ) : (
-                            <div className="flex-1 space-y-2">
-                              <input
-                                type="file"
-                                accept={buildAcceptFromKind(media.kind)}
-                                onChange={(e) => handleGroupMediaFileChange(safeIndex, e.target.files?.[0] || null)}
-                                className="block w-full text-sm text-neutral-700 file:mr-3 file:rounded-lg file:border file:border-neutral-200 file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-neutral-700 hover:file:border-neutral-300"
-                              />
-                              {media.localFile && (
-                                <p className="text-xs text-neutral-500">
-                                  {media.localFile.name} ({Math.round(media.localFile.size / 1024)} KB)
-                                </p>
-                              )}
-                              {media.uploadError && (
-                                <p className="text-xs text-red-600">{media.uploadError}</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 p-3 h-36">
+                      <div className="grid gap-3 md:grid-cols-[minmax(220px,_288px)_1fr] items-start">
+                        <div className="rounded-xl border border-dashed border-neutral-200 bg-neutral-50/60 p-3 w-full aspect-[9/5]">
                           {(() => {
                             const previewUrl = previewUrlFromMedia(media);
                             if (!previewUrl) {
@@ -3742,6 +3647,110 @@ export default function BuildJourneyPage() {
                               />
                             );
                           })()}
+                        </div>
+                        <div className="space-y-3">
+                          <div className="grid gap-3 items-end md:grid-cols-2 xl:grid-cols-[80px_minmax(180px,_2fr)_minmax(150px,_1fr)_minmax(120px,_0.9fr)]">
+                            <Input
+                              label={tUI(langCode, "build.media.order")}
+                              type="number"
+                              className="w-20"
+                              value={(media.sort_order ?? position).toString()}
+                              onChange={(value) =>
+                                updateMediaItemField(safeIndex, "sort_order", value ? Number(value) : undefined)
+                              }
+                            />
+                            <Input
+                              label={tUI(langCode, "build.media.title")}
+                              value={media.title}
+                              onChange={(value) => updateMediaItemField(safeIndex, "title", value)}
+                              placeholder={tUI(langCode, "build.media.title.placeholder")}
+                            />
+                            <Select
+                              label={isItalian ? "Ruolo" : "Role"}
+                              value={media.role ?? ""}
+                              onChange={(value) => updateMediaItemField(safeIndex, "role", value)}
+                              options={mediaRoleOptions}
+                            />
+                            <Select
+                              label={tUI(langCode, "build.media.type")}
+                              value={media.kind}
+                              onChange={(value) => updateMediaItemField(safeIndex, "kind", value as MediaKind)}
+                              options={mediaKindOptions}
+                            />
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-semibold text-neutral-600">
+                              {isItalian ? "Sorgente" : "Source"}
+                            </span>
+                            {(["url", "file"] as const).map((mode) => {
+                              const active = (media.sourceType || "url") === mode;
+                              return (
+                                <button
+                                  key={mode}
+                                  type="button"
+                                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                    active
+                                      ? "border-sky-500 bg-sky-50 text-sky-700"
+                                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+                                  }`}
+                                  onClick={() =>
+                                    updateMediaItemField(safeIndex, "sourceType", mode as "url" | "file")
+                                  }
+                                >
+                                  {mode === "url" ? "URL" : isItalian ? "File locale" : "Upload file"}
+                                </button>
+                              );
+                            })}
+                          {media.role === "cover" && (
+                            <span className="text-[11px] text-neutral-500">
+                              {isItalian ? "Solo immagini" : "Images only"}
+                            </span>
+                          )}
+                          {(media.sourceType || "url") === "url" && (
+                            <input
+                              type="url"
+                              className="h-9 w-full max-w-[360px] flex-1 rounded-xl border border-neutral-200 bg-white/80 px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/70"
+                              aria-label={tUI(langCode, "build.media.public_url")}
+                              value={media.public_url || media.source_url || ""}
+                              onChange={(e) =>
+                                setGroupEventMedia((prev) =>
+                                  prev.map((item, idx) =>
+                                    idx === safeIndex
+                                      ? { ...item, public_url: e.target.value, source_url: e.target.value }
+                                      : item,
+                                  ),
+                                )
+                              }
+                              placeholder={tUI(langCode, "build.media.url.placeholder")}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-red-600 ml-auto"
+                            onClick={() => removeMediaItem(safeIndex)}
+                          >
+                            {tUI(langCode, "build.media.delete")}
+                          </button>
+                        </div>
+                        {(media.sourceType || "url") === "file" && (
+                          <div className="w-full space-y-2">
+                            <input
+                              type="file"
+                              accept={buildAcceptFromKind(media.kind)}
+                              onChange={(e) => handleGroupMediaFileChange(safeIndex, e.target.files?.[0] || null)}
+                                className="block w-full text-sm text-neutral-700 file:mr-3 file:rounded-lg file:border file:border-neutral-200 file:bg-white file:px-3 file:py-2 file:text-sm file:font-semibold file:text-neutral-700 hover:file:border-neutral-300"
+                              />
+                              {media.localFile && (
+                                <p className="text-xs text-neutral-500">
+                                  {media.localFile.name} ({Math.round(media.localFile.size / 1024)} KB)
+                                </p>
+                              )}
+                              {media.uploadError && (
+                                <p className="text-xs text-red-600">{media.uploadError}</p>
+                              )}
+                            </div>
+                          )
+                        }
                         </div>
                       </div>
                     </div>

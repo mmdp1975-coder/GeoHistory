@@ -54,7 +54,7 @@ type GeWithCard = {
   ratings_count: number | null;
 };
 
-const DEFAULT_FROM = -3000;
+const DEFAULT_FROM = -5000;
 const DEFAULT_TO = 2025;
 
 const BRAND_BLUE = "#0b3b60";
@@ -269,7 +269,7 @@ export default function TimelinePage() {
         if (!cancelled) {
           setDataMin(minY);
           setDataMax(maxY);
-          setFromYear(minY);
+          setFromYear(Math.max(minY, DEFAULT_FROM));
           setToYear(maxY);
         }
       } catch (e: any) {
@@ -633,7 +633,9 @@ export default function TimelinePage() {
   );
 
   const MIN_SPAN = 1;
-  const ZOOM_GAIN = 2;
+  const ZOOM_GAIN_MIN = 2;
+  const ZOOM_GAIN_MAX = 6;
+  const PAN_GAIN_MAX = 15;
 
   function pxToYears(
     dxPx: number,
@@ -643,6 +645,18 @@ export default function TimelinePage() {
   ) {
     if (barWidthPx <= 0) return 0;
     return (dxPx / barWidthPx) * baseSpan * gain;
+  }
+
+  function dynamicGain(
+    spanYears: number,
+    minGain: number,
+    maxGain: number
+  ) {
+    const s = Math.max(1, spanYears);
+    const gain = Math.log10(s);
+    if (gain < minGain) return minGain;
+    if (gain > maxGain) return maxGain;
+    return gain;
   }
 
   function startPan(e: React.PointerEvent) {
@@ -679,7 +693,8 @@ export default function TimelinePage() {
 
     if (mode === "pan") {
       const currentSpan = Math.max(1, curTo - curFrom);
-      const dYears = pxToYears(dx, barWidth, currentSpan, 1);
+      const panGain = dynamicGain(currentSpan, 1, PAN_GAIN_MAX);
+      const dYears = pxToYears(dx, barWidth, currentSpan, panGain);
       let nextFrom = curFrom + dYears;
       let nextTo = curTo + dYears;
 
@@ -703,7 +718,12 @@ export default function TimelinePage() {
     }
 
     const currentSpan = Math.max(1, curTo - curFrom);
-    const dYears = pxToYears(dx, barWidth, currentSpan, ZOOM_GAIN);
+    const zoomGain = dynamicGain(
+      currentSpan,
+      ZOOM_GAIN_MIN,
+      ZOOM_GAIN_MAX
+    );
+    const dYears = pxToYears(dx, barWidth, currentSpan, zoomGain);
 
     if (activeThumb === "left") {
       let nextFrom = curFrom + dYears;
