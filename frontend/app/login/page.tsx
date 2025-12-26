@@ -124,13 +124,11 @@ export default function LoginPage() {
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    const play = () => {
-      el.play().catch(() => {
-        /* autoplay can be blocked until user interacts */
-      });
-    };
-    play();
-  }, []);
+    el.load();
+    el.play().catch(() => {
+      /* autoplay can be blocked until user interacts */
+    });
+  }, [videoSrc]);
 
   // 🔹 Submit con redirect immediato e fallback
   async function handleSubmit(event: React.FormEvent) {
@@ -187,6 +185,7 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={styles.bg} />
       <video
+        key={videoSrc}
         ref={videoRef}
         className={styles.video}
         autoPlay
