@@ -21,6 +21,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [videoMuted, setVideoMuted] = useState(true);
+  const [videoSrc, setVideoSrc] = useState("/GHJLogin/GHJLogin_EN.mp4");
   const [isMobile, setIsMobile] = useState(false);
   const [formOpen, setFormOpen] = useState(true);
 
@@ -110,6 +111,13 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
+    const lang = (navigator.language || "en").toLowerCase();
+    setVideoSrc(
+      lang.startsWith("it") ? "/GHJLogin/GHJLogin_IT.mp4" : "/GHJLogin/GHJLogin_EN.mp4",
+    );
+  }, []);
+
+  useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     const play = () => {
@@ -183,7 +191,7 @@ export default function LoginPage() {
         playsInline
         aria-hidden="true"
       >
-        <source src="/GHJLogin/GHJLogin.mp4" type="video/mp4" />
+        <source src={videoSrc} type="video/mp4" />
       </video>
       <div className={styles.veil} />
 
