@@ -111,10 +111,14 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    const lang = (navigator.language || "en").toLowerCase();
-    setVideoSrc(
-      lang.startsWith("it") ? "/GHJLogin/GHJLogin_IT.mp4" : "/GHJLogin/GHJLogin_EN.mp4",
-    );
+    const primary = (navigator.language || "en").toLowerCase();
+    const list = (navigator.languages || []).map((l) => l.toLowerCase());
+    const isItalian = primary.startsWith("it") || list.some((l) => l.startsWith("it"));
+    const resolvedSrc = isItalian
+      ? "/GHJLogin/GHJLogin_IT.mp4"
+      : "/GHJLogin/GHJLogin_EN.mp4";
+    console.log("[login-video] language", { primary, list, resolvedSrc });
+    setVideoSrc(resolvedSrc);
   }, []);
 
   useEffect(() => {
@@ -190,6 +194,11 @@ export default function LoginPage() {
         loop
         playsInline
         aria-hidden="true"
+        onLoadedMetadata={() => {
+          const el = videoRef.current;
+          const currentSrc = el?.currentSrc;
+          console.log("[login-video] loaded metadata", { currentSrc });
+        }}
       >
         <source src={videoSrc} type="video/mp4" />
       </video>
