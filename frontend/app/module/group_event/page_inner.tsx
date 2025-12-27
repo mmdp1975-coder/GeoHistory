@@ -2140,28 +2140,6 @@ const mapTextureStyle: CSSProperties = {
  <h1 className="text-base lg:text-xl font-semibold text-slate-900 leading-snug break-words whitespace-pre-line line-clamp-2">
  {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
  </h1>
- <div className="mt-2">
-   <div className="w-full max-w-[260px]">
-     {journeyAndEventMedia?.length ? (
-       <MediaBox
-         items={journeyAndEventMedia}
-         firstPreview={journeyMediaFirst || undefined}
-         onOpenOverlay={openOverlay}
-         hideHeader
-         height={isLg ? "sm" : "sm"}
-         compact
-         hoverPreviewList
-         alwaysShowList
-         hoverPreviewDirection="vertical"
-         listMaxHeight="100%"
-       />
-     ) : (
-       <div className="h-[88px] w-full rounded-xl bg-slate-100 flex items-center justify-center text-xs text-slate-500">
-         Nessun media del journey
-       </div>
-     )}
-   </div>
- </div>
  <div className="mt-2 flex items-center gap-2">
           <button
             onClick={toggleFavourite}
@@ -2206,6 +2184,12 @@ const mapTextureStyle: CSSProperties = {
           </button>
  {/* Link "Apri pagina" rimosso */}
 
+ </div>
+ <div
+   className="mt-2 max-h-[22svh] overflow-y-auto pr-1 text-[12.5px] leading-5 text-gray-700 whitespace-pre-wrap text-justify"
+   style={{ scrollbarWidth: "thin" }}
+ >
+   {journeyDescription || "Nessuna descrizione disponibile."}
  </div>
  {/* Nuovo layout: Nav + Griglia 2 colonne (descrizione / media+sezioni) */}
   <div className="hidden flex items-center justify-end gap-2 mb-3">
@@ -2429,93 +2413,6 @@ const mapTextureStyle: CSSProperties = {
  <div className="mx-auto w-full max-w-[820px]">
 <div className={`${BOX_3D} flex flex-col gap-2`}>
   <Collapsible
-    title="Media evento"
-    defaultOpen={false}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )}
-  >
-    <MediaBox
-      items={selectedEvent?.event_media ?? []}
-      firstPreview={selectedEvent?.event_media_first || undefined}
-      onOpenOverlay={openOverlay}
-      compact
-      height="sm"
-      hoverPreviewList
-      hoverPreviewDirection="horizontal"
-    />
-  </Collapsible>
-
-  <Collapsible
-    title={tUI(uiLang, "journey.related.title")}
-    badge={related?.length ? related.length : undefined}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1.5 1.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6L13.5 17" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )}
-  >
-    {related?.length ? (
-      <div className="space-y-1.5 max-h-[32svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
-        {related.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => router.push(geUrl(r.id))}
-            className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
-            title={r.title ?? r.slug ?? "Open journey"}
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" className="mr-2">
-              <path d="M4 12h5l2-3 2 6 2-3h5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {r.title ?? r.slug ?? "Journey"}
-          </button>
-        ))}
-      </div>
-    ) : (
-      <div className="text-[12.5px] text-gray-600">
-        {tUI(uiLang, "journey.related.none")}
-      </div>
-    )}
-  </Collapsible>
-
-  <Collapsible
-    title={tUI(uiLang, "journey.concurrent.title")}
-    badge={concurrentOther?.length ? concurrentOther.length : undefined}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M5 12h4l2-3 2 6 2-3h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="12" cy="6" r="1.8" fill="currentColor" />
-      </svg>
-    )}
-  >
-    {concurrentOther && concurrentOther.length ? (
-      <div className="space-y-1.5 max-h-[28svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
-        {concurrentOther.map((c) => {
-          const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
-          return (
-            <button
-              key={`${c.geId}:${c.evId}`}
-              onClick={() => router.push(geUrl(c.geId, c.evId))}
-              className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
-              title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
-            >
-              {label ? `${label} - ` : ""}{c.evTitle}
-            </button>
-          );
-        })}
-      </div>
-    ) : (
-      <div className="text-[12.5px] text-gray-600">
-        {tUI(uiLang, "journey.concurrent.none")}
-      </div>
-    )}
-  </Collapsible>
-
-  <Collapsible
     title="Descrizione"
     defaultOpen={false}
     icon={(
@@ -2733,6 +2630,101 @@ Voce mobile di bassa qualita disponibile.
  </div>
  </section>
  </div>
+
+ <section className="bg-white/70 backdrop-blur lg:hidden" style={mapTextureStyle}>
+ <div className="px-4 py-2">
+ <div className="mx-auto w-full max-w-[820px]">
+ <div className={`${BOX_3D} flex flex-col gap-2`}>
+  <Collapsible
+    title={tUI(uiLang, "journey.related.title")}
+    badge={related?.length ? related.length : undefined}
+    icon={(
+       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+         <path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1.5 1.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+         <path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6L13.5 17" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+       </svg>
+     )}
+   >
+     {related?.length ? (
+       <div className="space-y-1.5 max-h-[32svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+         {related.map((r) => (
+           <button
+             key={r.id}
+             onClick={() => router.push(geUrl(r.id))}
+             className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
+             title={r.title ?? r.slug ?? "Open journey"}
+           >
+             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" className="mr-2">
+               <path d="M4 12h5l2-3 2 6 2-3h5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+             </svg>
+             {r.title ?? r.slug ?? "Journey"}
+           </button>
+         ))}
+       </div>
+     ) : (
+       <div className="text-[12.5px] text-gray-600">
+         {tUI(uiLang, "journey.related.none")}
+      </div>
+    )}
+  </Collapsible>
+
+  <Collapsible
+    title={tUI(uiLang, "journey.concurrent.title")}
+     badge={concurrentOther?.length ? concurrentOther.length : undefined}
+     icon={(
+       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+         <path d="M5 12h4l2-3 2 6 2-3h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+         <circle cx="12" cy="6" r="1.8" fill="currentColor" />
+       </svg>
+     )}
+   >
+     {concurrentOther && concurrentOther.length ? (
+       <div className="space-y-1.5 max-h-[28svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
+         {concurrentOther.map((c) => {
+           const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+           return (
+             <button
+               key={`${c.geId}:${c.evId}`}
+               onClick={() => router.push(geUrl(c.geId, c.evId))}
+               className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
+               title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
+             >
+               {label ? `${label} - ` : ""}{c.evTitle}
+             </button>
+           );
+         })}
+       </div>
+     ) : (
+      <div className="text-[12.5px] text-gray-600">
+        {tUI(uiLang, "journey.concurrent.none")}
+      </div>
+    )}
+  </Collapsible>
+
+  <Collapsible
+    title="Media journey"
+    defaultOpen={false}
+    icon={(
+      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )}
+  >
+    <MediaBox
+      items={journeyMedia ?? []}
+      firstPreview={journeyMediaFirst || undefined}
+      onOpenOverlay={openOverlay}
+      compact
+      height="sm"
+      hoverPreviewList
+      hoverPreviewDirection="horizontal"
+    />
+  </Collapsible>
+ </div>
+ </div>
+ </div>
+ </section>
 
    {/* ===== DESKTOP (container allargato) ===== */
 <div className="mx-auto hidden w-full max-w-[120rem] lg:block" style={mapTextureStyle}>
