@@ -17,27 +17,8 @@ export default function RootPage() {
         return;
       }
 
-      // leggo persona_id dal profilo
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("persona_id")
-        .eq("id", user.id)
-        .single<{ persona_id: string | null }>();
-
-      let href = "/landing/FAN"; // fallback sicuro
-
-      if (profile?.persona_id) {
-        const { data: persona } = await supabase
-          .from("personas")
-          .select("code")
-          .eq("id", profile.persona_id)
-          .single<{ code: string | null }>();
-
-        const code = persona?.code?.trim();
-        if (code) href = `/landing/${code}`;
-      }
-
-      router.replace(href);
+      // landing unica: evita rotte persona obsolete (/landing/<code>)
+      router.replace("/module/landing");
     })();
   }, [router, supabase]);
 
