@@ -166,6 +166,9 @@ export default function TopBar() {
   }, [isVideoOpen, shouldAutoplay, volume]);
 
   const isQuiz = pathname?.startsWith('/module/quiz');
+  const guideVideoSrc = langCode.toLowerCase().startsWith('it')
+    ? '/GeoHistoryGuide/GeoHistoryGuide_IT.mp4'
+    : '/GeoHistoryGuide/GeoHistoryGuide_EN.mp4';
 
   return (
     <>
@@ -313,7 +316,7 @@ export default function TopBar() {
             <video
               ref={videoRef}
               className="w-full rounded-lg"
-              src="/GeoHistoryVideo/GeoHistoryIntro.mp4"
+              src={guideVideoSrc}
               controls
               playsInline
             >

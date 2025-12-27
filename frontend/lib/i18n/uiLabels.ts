@@ -88,6 +88,13 @@ const en: UIDictionary = {
   "timeline.search.placeholder": "Type to filter…",
   "timeline.search.clear": "Clear",
   "timeline.search.clear.title": "Clear text and keep only time range",
+  "timeline.visibility.label": "Visibility",
+  "timeline.visibility.all": "All",
+  "timeline.visibility.public": "Public",
+  "timeline.visibility.private": "Private",
+  "timeline.visibility.title.all": "Show all",
+  "timeline.visibility.title.public": "Show public",
+  "timeline.visibility.title.private": "Show private",
   "timeline.no_results":
     "No journeys found. Try changing the timeframe or clearing the search.",
 
@@ -134,6 +141,7 @@ const en: UIDictionary = {
   "journey.back": "Back",
   "journey.title_fallback": "Journey",
   "journey.related_from.fallback": "Origin journey",
+  "journey.concurrent.title": "Contemporary events",
   "journey.concurrent.none": "No concurrent events.",
   "journey.related.title": "Related journeys",
   "journey.related.none": "No related journeys.",
@@ -423,6 +431,13 @@ const it: UIDictionary = {
   "timeline.search.clear": "Pulisci",
   "timeline.search.clear.title":
     "Pulisci il testo e mantieni solo l'intervallo temporale",
+  "timeline.visibility.label": "Visibilita",
+  "timeline.visibility.all": "Tutti",
+  "timeline.visibility.public": "Pubblici",
+  "timeline.visibility.private": "Privati",
+  "timeline.visibility.title.all": "Mostra tutti",
+  "timeline.visibility.title.public": "Mostra pubblici",
+  "timeline.visibility.title.private": "Mostra privati",
   "timeline.no_results":
     "Nessun journey trovato. Prova a modificare il timeframe o svuota la ricerca.",
 
@@ -471,6 +486,7 @@ const it: UIDictionary = {
   "journey.back": "Indietro",
   "journey.title_fallback": "Journey",
   "journey.related_from.fallback": "Journey di provenienza",
+  "journey.concurrent.title": "Eventi contemporanei",
   "journey.concurrent.none": "Nessun evento concomitante.",
   "journey.related.title": "Journey correlati",
   "journey.related.none": "Nessun collegamento.",

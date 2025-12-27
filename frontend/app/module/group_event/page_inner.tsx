@@ -766,8 +766,9 @@ export default function GroupEventModulePage() {
  const { userId } = useCurrentUser();
  const isLg = useIsLg();
 
-const desiredLang = (() => {
-  const qp = sp.get("lang");
+const queryLang = sp.get("lang");
+const [desiredLang, setDesiredLang] = useState<string>(() => {
+  const qp = queryLang;
   if (qp && qp.trim()) return qp.trim().slice(0, 2).toLowerCase();
   if (typeof navigator !== "undefined") {
     const cand = (navigator.languages && navigator.languages.find((l) => !!l)) || navigator.language;
@@ -778,7 +779,54 @@ const desiredLang = (() => {
     if (intl) return intl.slice(0, 2).toLowerCase();
   } catch {}
   return "it";
-})();
+});
+
+useEffect(() => {
+  let active = true;
+  const qp = queryLang;
+  if (qp && qp.trim()) {
+    setDesiredLang(qp.trim().slice(0, 2).toLowerCase());
+    return () => { active = false; };
+  }
+  (async () => {
+    const browserLang =
+      typeof window !== "undefined" ? window.navigator.language : "en";
+    const browserShort = browserLang.slice(0, 2).toLowerCase();
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError) {
+        console.warn("[GE] auth.getUser error:", userError.message);
+      }
+      if (!user) {
+        if (active) setDesiredLang(browserShort);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("language_code")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) {
+        console.warn("[GE] profiles.language_code error:", error.message);
+        if (active) setDesiredLang(browserShort);
+        return;
+      }
+      if (!data || typeof data.language_code !== "string") {
+        if (active) setDesiredLang(browserShort);
+        return;
+      }
+      const dbLang = (data.language_code as string).trim() || browserShort;
+      if (active) setDesiredLang(dbLang.slice(0, 2).toLowerCase());
+    } catch (err: any) {
+      console.warn("[GE] Unexpected error loading language:", err?.message);
+      if (active) setDesiredLang(browserShort);
+    }
+  })();
+  return () => { active = false; };
+}, [queryLang, supabase]);
 
 const [ge, setGe] = useState<AnyObj | null>(null);
 const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string; lang?: string } | null>(null);
@@ -787,6 +835,7 @@ const resolvedLang = useMemo(
   () => geTr?.lang?.toLowerCase?.() || desiredLang,
   [geTr, desiredLang]
 );
+const uiLang = desiredLang || resolvedLang;
 
 const [rows, setRows] = useState<EventVM[]>([]);
 const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
@@ -1262,8 +1311,10 @@ useEffect(() => {
        center: [9.19, 45.46],
        zoom: 4,
        cooperativeGestures: true,
+       attributionControl: false,
      } as any);
      map.addControl(new maplibregl.NavigationControl(), "top-right");
+     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
      mapRef.current = map as any;
      setMapReady(true);
 
@@ -1944,7 +1995,7 @@ if (error) { setConcurrentOther([]); return; }
 
  const pickTitle = (translations: any[], lang: string) => {
    const norm = (v: string | null | undefined) => (v || "").toLowerCase();
-   const order = [lang, "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+   const order = [lang, norm(resolvedLang), "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
    for (const target of order) {
      const found = translations.find((t: any) => norm(t?.lang) === target);
      if (found?.title) return found.title;
@@ -1957,7 +2008,7 @@ const items = (data || []).map((r: any) => {
 const evRow = (r as any).events_list || (r as any);
 const translations = Array.isArray(evRow.event_translations) ? evRow.event_translations : [];
  const title =
-  pickTitle(translations, (resolvedLang || "").toLowerCase()) ||
+  pickTitle(translations, (desiredLang || "").toLowerCase()) ||
   evRow.title ||
   (evRow.location ?? evRow.country ?? evRow.continent ?? "Event");
  const yy: EventVM = {
@@ -2001,7 +2052,7 @@ const translations = Array.isArray(evRow.event_translations) ? evRow.event_trans
  setConcurrentOther(overlapping.slice(0, 20));
  } catch { setConcurrentOther([]); }
  })();
-}, [rows, selectedIndex, gid, supabase, resolvedLang]);
+}, [rows, selectedIndex, gid, supabase, resolvedLang, desiredLang]);
 
 const selectedEvent = rows[selectedIndex];
 const related = (() => {
@@ -2053,6 +2104,33 @@ const mapTextureStyle: CSSProperties = {
  className="flex min-h-screen flex-col"
  style={mapTextureStyle}
  >
+  <style jsx global>{`
+    .maplibregl-ctrl-attrib.maplibregl-compact {
+      font-size: 0;
+      line-height: 0;
+    }
+    .maplibregl-ctrl-attrib.maplibregl-compact:hover {
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button {
+      width: 22px;
+      height: 22px;
+      background: #ffffff;
+      border-radius: 999px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+      background-image: none;
+    }
+    .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button::before {
+      content: "!";
+      display: block;
+      font-size: 14px;
+      line-height: 22px;
+      text-align: center;
+      color: #111827;
+      font-weight: 700;
+    }
+  `}</style>
  {/* ===== HEADER (container allargato) ===== */}
  <section className="border-b border-slate-200 bg-white/95 shadow-sm lg:hidden" style={mapTextureStyle}>
  <div className="mx-auto w-full max-w-[120rem] px-3 py-3 lg:px-8 lg:py-4">
@@ -2167,7 +2245,9 @@ const mapTextureStyle: CSSProperties = {
  </div>
  {/* Eventi contemporanei (MOBILE) - altri journey */}
  <div className="mb-2">
- <div className="text-[12px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+ <div className="text-[12px] font-semibold text-gray-800 mb-1">
+ {tUI(uiLang, "journey.concurrent.title")}
+ </div>
  {concurrentOther && concurrentOther.length ? (
  <div className="h-[150px] overflow-y-auto pr-1 space-y-1.5">
  {concurrentOther.map((c) => {
@@ -2185,7 +2265,9 @@ const mapTextureStyle: CSSProperties = {
  })}
  </div>
  ) : (
- <div className="text-[12px] text-gray-500">Nessun evento concomitante.</div>
+ <div className="text-[12px] text-gray-500">
+ {tUI(uiLang, "journey.concurrent.none")}
+ </div>
  )}
  </div>
  <div className="pt-2 flex items-center gap-3">
@@ -2219,7 +2301,9 @@ const mapTextureStyle: CSSProperties = {
 
           {/* Eventi contemporanei (altri journey) */}
           <div className={`hidden ${BOX_3D} p-3 h-[220px]`}>
-            <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Eventi contemporanei</div>
+            <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
+              {tUI(uiLang, "journey.concurrent.title")}
+            </div>
             {concurrentOther && concurrentOther.length ? (
               <div className="h-[176px] overflow-y-auto pr-1 space-y-1.5">
                 {concurrentOther.map((c) => {
@@ -2237,13 +2321,17 @@ const mapTextureStyle: CSSProperties = {
  })}
  </div>
  ) : (
- <div className="text-[12.5px] text-gray-500">Nessun evento concomitante.</div>
+ <div className="text-[12.5px] text-gray-500">
+ {tUI(uiLang, "journey.concurrent.none")}
+ </div>
  )}
  </div>
 
  {related?.length ? (
  <div className={`${BOX_3D} p-3`}>
- <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
+ <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
+ {tUI(uiLang, "journey.related.title")}
+ </div>
  <div className="flex flex-wrap gap-1.5 h-[150px] overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: 'thin' }}>
  {related.map((r) => (
  <button
@@ -2259,8 +2347,12 @@ const mapTextureStyle: CSSProperties = {
  </div>
  ) : (
  <div className={`${BOX_3D} p-3`}>
- <div className="text-[12.5px] font-semibold text-gray-800 mb-1">Related Journeys</div>
- <div className="text-[12.5px] text-gray-500">Nessun collegamento.</div>
+ <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
+ {tUI(uiLang, "journey.related.title")}
+ </div>
+ <div className="text-[12.5px] text-gray-500">
+ {tUI(uiLang, "journey.related.none")}
+ </div>
  </div>
  )}
  </div>
@@ -2358,7 +2450,7 @@ const mapTextureStyle: CSSProperties = {
   </Collapsible>
 
   <Collapsible
-    title={tUI(resolvedLang, "journey.related.title")}
+    title={tUI(uiLang, "journey.related.title")}
     badge={related?.length ? related.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -2384,12 +2476,14 @@ const mapTextureStyle: CSSProperties = {
         ))}
       </div>
     ) : (
-      <div className="text-[12.5px] text-gray-600">Nessun collegamento disponibile.</div>
+      <div className="text-[12.5px] text-gray-600">
+        {tUI(uiLang, "journey.related.none")}
+      </div>
     )}
   </Collapsible>
 
   <Collapsible
-    title={resolvedLang?.toLowerCase?.().startsWith("en") ? "Contemporary events" : "Eventi contemporanei"}
+    title={tUI(uiLang, "journey.concurrent.title")}
     badge={concurrentOther?.length ? concurrentOther.length : undefined}
     icon={(
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -2415,7 +2509,9 @@ const mapTextureStyle: CSSProperties = {
         })}
       </div>
     ) : (
-      <div className="text-[12.5px] text-gray-600">Nessun evento concomitante.</div>
+      <div className="text-[12.5px] text-gray-600">
+        {tUI(uiLang, "journey.concurrent.none")}
+      </div>
     )}
   </Collapsible>
 
@@ -2775,7 +2871,7 @@ Voce mobile di bassa qualita disponibile.
 
       <div className={`${BOX_3D} p-3 h-[180px] flex flex-col`}>
         <div className="text-[12px] font-semibold text-slate-800">
-          {resolvedLang?.toLowerCase?.().startsWith("en") ? "Contemporary events" : "Eventi contemporanei"}
+          {tUI(uiLang, "journey.concurrent.title")}
         </div>
         {concurrentOther && concurrentOther.length ? (
           <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
@@ -2796,14 +2892,14 @@ Voce mobile di bassa qualita disponibile.
           </div>
         ) : (
  <div className="mt-2 flex flex-1 items-start justify-start rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-  {tUI(resolvedLang, "journey.concurrent.none")}
+  {tUI(uiLang, "journey.concurrent.none")}
  </div>
         )}
       </div>
 
       <div className={`${BOX_3D} p-3 h-[145px] flex flex-col`}>
       <div className="text-[12px] font-semibold text-gray-800">
-        {tUI(resolvedLang, "journey.related.title")}
+        {tUI(uiLang, "journey.related.title")}
       </div>
         {related?.length ? (
           <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
@@ -2819,7 +2915,9 @@ Voce mobile di bassa qualita disponibile.
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">Nessun collegamento.</p>
+          <p className="mt-2 text-sm text-slate-500">
+            {tUI(uiLang, "journey.related.none")}
+          </p>
         )}
       </div>
     </div>

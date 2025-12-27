@@ -789,11 +789,7 @@ export default function TimelinePage() {
                 <span className="text-xs text-white/70">
                   {tUI(langCode, "timeline.header.guest")}
                 </span>
-              ) : (
-                <span className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs">
-                  {personaCode || "USER"}
-                </span>
-              )}
+              ) : null}
 
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1">
@@ -1097,7 +1093,7 @@ export default function TimelinePage() {
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-neutral-700">
-                Visibility
+                {tUI(langCode, "timeline.visibility.label")}
               </span>
               {["all", "public", "private"].map((v) => {
                 const active = visibilityFilter === v;
@@ -1114,13 +1110,12 @@ export default function TimelinePage() {
                         ? "rounded-md border border-neutral-300 bg-neutral-900 px-3 py-1 text-sm text-white"
                         : "rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
                     }
-                    title={`Show ${v}`}
+                    title={tUI(
+                      langCode,
+                      `timeline.visibility.title.${v}`
+                    )}
                   >
-                    {v === "all"
-                      ? "All"
-                      : v === "public"
-                      ? "Public"
-                      : "Private"}
+                    {tUI(langCode, `timeline.visibility.${v}`)}
                   </button>
                 );
               })}
