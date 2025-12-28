@@ -14,6 +14,20 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title,
   description,
+  manifest: "/site.webmanifest",
+  themeColor: "#0f172a",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "GeoHistory",
+    statusBarStyle: "default",
+  },
   openGraph: {
     title,
     description,
