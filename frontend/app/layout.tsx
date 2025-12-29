@@ -1,5 +1,5 @@
 // frontend/app/layout.tsx
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import SupabaseProvider from "./components/SupabaseProvider";
 import IdleLogoutProvider from "./components/IdleLogoutProvider";
@@ -15,7 +15,6 @@ export const metadata: Metadata = {
   title,
   description,
   manifest: "/site.webmanifest",
-  themeColor: "#0f172a",
   icons: {
     icon: [
       { url: "/favicon.ico" },
@@ -50,6 +49,13 @@ export const metadata: Metadata = {
     description,
     images: [ogImageUrl],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

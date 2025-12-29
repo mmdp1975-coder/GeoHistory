@@ -22,29 +22,17 @@ export async function GET() {
   try {
     const supabase = getAdminClient();
 
-    // 1) Tentativo via pg_meta (preferito)
+    // 1) RPC preferita (schema public)
     let names: string[] | null = null;
     try {
-      const { data, error } = await supabase
-        .schema("pg_meta")
-        .from("tables")
-        .select("name, schema")
-        .eq("schema", "public")
-        .order("name", { ascending: true });
-
+      const { data, error } = await supabase.rpc("gh_list_all_tables");
       if (error) throw error;
       names = (data ?? [])
-        .map((r: any) => r?.name as string)
+        .map((r: any) => r?.table_name as string)
         .filter(Boolean);
     } catch {
-      // 2) Fallback via information_schema.tables
-      const { data, error } = await supabase
-        .schema("information_schema")
-        .from("tables")
-        .select("table_name, table_schema")
-        .eq("table_schema", "public")
-        .order("table_name", { ascending: true });
-
+      // 2) Fallback via view (schema public)
+      const { data, error } = await supabase.from("v_admin_tables").select("table_name");
       if (error) throw error;
       names = (data ?? [])
         .map((r: any) => r?.table_name as string)

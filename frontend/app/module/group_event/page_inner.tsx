@@ -2995,11 +2995,6 @@ Voce mobile di bassa qualita disponibile.
       </div>
 
       <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
-        {showNoVoicesWarning && (
-          <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
-            Nessuna voce disponibile in questo browser.
-          </div>
-        )}
         {showLowQualityWarning && (
           <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
             Voce mobile di bassa qualita disponibile.

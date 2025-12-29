@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = createClientComponentClient();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hasAttemptedPlay = useRef(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -184,24 +185,55 @@ export default function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.bg} />
-      <video
-        key={videoSrc}
-        ref={videoRef}
-        className={styles.video}
-        autoPlay
-        muted={videoMuted}
-        loop
-        playsInline
-        aria-hidden="true"
-        onLoadedMetadata={() => {
-          const el = videoRef.current;
-          const currentSrc = el?.currentSrc;
-          console.log("[login-video] loaded metadata", { currentSrc });
-        }}
-      >
-        <source src={videoSrc} type="video/mp4" />
-      </video>
+      <div className={styles.videoWrap} aria-hidden="true">
+        <video
+          key={videoSrc}
+          ref={videoRef}
+          className={styles.video}
+          autoPlay
+          preload="auto"
+          muted={videoMuted}
+          loop
+          controls={false}
+          disablePictureInPicture
+          playsInline
+          aria-hidden="true"
+          onLoadedMetadata={() => {
+            const el = videoRef.current;
+            const currentSrc = el?.currentSrc;
+            console.log("[login-video] loaded metadata", { currentSrc });
+          }}
+          onLoadedData={() => {
+            if (hasAttemptedPlay.current) return;
+            hasAttemptedPlay.current = true;
+            try {
+              const playPromise = videoRef.current?.play();
+              if (playPromise && typeof playPromise.catch === "function") {
+                playPromise.catch(() => {
+                  /* autoplay can be blocked until user interacts */
+                });
+              }
+            } catch {
+              /* autoplay can be blocked until user interacts */
+            }
+          }}
+        >
+          <source src={videoSrc} type="video/mp4" />
+        </video>
+      </div>
       <div className={styles.veil} />
+      {isMobile && (
+        <div className={styles.logoOverlay} aria-hidden="true">
+          <Image
+            className={styles.logoOverlayImage}
+            src="/logo.png"
+            alt=""
+            width={140}
+            height={140}
+            priority
+          />
+        </div>
+      )}
 
       <div
         className={`${styles.card} ${isMobile ? styles.cardMobile : ""} ${

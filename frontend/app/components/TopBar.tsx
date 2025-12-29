@@ -172,20 +172,23 @@ export default function TopBar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-20 bg-white border-b border-slate-200">
-        <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
+      <nav
+        className="sticky top-0 z-20 bg-white border-b border-slate-200"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="mx-auto max-w-7xl px-4 h-16 flex flex-nowrap items-center justify-between">
           {isQuiz ? (
             <>
-              <div className="flex items-end space-x-3">
+              <div className="flex min-w-0 items-end space-x-3">
                 <Image
                   src="/logo.png"
                   alt={tUI(langCode, 'app.title')}
                   width={220}
                   height={64}
                   priority
-                  className="h-10 md:h-12 w-auto"
+                  className="h-10 md:h-12 w-auto flex-none"
                 />
-                <span className="hidden md:inline text-slate-600 text-xs md:text-sm italic mt-2">
+                <span className="topbar-tagline flex-1 min-w-0 truncate text-slate-600 text-xs md:text-sm italic mt-2">
                   {tUI(langCode, 'topbar.motto')}
                 </span>
               </div>
@@ -204,7 +207,7 @@ export default function TopBar() {
               <Link
                 href="/"
                 aria-label={tUI(langCode, 'topbar.logo.ariaLabel')}
-                className="flex items-end space-x-3"
+                className="flex min-w-0 items-end space-x-3"
               >
                 <Image
                   src="/logo.png"
@@ -212,14 +215,14 @@ export default function TopBar() {
                   width={300}
                   height={80}
                   priority
-                  className="h-10 md:h-12 w-auto"
+                  className="h-10 md:h-12 w-auto flex-none"
                 />
-                <span className="hidden md:inline text-slate-600 text-xs md:text-sm italic mt-2">
+                <span className="topbar-tagline flex-1 min-w-0 truncate text-slate-600 text-xs md:text-sm italic mt-2">
                   {tUI(langCode, 'topbar.motto')}
                 </span>
               </Link>
 
-              <div className="flex items-center gap-4 md:gap-6 text-sm md:text-base">
+              <div className="flex min-w-0 flex-nowrap items-center gap-4 md:gap-6 text-sm md:text-base">
                 <button
                   onClick={goHome}
                   className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
@@ -299,6 +302,19 @@ export default function TopBar() {
           )}
         </div>
       </nav>
+
+      <style jsx>{`
+        .topbar-tagline {
+          display: inline-block;
+        }
+
+        @media (max-width: 768px), (max-height: 500px),
+          (orientation: landscape) and (max-width: 900px) {
+          .topbar-tagline {
+            display: none;
+          }
+        }
+      `}</style>
 
       {isVideoOpen && !isQuiz && (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
