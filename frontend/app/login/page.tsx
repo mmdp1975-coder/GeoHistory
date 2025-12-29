@@ -220,20 +220,19 @@ export default function LoginPage() {
         >
           <source src={videoSrc} type="video/mp4" />
         </video>
-      </div>
-      <div className={styles.veil} />
-      {isMobile && (
+        <div className={styles.veil} />
         <div className={styles.logoOverlay} aria-hidden="true">
           <Image
             className={styles.logoOverlayImage}
-            src="/logo.png"
+            src="/logo/logo_white_transparent.png"
             alt=""
-            width={140}
-            height={140}
+            width={220}
+            height={220}
+            sizes="(max-width: 900px) 28vw, 180px"
             priority
           />
         </div>
-      )}
+      </div>
 
       <div
         className={`${styles.card} ${isMobile ? styles.cardMobile : ""} ${
