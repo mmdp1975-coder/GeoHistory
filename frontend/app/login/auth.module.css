@@ -25,7 +25,9 @@
   inset: 0;
   background: #000;             /* fallback sotto il video */
   z-index: 0;
+  pointer-events: none;
 }
+
 .videoWrap {
   position: fixed;
   inset: 0;
@@ -331,6 +333,7 @@
 }
 .alertError { border: 1px solid #fecaca; background: #fef2f2; color: #7f1d1d; }
 .alertOk    { border: 1px solid #bbf7d0; background: #f0fdf4; color: #14532d; }
+
 
 
 
