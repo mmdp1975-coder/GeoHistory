@@ -13,7 +13,7 @@ export default function RootPage() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.replace("/login");
+        router.replace("/module/preview");
         return;
       }
 
