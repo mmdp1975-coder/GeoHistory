@@ -1,10 +1,10 @@
 {
-  "journey_title_it": "L'Impero Ottomano: ascesa, apogeo e declino",
-  "journey_title_en": "The Ottoman Empire: Rise, Zenith and Decline",
+  "journey_title_it": "L'Impero Ottomano",
+  "journey_title_en": "The Ottoman Empire",
   "events": [
     {
-      "titolo_evento_it": "Ascesa di Osman I e fondazione del beylik ottomano",
-      "title_event_en": "Rise of Osman I and the founding of the Ottoman beylik",
+      "titolo_evento_it": "Nascita del Beylicato Ottomano a Söğüt",
+      "title_event_en": "Birth of the Ottoman Beylik at Söğüt",
       "era": "AD",
       "from": 1299,
       "to": 1299,
@@ -13,8 +13,18 @@
       "location": "Söğüt"
     },
     {
-      "titolo_evento_it": "Conquista di Bursa e nascita della prima capitale",
-      "title_event_en": "Conquest of Bursa and emergence of the first capital",
+      "titolo_evento_it": "Battaglia di Bafeo",
+      "title_event_en": "Battle of Bapheus",
+      "era": "AD",
+      "from": 1302,
+      "to": 1302,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Yalova"
+    },
+    {
+      "titolo_evento_it": "Conquista di Bursa",
+      "title_event_en": "Conquest of Bursa",
       "era": "AD",
       "from": 1326,
       "to": 1326,
@@ -23,8 +33,8 @@
       "location": "Bursa"
     },
     {
-      "titolo_evento_it": "Sbarco a Gallipoli: primo avamposto in Europa",
-      "title_event_en": "Landing at Gallipoli: the first foothold in Europe",
+      "titolo_evento_it": "Presa di Gelibolu sullo Stretto dei Dardanelli",
+      "title_event_en": "Seizure of Gelibolu on the Dardanelles",
       "era": "AD",
       "from": 1354,
       "to": 1354,
@@ -33,8 +43,18 @@
       "location": "Gelibolu"
     },
     {
-      "titolo_evento_it": "Battaglia del Kosovo e affermazione nei Balcani",
-      "title_event_en": "Battle of Kosovo and assertion in the Balkans",
+      "titolo_evento_it": "Conquista di Edirne",
+      "title_event_en": "Conquest of Edirne",
+      "era": "AD",
+      "from": 1361,
+      "to": 1361,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Edirne"
+    },
+    {
+      "titolo_evento_it": "Battaglia del Kosovo",
+      "title_event_en": "Battle of Kosovo",
       "era": "AD",
       "from": 1389,
       "to": 1389,
@@ -43,48 +63,48 @@
       "location": "Kosovo Polje"
     },
     {
-      "titolo_evento_it": "Caduta di Costantinopoli e nascita di Istanbul",
-      "title_event_en": "Fall of Constantinople and the birth of Istanbul",
+      "titolo_evento_it": "Battaglia di Ankara",
+      "title_event_en": "Battle of Ankara",
+      "era": "AD",
+      "from": 1402,
+      "to": 1402,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Ankara"
+    },
+    {
+      "titolo_evento_it": "Fine dell'Interregno Ottomano sotto Mehmed I",
+      "title_event_en": "End of the Ottoman Interregnum under Mehmed I",
+      "era": "AD",
+      "from": 1413,
+      "to": 1413,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Edirne"
+    },
+    {
+      "titolo_evento_it": "Caduta di Costantinopoli",
+      "title_event_en": "Fall of Constantinople",
       "era": "AD",
       "from": 1453,
       "to": 1453,
       "continent": "Europe",
       "country": "Turkey",
-      "location": "Costantinopoli"
+      "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Conquista di Trebisonda e fine dell'Impero di Trebisonda",
-      "title_event_en": "Conquest of Trebizond and the end of the Empire of Trebizond",
-      "era": "AD",
-      "from": 1461,
-      "to": 1461,
-      "continent": "Asia",
-      "country": "Turkey",
-      "location": "Trabzon"
-    },
-    {
-      "titolo_evento_it": "Battaglia di Çaldıran contro i Safavidi",
-      "title_event_en": "Battle of Chaldiran against the Safavids",
+      "titolo_evento_it": "Battaglia di Çaldıran",
+      "title_event_en": "Battle of Chaldiran",
       "era": "AD",
       "from": 1514,
       "to": 1514,
       "continent": "Asia",
-      "country": "Turkey",
-      "location": "Çaldıran"
+      "country": "Iran",
+      "location": "Chaldiran"
     },
     {
-      "titolo_evento_it": "Vittoria a Marj Dabiq e annessione della Siria",
-      "title_event_en": "Victory at Marj Dabiq and annexation of Syria",
-      "era": "AD",
-      "from": 1516,
-      "to": 1516,
-      "continent": "Asia",
-      "country": "Syria",
-      "location": "Marj Dabiq"
-    },
-    {
-      "titolo_evento_it": "Conquista del Cairo e fine del sultanato mamelucco",
-      "title_event_en": "Conquest of Cairo and the end of the Mamluk Sultanate",
+      "titolo_evento_it": "Conquista del Cairo e fine dei Mamelucchi",
+      "title_event_en": "Conquest of Cairo and the End of the Mamluks",
       "era": "AD",
       "from": 1517,
       "to": 1517,
@@ -93,14 +113,24 @@
       "location": "Cairo"
     },
     {
-      "titolo_evento_it": "Il Kanun di Solimano e la codificazione imperiale",
-      "title_event_en": "Suleiman’s Kanun and imperial codification",
+      "titolo_evento_it": "Assedio e resa di Rodi",
+      "title_event_en": "Siege and Surrender of Rhodes",
       "era": "AD",
-      "from": 1520,
-      "to": 1566,
+      "from": 1522,
+      "to": 1522,
       "continent": "Europe",
-      "country": "Turkey",
-      "location": "Istanbul"
+      "country": "Greece",
+      "location": "Rhodes"
+    },
+    {
+      "titolo_evento_it": "Battaglia di Mohács",
+      "title_event_en": "Battle of Mohács",
+      "era": "AD",
+      "from": 1526,
+      "to": 1526,
+      "continent": "Europe",
+      "country": "Hungary",
+      "location": "Mohács"
     },
     {
       "titolo_evento_it": "Primo assedio di Vienna",
@@ -113,16 +143,6 @@
       "location": "Vienna"
     },
     {
-      "titolo_evento_it": "Grande assedio di Malta",
-      "title_event_en": "Great Siege of Malta",
-      "era": "AD",
-      "from": 1565,
-      "to": 1565,
-      "continent": "Europe",
-      "country": "Malta",
-      "location": "Birgu"
-    },
-    {
       "titolo_evento_it": "Battaglia di Lepanto",
       "title_event_en": "Battle of Lepanto",
       "era": "AD",
@@ -133,8 +153,8 @@
       "location": "Nafpaktos"
     },
     {
-      "titolo_evento_it": "Lungo assedio di Candia e conquista di Creta",
-      "title_event_en": "Long Siege of Candia and conquest of Crete",
+      "titolo_evento_it": "Guerra di Candia e caduta di Candia",
+      "title_event_en": "Cretan War and the Fall of Candia",
       "era": "AD",
       "from": 1648,
       "to": 1669,
@@ -153,8 +173,8 @@
       "location": "Vienna"
     },
     {
-      "titolo_evento_it": "Trattato di Karlowitz e perdita di territori",
-      "title_event_en": "Treaty of Karlowitz and territorial losses",
+      "titolo_evento_it": "Trattato di Karlowitz",
+      "title_event_en": "Treaty of Karlowitz",
       "era": "AD",
       "from": 1699,
       "to": 1699,
@@ -173,48 +193,28 @@
       "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Trattato di Küçük Kaynarca con l’Impero Russo",
-      "title_event_en": "Treaty of Küçük Kaynarca with the Russian Empire",
-      "era": "AD",
-      "from": 1774,
-      "to": 1774,
-      "continent": "Europe",
-      "country": "Bulgaria",
-      "location": "Kaynardzha"
-    },
-    {
       "titolo_evento_it": "Le riforme del Nizam-ı Cedid di Selim III",
-      "title_event_en": "The Nizam-i Cedid reforms of Selim III",
+      "title_event_en": "Selim III’s Nizam-i Cedid Reforms",
       "era": "AD",
-      "from": 1792,
+      "from": 1789,
       "to": 1807,
       "continent": "Europe",
       "country": "Turkey",
       "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Rivoluzione serba e conquista dell'autonomia",
-      "title_event_en": "Serbian Revolution and the achievement of autonomy",
+      "titolo_evento_it": "L'Incidente Auspicioso",
+      "title_event_en": "The Auspicious Incident",
       "era": "AD",
-      "from": 1804,
-      "to": 1817,
+      "from": 1826,
+      "to": 1826,
       "continent": "Europe",
-      "country": "Serbia",
-      "location": "Orašac"
+      "country": "Turkey",
+      "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Guerra d’indipendenza greca",
-      "title_event_en": "Greek War of Independence",
-      "era": "AD",
-      "from": 1821,
-      "to": 1829,
-      "continent": "Europe",
-      "country": "Greece",
-      "location": "Nafplio"
-    },
-    {
-      "titolo_evento_it": "Editto di Gülhane e inizio delle Tanzimat",
-      "title_event_en": "Edict of Gülhane and the beginning of the Tanzimat",
+      "titolo_evento_it": "Hatt-ı Şerif di Gülhane e avvio del Tanzimat",
+      "title_event_en": "Hatt-i Sherif of Gülhane and the Start of the Tanzimat",
       "era": "AD",
       "from": 1839,
       "to": 1839,
@@ -223,18 +223,18 @@
       "location": "Istanbul"
     },
     {
-      "titolo_evento_it": "Guerra di Crimea e alleanze europee",
-      "title_event_en": "Crimean War and European alliances",
+      "titolo_evento_it": "Guerra di Crimea: assedio di Sebastopoli",
+      "title_event_en": "Crimean War: Siege of Sevastopol",
       "era": "AD",
-      "from": 1853,
-      "to": 1856,
+      "from": 1854,
+      "to": 1855,
       "continent": "Europe",
       "country": "Ukraine",
       "location": "Sevastopol"
     },
     {
-      "titolo_evento_it": "Congresso di Berlino e ridisegno dei confini balcanici",
-      "title_event_en": "Congress of Berlin and the redrawing of Balkan borders",
+      "titolo_evento_it": "Congresso e Trattato di Berlino",
+      "title_event_en": "Congress and Treaty of Berlin",
       "era": "AD",
       "from": 1878,
       "to": 1878,
@@ -243,38 +243,18 @@
       "location": "Berlin"
     },
     {
-      "titolo_evento_it": "Rivoluzione dei Giovani Turchi",
-      "title_event_en": "Young Turk Revolution",
+      "titolo_evento_it": "Guerre balcaniche e perdita di Salonicco",
+      "title_event_en": "Balkan Wars and the Loss of Thessaloniki",
       "era": "AD",
-      "from": 1908,
-      "to": 1908,
+      "from": 1912,
+      "to": 1913,
       "continent": "Europe",
       "country": "Greece",
       "location": "Thessaloniki"
     },
     {
-      "titolo_evento_it": "Guerra italo-turca e perdita della Libia",
-      "title_event_en": "Italo-Turkish War and the loss of Libya",
-      "era": "AD",
-      "from": 1911,
-      "to": 1912,
-      "continent": "Africa",
-      "country": "Libya",
-      "location": "Tripoli"
-    },
-    {
-      "titolo_evento_it": "Guerre balcaniche e crisi imperiale",
-      "title_event_en": "Balkan Wars and imperial crisis",
-      "era": "AD",
-      "from": 1912,
-      "to": 1913,
-      "continent": "Europe",
-      "country": "Turkey",
-      "location": "Edirne"
-    },
-    {
-      "titolo_evento_it": "Campagna di Gallipoli nella Prima guerra mondiale",
-      "title_event_en": "Gallipoli Campaign in the First World War",
+      "titolo_evento_it": "Campagna di Gallipoli",
+      "title_event_en": "Gallipoli Campaign",
       "era": "AD",
       "from": 1915,
       "to": 1916,
@@ -283,24 +263,24 @@
       "location": "Gelibolu"
     },
     {
-      "titolo_evento_it": "Trattato di Sèvres e smembramento dell’Impero",
-      "title_event_en": "Treaty of Sèvres and the partition of the Empire",
+      "titolo_evento_it": "Armistizio di Mudros",
+      "title_event_en": "Armistice of Mudros",
       "era": "AD",
-      "from": 1920,
-      "to": 1920,
+      "from": 1918,
+      "to": 1918,
       "continent": "Europe",
-      "country": "France",
-      "location": "Sèvres"
+      "country": "Greece",
+      "location": "Moudros"
     },
     {
-      "titolo_evento_it": "Abolizione del sultanato ottomano",
+      "titolo_evento_it": "Abolizione del Sultanato Ottomano",
       "title_event_en": "Abolition of the Ottoman Sultanate",
       "era": "AD",
       "from": 1922,
       "to": 1922,
-      "continent": "Asia",
+      "continent": "Europe",
       "country": "Turkey",
-      "location": "Ankara"
+      "location": "Istanbul"
     }
   ]
 }
