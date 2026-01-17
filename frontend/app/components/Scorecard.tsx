@@ -241,7 +241,7 @@ export function Scorecard({
     <li className={cardClassName} {...restLiProps}>
       <CardWrapper>
         {/* COVER */}
-        <div className="relative h-40 w-full bg-neutral-100">
+        <div className="relative w-full aspect-[5/3] bg-neutral-100">
           {coverUrl ? (
             (() => {
               const browserCoverUrl = normalizeCoverUrl(coverUrl);
@@ -342,39 +342,48 @@ export function Scorecard({
               </span>
             )}
           </div>
+
+          {/* Rating in basso a destra */}
+          <div className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 shadow text-[11px] text-neutral-700">
+            <span className="inline-flex items-center gap-1 font-semibold">
+              {hasRating ? (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-amber-500"
+                  fill="currentColor"
+                  aria-hidden
+                >
+                  <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                </svg>
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-neutral-400"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  aria-hidden
+                >
+                  <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                </svg>
+              )}
+              {safeAverage.toFixed(1)}
+              <span className="text-[10px] text-neutral-500">({safeCount})</span>
+            </span>
+          </div>
         </div>
 
         {/* CONTENUTO */}
-        <div className="flex flex-col gap-3 p-3">
-          {/* Titolo + rating */}
+        <div className="flex flex-col gap-2 p-2.5">
+          {/* Titolo + data */}
           <div className="flex items-start justify-between gap-2">
-            <h3 className="text-sm font-semibold text-neutral-900 line-clamp-2">
+            <h3 className="text-[13px] font-semibold text-neutral-900 line-clamp-2">
               {title}
             </h3>
 
-            {hasRating ? (
-              <div className="flex flex-col items-end text-xs text-neutral-600">
-                <span className="inline-flex items-center gap-1 font-semibold">
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4 text-amber-500"
-                    fill="currentColor"
-                    aria-hidden
-                  >
-                    <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                  </svg>
-                  {safeAverage.toFixed(1)}
-                </span>
-                <span className="text-[10px] text-neutral-500">({safeCount})</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Riga date/meta + CTA */}
-          <div className="grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-xs text-neutral-600">
             {publishedLabel && (
               <span
-                className="inline-flex items-center rounded bg-neutral-100 px-2 py-[2px] text-xs font-medium text-neutral-700 whitespace-nowrap"
+                className="mt-[2px] inline-flex items-center rounded bg-neutral-100 px-2 py-[2px] text-[10px] font-medium text-neutral-600 whitespace-nowrap"
                 title={tUI(
                   langCode,
                   "scorecard.publication_date.title"
@@ -383,12 +392,15 @@ export function Scorecard({
                 {publishedLabel}
               </span>
             )}
+          </div>
 
-            <div className="col-[2] row-[2] mt-[2px] flex justify-end">
+          {/* Riga date/meta + CTA */}
+          <div className="grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-[11px] text-neutral-600">
+            <div className="col-[2] row-[2] mt-[1px] flex justify-end">
               {/* lo spazio per eventuali future badge a destra, lasciato come in origine */}
             </div>
 
-            <div className="col-span-2 mt-2 flex items-center justify-between gap-2 text-xs text-neutral-600">
+            <div className="col-span-2 mt-1.5 flex items-center justify-between gap-2 text-[11px] text-neutral-600">
               <div className="flex flex-wrap items-center gap-3">
                 {/* Numero eventi */}
                 <span
@@ -431,11 +443,12 @@ export function Scorecard({
               </div>
 
               {finalCtaLabel ? (
-                <span className="rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white">
+                <span className="rounded-md bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white">
                   {finalCtaLabel}
                 </span>
               ) : null}
             </div>
+
           </div>
         </div>
       </CardWrapper>
