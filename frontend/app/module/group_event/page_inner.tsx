@@ -79,6 +79,25 @@ const UUID_RE =
 const BOX_3D =
  "rounded-2xl border border-slate-200 bg-white/95 shadow-[0_12px_28px_rgba(15,23,42,0.16)] ring-1 ring-white/70";
 
+
+const TTS_VOICE_OPTIONS = [
+  "alloy",
+  "ash",
+  "ballad",
+  "coral",
+  "echo",
+  "fable",
+  "onyx",
+  "nova",
+  "sage",
+  "shimmer",
+  "verse",
+  "marin",
+  "cedar",
+] as const;
+const TTS_TONE_OPTIONS = ["calm", "neutral", "energetic"] as const;
+type TTSTone = (typeof TTS_TONE_OPTIONS)[number];
+
 /* ===================== Util date/ordine ===================== */
 function normEra(era?: string | null): "BC" | "AD" {
  if (!era) return "AD";
@@ -427,10 +446,10 @@ function MediaOverlay({
  )
  ) : (
  <img src={media.url || media.preview || ""} alt="media" className="w-full h-full object-contain bg-black" />
- )}
+  )}
+  </div>
  </div>
- </div>
- );
+  );
 }
 
 /* ===================== Quiz Overlay ===================== */
@@ -542,16 +561,16 @@ function MediaBox({
  0/0
  </div>
  )}
- <div
-   className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}
-   style={{ height: `${baseHeightPx}px`, minHeight: `${baseHeightPx}px` }}
- >
- <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
- Nessun media disponibile
- </div>
- </div>
- </div>
- );
+  <div
+    className={`relative ${heightClass} w-full rounded-xl overflow-hidden ring-1 ring-black/10 bg-slate-100`}
+    style={{ height: `${baseHeightPx}px`, minHeight: `${baseHeightPx}px` }}
+  >
+  <div className="flex h-full w-full items-center justify-center text-xs text-slate-500">
+  Nessun media disponibile
+   </div>
+   </div>
+  </div>
+  );
  }
 
   const safeIndex = Math.max(0, Math.min(index, items.length - 1));
@@ -697,9 +716,9 @@ function MediaBox({
      ) : null}
    </>
  )}
- </div>
- </div>
- );
+  </div>
+  </div>
+  );
 }
 
 /* ===================== Collapsible (mobile) ===================== */
@@ -845,74 +864,9 @@ const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
 const [selectedIndex, setSelectedIndex] = useState(0);
 const [loading, setLoading] = useState(true);
 const [isPlaying, setIsPlaying] = useState(false);
-const [speechSupported, setSpeechSupported] = useState(false);
-const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
-const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-const speechAutoAdvanceRef = useRef(false);
-const autoplayFallbackRef = useRef<number | null>(null);
-const voicePrefLoadedRef = useRef(false);
-const normalizeLang = (v?: string | null) => (v ? v.slice(0, 2).toLowerCase() : "");
+const [isBuffering, setIsBuffering] = useState(false);
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
 const BRAND_BLUE = "#0f3c8c";
-const isMobile = !isLg;
-const voicePrefKey = useMemo(() => {
-  if (typeof navigator === "undefined") return null;
-  const langKey = normalizeLang(resolvedLang || desiredLang) || "und";
-  const ua = navigator.userAgent || "";
-  const vendor = (navigator as any).vendor || "";
-  const platform = navigator.platform || "";
-  const seed = `${langKey}|${ua}|${vendor}|${platform}`;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
-  }
-  return `tts_voice_pref:${langKey}:${Math.abs(hash)}`;
-}, [resolvedLang, desiredLang]);
-
-const pickBestVoice = useCallback(
-  (langHint?: string | null) => {
-    if (!voices.length) return null;
-    const target = normalizeLang(langHint || resolvedLang || desiredLang);
-    let best: SpeechSynthesisVoice | null = null;
-    let bestScore = -Infinity;
-    for (const v of voices) {
-      const vLang = normalizeLang(v.lang);
-      const name = (v.name || "").toLowerCase();
-      const uri = (v.voiceURI || "").toLowerCase();
-      const highQuality =
-        /enhanced|premium|natural|neural|wavenet|online/.test(name) ||
-        /enhanced|premium|natural|neural|wavenet|online/.test(uri);
-      const lowQuality =
-        /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(name) ||
-        /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(uri);
-      let score = 0;
-      if (target && vLang === target) score += 100;
-      else if (target && vLang.startsWith(target)) score += 70;
-      if (highQuality) score += isMobile ? 22 : 8;
-      if (lowQuality) score -= isMobile ? 26 : 10;
-      if (v.localService) score += isMobile ? -2 : 5;
-      else score += isMobile ? 8 : 0;
-      if (target === "it") {
-        if (/elsa/.test(name)) score -= 40;
-        if (/alice|luca|federica|paola|giorgio|stefano/.test(name)) score += 20;
-        if (/siri|apple/.test(name) || /com\.apple/.test(uri)) score += 18;
-        if (/google/.test(name) || /com\.google/.test(uri)) score += 16;
-        if (/microsoft|zira|david/.test(name)) score -= 5;
-      }
-      if (isMobile) {
-        if (/siri|apple/.test(name) || /com\.apple/.test(uri)) score += 10;
-        if (/google/.test(name) || /com\.google/.test(uri)) score += 10;
-      }
-      if (score > bestScore) {
-        best = v;
-        bestScore = score;
-      }
-    }
-    return best;
-  },
-  [voices, resolvedLang, desiredLang, isMobile]
-);
 
 const toggleMapModeView = useCallback(() => {
   setMapMode((m) => (m === "normal" ? "fullscreen" : "normal"));
@@ -971,168 +925,367 @@ useEffect(() => {
  } catch {}
  }, []);
 
-// ===== Sintesi vocale =====
+
+// ===== TTS (OpenAI via /api/tts) =====
+const [voice, setVoice] = useState<string>(() => {
+  if (typeof window === "undefined") return "alloy";
+  try {
+    const stored = localStorage.getItem("geohistory_tts_voice") || "";
+    return (TTS_VOICE_OPTIONS as readonly string[]).includes(stored) ? stored : "alloy";
+  } catch {
+    return "alloy";
+  }
+});
+const [tone, setTone] = useState<TTSTone>(() => {
+  if (typeof window === "undefined") return "neutral";
+  try {
+    const stored = localStorage.getItem("geohistory_tts_tone") || "";
+    return (TTS_TONE_OPTIONS as readonly string[]).includes(stored) ? (stored as TTSTone) : "neutral";
+  } catch {
+    return "neutral";
+  }
+});
+
 useEffect(() => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  setSpeechSupported(true);
-  const synth = window.speechSynthesis;
-  const loadVoices = () => {
-    const list = synth.getVoices() || [];
-    setVoices([...list]);
-  };
-  loadVoices();
-  synth.onvoiceschanged = loadVoices;
-  return () => { synth.onvoiceschanged = null; };
-}, []);
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("geohistory_tts_voice", voice);
+    localStorage.setItem("geohistory_tts_tone", tone);
+  } catch {}
+}, [voice, tone]);
 
-const stopSpeech = useCallback(() => {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
-  speechUtteranceRef.current = null;
-  speechAutoAdvanceRef.current = false;
-}, []);
+const audioRef = useRef<HTMLAudioElement | null>(null);
+const abortRef = useRef<AbortController | null>(null);
+const queueRef = useRef<Array<{ kind: "intro" | "event"; index?: number; text: string }>>([]);
+const autoAdvanceRef = useRef(false);
+const currentQueuePosRef = useRef(0);
+const playStartIndexRef = useRef<number | null>(null);
+const audioUrlRef = useRef<string | null>(null);
+const isPlayingRef = useRef(false);
+const selectedIndexRef = useRef(0);
+const ignoreNextSelectedIndexRef = useRef(false);
+const ttsCacheRef = useRef<Map<string, ArrayBuffer>>(new Map());
+const prefetchAbortRef = useRef<AbortController | null>(null);
 
-const speakEventDescription = useCallback(
-  (ev: EventVM | null | undefined, opts?: { autoAdvance?: boolean }) => {
-    if (!ev || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const parts = [ev.title, ev.description].filter(Boolean);
-    const text = parts.join(". ").trim();
-    if (!text) return;
-    stopSpeech();
-    const langHint = (ev as any)?.lang || resolvedLang || desiredLang;
-    const chosen =
-      (selectedVoiceId && voices.find((v) => v.voiceURI === selectedVoiceId)) ||
-      pickBestVoice(langHint) ||
-      voices[0] ||
-      null;
-    const utter = new SpeechSynthesisUtterance(text);
-    if (chosen) {
-      utter.voice = chosen;
-      utter.lang = chosen.lang || utter.lang;
-    } else if (langHint) {
-      utter.lang = langHint;
+useEffect(() => {
+  isPlayingRef.current = isPlaying;
+}, [isPlaying]);
+useEffect(() => {
+  selectedIndexRef.current = selectedIndex;
+}, [selectedIndex]);
+
+const ttsLang = useMemo(() => {
+  const v = (resolvedLang || desiredLang || "it").toString().slice(0, 2).toLowerCase();
+  return v || "it";
+}, [resolvedLang, desiredLang]);
+
+function formatExactDateForSpeech(value?: string | null, lang?: string) {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    const locale = (lang || "it").startsWith("it") ? "it-IT" : "en-US";
+    return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(d);
+  } catch {
+    return value || "";
+  }
+}
+
+function buildIntroText(lang: string, description: string) {
+  const desc = (description || "").trim();
+  if (lang.startsWith("it")) {
+    return desc
+      ? `Benvenuto in questo journey. ${desc} Iniziamo dal primo evento.`
+      : "Benvenuto in questo journey. Iniziamo dal primo evento.";
+  }
+  return desc
+    ? `Welcome to this journey. ${desc} Let's start with the first event.`
+    : "Welcome to this journey. Let's start with the first event.";
+}
+
+function buildEventSpeechText(ev: EventVM, lang: string) {
+  const dateText = ev.exact_date ? formatExactDateForSpeech(ev.exact_date, lang) : formatEventRange(ev);
+  const place = ev.location ? ev.location : "";
+  const title = ev.title || (lang.startsWith("it") ? "Evento" : "Event");
+  const description = ev.description || "";
+  const dash = place ? ` - ${place}` : "";
+  return `${dateText}${dash}. ${title}. ${description}`.trim();
+}
+
+const buildQueueFrom = useCallback(
+  (startIndex: number, includeIntro: boolean) => {
+    const items: Array<{ kind: "intro" | "event"; index?: number; text: string }> = [];
+    if (includeIntro) {
+      items.push({ kind: "intro", text: buildIntroText(ttsLang, journeyDescription) });
     }
-    speechAutoAdvanceRef.current = !!opts?.autoAdvance;
-    utter.onend = () => {
-      speechUtteranceRef.current = null;
-      if (speechAutoAdvanceRef.current) {
-        setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0));
-      }
-    };
-    utter.onerror = () => {
-      speechUtteranceRef.current = null;
-    };
-    speechUtteranceRef.current = utter;
-    window.speechSynthesis.speak(utter);
+    for (let i = startIndex; i < rows.length; i += 1) {
+      const ev = rows[i];
+      items.push({ kind: "event", index: i, text: buildEventSpeechText(ev, ttsLang) });
+    }
+    return items;
   },
-  [desiredLang, resolvedLang, selectedVoiceId, voices, rows.length, stopSpeech, pickBestVoice]
+  [rows, journeyDescription, ttsLang]
+);
+
+const buildTtsCacheKey = useCallback(
+  (text: string) => `${ttsLang}|${voice}|${tone}|${text}`,
+  [ttsLang, voice, tone]
+);
+
+const abortCurrentAudio = useCallback(() => {
+  abortRef.current?.abort();
+  abortRef.current = null;
+  const audio = audioRef.current;
+  if (audio) {
+    audio.pause();
+    audio.currentTime = 0;
+  }
+  if (audioUrlRef.current) {
+    URL.revokeObjectURL(audioUrlRef.current);
+    audioUrlRef.current = null;
+  }
+}, []);
+
+const stopAllPlayback = useCallback(() => {
+  abortCurrentAudio();
+  queueRef.current = [];
+  currentQueuePosRef.current = 0;
+  playStartIndexRef.current = null;
+  setIsBuffering(false);
+}, [abortCurrentAudio]);
+
+useEffect(() => () => stopAllPlayback(), [stopAllPlayback]);
+
+const playSegment = useCallback(
+  async (pos: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const item = queueRef.current[pos];
+    if (!item) {
+      setIsPlaying(false);
+      return;
+    }
+    abortCurrentAudio();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const cacheKey = buildTtsCacheKey(item.text);
+      let buf = ttsCacheRef.current.get(cacheKey);
+      if (!buf) {
+        setIsBuffering(true);
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: item.text, lang: ttsLang, voice, tone }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`TTS ${res.status}: ${errText}`);
+        }
+        buf = await res.arrayBuffer();
+        ttsCacheRef.current.set(cacheKey, buf);
+      }
+      setIsBuffering(false);
+      if (!isPlayingRef.current) return;
+      const blob = new Blob([buf], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = url;
+      audio.src = url;
+      audio.currentTime = 0;
+      await audio.play();
+    } catch (err: any) {
+      if (controller.signal.aborted) return;
+      console.error("[GE] TTS error:", err?.message || err);
+      setIsBuffering(false);
+      setIsPlaying(false);
+    } finally {
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
+    }
+  },
+  [abortCurrentAudio, ttsLang, voice, tone]
+);
+
+const handleAudioEnded = useCallback(() => {
+  const pos = currentQueuePosRef.current;
+  const item = queueRef.current[pos];
+  if (item?.kind === "event" && typeof item.index === "number") {
+    const nextIndex = item.index + 1;
+    if (nextIndex < rows.length) {
+      autoAdvanceRef.current = true;
+      setSelectedIndex(nextIndex);
+      setTimeout(() => { autoAdvanceRef.current = false; }, 0);
+    }
+  }
+  const nextPos = pos + 1;
+  if (nextPos < queueRef.current.length) {
+    currentQueuePosRef.current = nextPos;
+    playSegment(nextPos);
+  } else {
+    setIsPlaying(false);
+  }
+}, [rows.length, playSegment]);
+
+useEffect(() => {
+  const audio = audioRef.current;
+  if (!audio) return;
+  const onEnded = () => handleAudioEnded();
+  const onError = () => {
+    console.warn("[GE] Audio element error");
+    setIsPlaying(false);
+  };
+  audio.addEventListener("ended", onEnded);
+  audio.addEventListener("error", onError);
+  return () => {
+    audio.removeEventListener("ended", onEnded);
+    audio.removeEventListener("error", onError);
+  };
+}, [handleAudioEnded]);
+
+useEffect(() => {
+  if (!isPlaying) {
+    stopAllPlayback();
+    return;
+  }
+  if (!rows.length) return;
+  if (playStartIndexRef.current == null) {
+    playStartIndexRef.current = selectedIndexRef.current;
+  }
+  const startIndex = Math.max(0, Math.min(playStartIndexRef.current ?? 0, rows.length - 1));
+  const includeIntro = startIndex === 0;
+  queueRef.current = buildQueueFrom(startIndex, includeIntro);
+  currentQueuePosRef.current = 0;
+  playSegment(0);
+}, [isPlaying, rows.length, buildQueueFrom, playSegment, stopAllPlayback]);
+
+useEffect(() => {
+  if (!isPlaying) return;
+  if (ignoreNextSelectedIndexRef.current) {
+    ignoreNextSelectedIndexRef.current = false;
+    return;
+  }
+  if (autoAdvanceRef.current) return;
+  if (!rows.length) return;
+  playStartIndexRef.current = selectedIndex;
+  queueRef.current = buildQueueFrom(selectedIndex, false);
+  currentQueuePosRef.current = 0;
+  playSegment(0);
+}, [selectedIndex, isPlaying, rows.length, buildQueueFrom, playSegment]);
+
+const togglePlay = useCallback(() => {
+  setIsPlaying((prev) => {
+    if (!prev) {
+      playStartIndexRef.current = selectedIndexRef.current;
+      ignoreNextSelectedIndexRef.current = true;
+    }
+    return !prev;
+  });
+}, []);
+
+const prefetchFirstSegment = useCallback(
+  async (index: number) => {
+    if (!rows.length) return;
+    const ev = rows[index];
+    if (!ev) return;
+    const text = buildEventSpeechText(ev, ttsLang);
+    const cacheKey = buildTtsCacheKey(text);
+    if (ttsCacheRef.current.has(cacheKey)) return;
+    prefetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    prefetchAbortRef.current = controller;
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, lang: ttsLang, voice, tone }),
+        signal: controller.signal,
+      });
+      if (!res.ok) return;
+      const buf = await res.arrayBuffer();
+      if (!controller.signal.aborted) {
+        ttsCacheRef.current.set(cacheKey, buf);
+      }
+    } catch {}
+  },
+  [rows, ttsLang, voice, tone, buildTtsCacheKey]
 );
 
 useEffect(() => {
-  if (!speechSupported || !isPlaying) return;
-  const ev = rows[selectedIndex];
-  speakEventDescription(ev, { autoAdvance: true });
-}, [isPlaying, rows, selectedIndex, speakEventDescription, speechSupported]);
-
-// Se cambio voce mentre riproduce, riavvia con la nuova voce
-useEffect(() => {
- if (!speechSupported || !isPlaying) return;
- const ev = rows[selectedIndex];
- stopSpeech();
- speakEventDescription(ev, { autoAdvance: true });
-}, [selectedVoiceId, speechSupported, isPlaying, rows, selectedIndex, speakEventDescription, stopSpeech]);
-
-// Pausa immediata quando isPlaying diventa false
-useEffect(() => {
-  if (!speechSupported) return;
-  if (!isPlaying) {
-    stopSpeech();
-  }
-}, [isPlaying, speechSupported, stopSpeech]);
-
-// Autoplay fallback for browsers without speech synthesis (common on mobile)
-useEffect(() => {
-  if (speechSupported || !isPlaying) {
-    if (autoplayFallbackRef.current) {
-      clearInterval(autoplayFallbackRef.current);
-      autoplayFallbackRef.current = null;
-    }
-    return;
-  }
-  if (typeof window === "undefined") return;
-  autoplayFallbackRef.current = window.setInterval(() => {
-    setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0));
-  }, 9000);
-  return () => {
-    if (autoplayFallbackRef.current) {
-      clearInterval(autoplayFallbackRef.current);
-      autoplayFallbackRef.current = null;
-    }
-  };
-}, [isPlaying, rows.length, speechSupported]);
+  if (!rows.length) return;
+  if (isPlayingRef.current) return;
+  prefetchFirstSegment(selectedIndex);
+}, [rows.length, selectedIndex, prefetchFirstSegment]);
 
 useEffect(() => {
-  if (!speechSupported || !voices.length || voicePrefLoadedRef.current) return;
-  voicePrefLoadedRef.current = true;
-  if (selectedVoiceId) return;
-  if (voicePrefKey) {
-    try {
-      const saved = localStorage.getItem(voicePrefKey);
-      const match = saved ? voices.find((v) => v.voiceURI === saved) : null;
-      if (match) {
-        setSelectedVoiceId(match.voiceURI);
-        return;
-      }
-    } catch {}
-  }
-  const best =
-    pickBestVoice(resolvedLang || desiredLang) ||
-    voices.find((v) => normalizeLang(v.lang) === "en") ||
-    voices[0];
-  if (best) setSelectedVoiceId(best.voiceURI);
-}, [voices, speechSupported, selectedVoiceId, resolvedLang, desiredLang, pickBestVoice, voicePrefKey]);
+  if (!rows.length) return;
+  if (isPlayingRef.current) return;
+  prefetchFirstSegment(0);
+}, [rows.length, prefetchFirstSegment]);
 
-useEffect(() => {
-  if (!speechSupported || !selectedVoiceId || !voicePrefKey) return;
+const prefetchIntroSegment = useCallback(async () => {
+  if (!journeyDescription) return;
+  const text = buildIntroText(ttsLang, journeyDescription);
+  const cacheKey = buildTtsCacheKey(text);
+  if (ttsCacheRef.current.has(cacheKey)) return;
+  prefetchAbortRef.current?.abort();
+  const controller = new AbortController();
+  prefetchAbortRef.current = controller;
   try {
-    localStorage.setItem(voicePrefKey, selectedVoiceId);
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, lang: ttsLang, voice, tone }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    if (!controller.signal.aborted) {
+      ttsCacheRef.current.set(cacheKey, buf);
+    }
   } catch {}
-}, [speechSupported, selectedVoiceId, voicePrefKey]);
+}, [journeyDescription, ttsLang, voice, tone, buildTtsCacheKey]);
 
-// Stop speech on unmount
-useEffect(() => stopSpeech, [stopSpeech]);
+useEffect(() => {
+  if (isPlayingRef.current) return;
+  if (selectedIndex !== 0) return;
+  prefetchIntroSegment();
+}, [selectedIndex, prefetchIntroSegment]);
 
-const voiceOptions = useMemo(() => {
-  if (!voices.length) return [] as { id: string; label: string; lang: string }[];
-  return voices.map((v) => ({
-    id: v.voiceURI,
-    lang: normalizeLang(v.lang),
-    label: `${v.name}${v.localService ? " (local)" : ""} - ${v.lang || ""}`,
-  }));
-}, [voices]);
+const renderVoiceToneControls = useCallback(
+  (opts?: { compact?: boolean }) => (
+    <div className={`flex items-center gap-1 ${opts?.compact ? "" : ""}`}>
+      <select
+        value={voice}
+        onChange={(e) => setVoice(e.target.value)}
+        className="min-w-[84px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        aria-label="Voice"
+      >
+        {TTS_VOICE_OPTIONS.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
+      <select
+        value={tone}
+        onChange={(e) => setTone(e.target.value as TTSTone)}
+        className="min-w-[84px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+        aria-label="Tone"
+      >
+        {TTS_TONE_OPTIONS.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </select>
+    </div>
+  ),
+  [voice, tone]
+);
 
-const voiceQualitySummary = useMemo(() => {
-  if (!voices.length) return { hasHighQuality: false, hasLowQuality: false };
-  let hasHighQuality = false;
-  let hasLowQuality = false;
-  for (const v of voices) {
-    const name = (v.name || "").toLowerCase();
-    const uri = (v.voiceURI || "").toLowerCase();
-    const high =
-      /enhanced|premium|natural|neural|wavenet|online/.test(name) ||
-      /enhanced|premium|natural|neural|wavenet|online/.test(uri);
-    const low =
-      /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(name) ||
-      /compact|basic|default|espeak|flite|festival|mbrola|piper|robot/.test(uri);
-    if (high) hasHighQuality = true;
-    if (low) hasLowQuality = true;
-  }
-  return { hasHighQuality, hasLowQuality };
-}, [voices]);
-
-const showLowQualityWarning =
-  speechSupported && isMobile && voices.length > 0 && !voiceQualitySummary.hasHighQuality;
-const showNoVoicesWarning = speechSupported && voices.length === 0;
 
 const [overlayOpen, setOverlayOpen] = useState(false);
 const [overlayMode, setOverlayMode] = useState<"overlay" | "full">("overlay");
@@ -1926,7 +2079,7 @@ useEffect(() => {
  >
  {formatTimelineYearLabel(data.max)}
  </span>
- </div>
+  </div>
  </div>
  );
  }
@@ -2201,7 +2354,7 @@ const mapTextureStyle: CSSProperties = {
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <button
-      onClick={() => setIsPlaying((p) => !p)}
+      onClick={togglePlay}
       className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
       title={isPlaying ? "Pause" : "Play"}
     >
@@ -2211,6 +2364,7 @@ const mapTextureStyle: CSSProperties = {
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       )}
     </button>
+    {isBuffering ? <span className="text-[11px] text-slate-500">Buffering voice…</span> : null}
     <button
       onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
       className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
@@ -2504,12 +2658,12 @@ const mapTextureStyle: CSSProperties = {
  <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  </svg>
  </button>
- <button
- onClick={() => setIsPlaying((p) => !p)}
- className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
- >
+  <button
+  onClick={togglePlay}
+  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+  style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+  aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+  >
  {isPlaying ? (
  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
@@ -2520,7 +2674,9 @@ const mapTextureStyle: CSSProperties = {
  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
  </svg>
  )}
- </button>
+  </button>
+  {isBuffering ? <span className="text-[11px] text-slate-200">Buffering voice…</span> : null}
+  {isBuffering ? <span className="text-[11px] text-slate-200">Buffering voice…</span> : null}
  <button
  onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
@@ -2531,37 +2687,9 @@ const mapTextureStyle: CSSProperties = {
  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  </svg>
  </button>
- {speechSupported && (
- <select
- value={selectedVoiceId ?? ""}
- onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
- className="ml-1 min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
- aria-label="Voce sintesi"
- disabled={!voiceOptions.length}
- >
- {voiceOptions.length ? (
- voiceOptions.map((opt) => (
- <option key={opt.id} value={opt.id}>
- {opt.label}
- </option>
- ))
- ) : (
- <option value="">Nessuna voce</option>
- )}
- </select>
- )}
+ {renderVoiceToneControls({ compact: true })}
  </div>
- {showNoVoicesWarning && (
- <div className="absolute left-3 top-14 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
- Nessuna voce disponibile in questo browser.
- </div>
- )}
-{showLowQualityWarning && (
-<div className="absolute left-3 top-24 z-20 rounded-full border border-amber-200 bg-amber-50/95 px-2.5 py-1 text-[10px] text-amber-900 shadow">
-Voce mobile di bassa qualita disponibile.
-</div>
-)}
- <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
+  <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
  <button
  onClick={toggleMapModeView}
  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
@@ -2587,7 +2715,7 @@ Voce mobile di bassa qualita disponibile.
  </svg>
  </button>
  <button
- onClick={() => setIsPlaying((p) => !p)}
+ onClick={togglePlay}
  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
  style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
  aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
@@ -2613,20 +2741,7 @@ Voce mobile di bassa qualita disponibile.
  <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  </svg>
  </button>
- {voiceOptions.length > 1 && (
- <select
- value={selectedVoiceId ?? ""}
- onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
- className="ml-1 min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
- aria-label="Voce sintesi"
- >
- {voiceOptions.map((opt) => (
- <option key={opt.id} value={opt.id}>
- {opt.label}
- </option>
- ))}
- </select>
- )}
+ {renderVoiceToneControls({ compact: true })}
  </div>
  </section>
  </div>
@@ -2726,7 +2841,7 @@ Voce mobile di bassa qualita disponibile.
  </div>
  </section>
 
-   {/* ===== DESKTOP (container allargato) ===== */
+   {/* ===== DESKTOP (container allargato) ===== */}
 <div className="mx-auto hidden w-full max-w-[120rem] lg:block" style={mapTextureStyle}>
   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)] gap-3 px-4 py-6 items-stretch">
     {/* Sinistra: Titolo + Media Journey */}
@@ -2933,7 +3048,7 @@ Voce mobile di bassa qualita disponibile.
             </svg>
           </button>
           <button
-            onClick={() => setIsPlaying((p) => !p)}
+            onClick={togglePlay}
             className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_3px_12px_rgba(15,60,140,0.35)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
             style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
             aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
@@ -2949,6 +3064,7 @@ Voce mobile di bassa qualita disponibile.
               </svg>
             )}
           </button>
+          {isBuffering ? <span className="text-[11px] text-slate-500">Buffering voice…</span> : null}
           <button
             onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
@@ -2959,25 +3075,7 @@ Voce mobile di bassa qualita disponibile.
               <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
-          {speechSupported && (
-            <select
-              value={selectedVoiceId ?? ""}
-              onChange={(e) => { setSelectedVoiceId(e.target.value || null); }}
-              className="min-w-[90px] max-w-[140px] truncate rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[10px] text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              aria-label="Voce sintesi"
-              disabled={!voiceOptions.length}
-            >
-              {voiceOptions.length ? (
-                voiceOptions.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))
-              ) : (
-                <option value="">Nessuna voce</option>
-              )}
-            </select>
-          )}
+          {renderVoiceToneControls({ compact: true })}
           {selectedEvent?.wiki_url ? (
             <a
               href={selectedEvent.wiki_url}
@@ -2995,12 +3093,7 @@ Voce mobile di bassa qualita disponibile.
       </div>
 
       <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
-        {showLowQualityWarning && (
-          <div className="mb-2 rounded-full border border-amber-200 bg-amber-50/95 px-3 py-1 text-[10px] text-amber-900 shadow">
-            Voce mobile di bassa qualita disponibile.
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
+                <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
           {selectedEvent?.description || "No description available."}
         </div>
       </div>
@@ -3064,7 +3157,7 @@ Voce mobile di bassa qualita disponibile.
               </svg>
             </button>
             <button
-              onClick={() => setIsPlaying((p) => !p)}
+              onClick={togglePlay}
               className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
               style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
               aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
@@ -3080,6 +3173,7 @@ Voce mobile di bassa qualita disponibile.
                 </svg>
               )}
             </button>
+            {isBuffering ? <span className="text-[11px] text-slate-600">Buffering voice…</span> : null}
             <button
               onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
@@ -3095,18 +3189,20 @@ Voce mobile di bassa qualita disponibile.
       </section>
     </section>
   </div>
-</div>
-
-/* Overlay/Full-screen player */}
- <QuizOverlay open={quizOpen} onClose={closeQuiz} src={quizUrl} />
- <MediaOverlay
- open={overlayOpen}
- mode={overlayMode}
- media={overlayMedia}
- autoplay={overlayAutoplay}
- onClose={closeOverlay}
- onToggleMode={toggleOverlayMode}
- />
  </div>
- );
+
+  <audio ref={audioRef} preload="none" className="hidden" />
+
+  {/* Overlay/Full-screen player */}
+  <QuizOverlay open={quizOpen} onClose={closeQuiz} src={quizUrl} />
+  <MediaOverlay
+    open={overlayOpen}
+    mode={overlayMode}
+    media={overlayMedia}
+    autoplay={overlayAutoplay}
+    onClose={closeOverlay}
+    onToggleMode={toggleOverlayMode}
+  />
+</div>
+  );
 }
