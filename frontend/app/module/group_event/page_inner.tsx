@@ -2349,7 +2349,11 @@ if (error) { setConcurrentOther([]); return; }
    if (r.title) g.translations.push({ title: r.title, lang: r.lang });
  });
 
- const items = Array.from(grouped.values()).map((r: any) => {
+   const items = Array.from(grouped.values()).map((r: any) => {
+   const yf = r.year_from != null ? Number(r.year_from) : null;
+   const yt = r.year_to != null ? Number(r.year_to) : null;
+   const yearFrom = Number.isFinite(yf as any) ? (yf as number) : null;
+   const yearTo = Number.isFinite(yt as any) ? (yt as number) : null;
    const translations = Array.isArray(r.translations) ? r.translations : [];
    const title =
      pickTitle(translations, (desiredLang || "").toLowerCase()) ||
@@ -2364,13 +2368,20 @@ if (error) { setConcurrentOther([]); return; }
      latitude: r.latitude ?? null,
      longitude: r.longitude ?? null,
      era: r.era ?? null,
-     year_from: r.year_from ?? null,
-     year_to: r.year_to ?? null,
+     year_from: yearFrom,
+     year_to: yearTo,
      exact_date: r.exact_date ?? null,
      location: null,
      image_url: r.image_url ?? null,
    } as any;
-   const spn = buildTimelineSpan(yy);
+   const spn = buildTimelineSpan(yy) || (yearFrom != null || yearTo != null
+     ? {
+         min: Math.min(yearFrom ?? yearTo ?? 0, yearTo ?? yearFrom ?? 0),
+         max: Math.max(yearFrom ?? yearTo ?? 0, yearTo ?? yearFrom ?? 0),
+         center: ((yearFrom ?? yearTo ?? 0) + (yearTo ?? yearFrom ?? 0)) / 2,
+         start: yearFrom ?? yearTo ?? 0,
+       }
+     : null);
    return {
      evId: String(r.event_id),
      geId: String(r.group_event_id ?? ""),
@@ -2385,11 +2396,12 @@ if (error) { setConcurrentOther([]); return; }
  if (!s) { setConcurrentOther([]); return; }
  const overlapping = items.filter((it) => {
  if (!it.span) return false;
- const from = it.span.min;
- const to = it.span.max;
- const inFrom = from >= s.min && from <= s.max;
- const inTo = to >= s.min && to <= s.max;
- return inFrom || inTo;
+ if (spansOverlap(s, it.span, 0)) return true;
+ const sMin = Math.round(s.min);
+ const sMax = Math.round(s.max);
+ const iMin = Math.round(it.span.min);
+ const iMax = Math.round(it.span.max);
+ return sMin === sMax && iMin === iMax && iMin === sMin;
  });
  overlapping.sort((a, b) => {
  const da = a.startYear != null ? a.startYear : Number.POSITIVE_INFINITY;
@@ -2605,7 +2617,8 @@ const mapTextureStyle: CSSProperties = {
  </div>
  )}
  </div>
- <div className="pt-2 flex items-center gap-3">
+ <div className="pt-2 flex items-center justify-between gap-3">
+ <div className="flex flex-wrap items-center gap-3">
  {selectedEvent?.wiki_url ? (
  <a
  href={selectedEvent.wiki_url}
@@ -2627,6 +2640,18 @@ const mapTextureStyle: CSSProperties = {
  Guarda il video
  </a>
  ) : null}
+ </div>
+ <div className="shrink-0 inline-flex items-center gap-2">
+ <span className="text-[11px] font-semibold text-slate-700">
+ {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
+ </span>
+ <div
+ className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
+ title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+ >
+ {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+ </div>
+ </div>
  </div>
  </div>
 
@@ -2778,28 +2803,41 @@ const mapTextureStyle: CSSProperties = {
     >
       {selectedEvent?.description || "No description available."}
     </div>
-    <div className="pt-2 flex items-center gap-3">
-      {selectedEvent?.wiki_url ? (
-        <a
-          href={selectedEvent.wiki_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+    <div className="pt-2 flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {selectedEvent?.wiki_url ? (
+          <a
+            href={selectedEvent.wiki_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+          >
+            Wikipedia
+          </a>
+        ) : null}
+        {selectedEvent?.video_url ? (
+          <a
+            href={selectedEvent.video_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
+            title="Guarda il video dell'evento"
+          >
+            Guarda il video
+          </a>
+        ) : null}
+      </div>
+      <div className="shrink-0 inline-flex items-center gap-2">
+        <span className="text-[11px] font-semibold text-slate-700">
+          {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
+        </span>
+        <div
+          className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
+          title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
         >
-          Wikipedia
-        </a>
-      ) : null}
-      {selectedEvent?.video_url ? (
-        <a
-          href={selectedEvent.video_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-          title="Guarda il video dell'evento"
-        >
-          Guarda il video
-        </a>
-      ) : null}
+          {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+        </div>
+      </div>
     </div>
   </Collapsible>
  </div>
@@ -3232,8 +3270,8 @@ const mapTextureStyle: CSSProperties = {
         <Timeline3D />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 -mt-1">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 -mt-1 w-full">
+        <div className="flex items-center gap-2 min-w-0">
           <button
             onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
@@ -3286,6 +3324,17 @@ const mapTextureStyle: CSSProperties = {
               Wiki
             </a>
           ) : null}
+        </div>
+        <div className="ml-auto shrink-0 inline-flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-slate-700">
+            {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
+          </span>
+          <div
+            className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
+            title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+          >
+            {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+          </div>
         </div>
       </div>
 
