@@ -2554,7 +2554,7 @@ const mapTextureStyle: CSSProperties = {
    {journeyDescription || "Nessuna descrizione disponibile."}
  </div>
  {/* Nuovo layout: Nav + Griglia 2 colonne (descrizione / media+sezioni) */}
-  <div className="hidden flex items-center justify-end gap-2 mb-3">
+  <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
     <button
       onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
       className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
@@ -2581,6 +2581,7 @@ const mapTextureStyle: CSSProperties = {
     >
       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
+    {renderVoiceToneControls({ compact: true })}
   </div>
 
  <div className="hidden grid grid-cols-2 gap-3 items-start">
@@ -2893,7 +2894,7 @@ const mapTextureStyle: CSSProperties = {
  <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
  </svg>
  </button>
-  <button
+ <button
   onClick={togglePlay}
   className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
   style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
@@ -2911,61 +2912,6 @@ const mapTextureStyle: CSSProperties = {
  )}
   </button>
   {isBuffering ? <span className="text-[11px] text-slate-200">Buffering voice…</span> : null}
-  {isBuffering ? <span className="text-[11px] text-slate-200">Buffering voice…</span> : null}
- <button
- onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
- className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label="Evento successivo"
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- </svg>
- </button>
- {renderVoiceToneControls({ compact: true })}
- </div>
-  <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
- <button
- onClick={toggleMapModeView}
- className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
- title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
- aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- {mapMode === "fullscreen" ? (
- <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- ) : (
- <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- )}
- </svg>
- </button>
- <button
- onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
- className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label="Evento precedente"
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- </svg>
- </button>
- <button
- onClick={togglePlay}
- className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
- >
- {isPlaying ? (
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
- <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
- </svg>
- ) : (
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
- </svg>
- )}
- </button>
  <button
  onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"

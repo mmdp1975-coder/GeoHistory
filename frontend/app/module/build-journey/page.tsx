@@ -13,6 +13,7 @@ import {
   type JourneyEventEditPayload,
   deleteJourneyCascade,
   requestJourneyApproval,
+  loadJourneyEvents,
 } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentUser } from "@/lib/useCurrentUser";
@@ -1272,94 +1273,67 @@ export default function BuildJourneyPage() {
       setRelatedEventsLoading(true);
       setRelatedEventsError(null);
       try {
-        const { data: evData, error: evError } = await supabase
-          .from("event_group_event")
-          .select(
-            "event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images,event_types_id, event_types!fk_event_types (id))",
-          )
-          .eq("group_event_id", journeyId)
-          .order("created_at", { ascending: true });
-        if (evError) throw evError;
-        const rows = (evData ?? []) as any[];
-        const eventIds = rows
-          .map((row) => row.event_id || row.events_list?.id)
-          .filter((id): id is string => Boolean(id));
+        const {
+          rows: evRows,
+          translations: trRows,
+          correlations: corrRows,
+          media: mediaRows,
+        } = await loadJourneyEvents({ group_event_id: journeyId });
+        const rows = (evRows ?? []) as any[];
 
         const translationsMap: Record<string, { primary: JourneyEventEditor["translation"]; all: JourneyEventEditor["translations_all"] }> = {};
-        if (eventIds.length) {
-          const { data: trData } = await supabase
-            .from("event_translations")
-            .select("id, event_id, lang, title, description_short, description, wikipedia_url, video_url")
-            .in("event_id", eventIds);
-          (trData ?? []).forEach((row: any) => {
-            if (!row?.event_id) return;
-            const trObj = {
-              id: row.id as string | undefined,
-              lang: row.lang || DEFAULT_LANGUAGE,
-              title: row.title || "",
-              description_short: row.description_short || "",
-              description: row.description || "",
-              wikipedia_url: row.wikipedia_url || "",
-              video_url: row.video_url || "",
-            };
-            const existing = translationsMap[row.event_id];
-            if (!existing) {
-              translationsMap[row.event_id] = { primary: trObj, all: [trObj] };
-            } else {
-              existing.all.push(trObj);
-              // prefer the default language as "primary"
-              if (trObj.lang === DEFAULT_LANGUAGE) {
-                existing.primary = trObj;
-              }
+        (trRows ?? []).forEach((row: any) => {
+          if (!row?.event_id) return;
+          const trObj = {
+            id: row.id as string | undefined,
+            lang: row.lang || DEFAULT_LANGUAGE,
+            title: row.title || "",
+            description_short: row.description_short || "",
+            description: row.description || "",
+            wikipedia_url: row.wikipedia_url || "",
+            video_url: row.video_url || "",
+          };
+          const existing = translationsMap[row.event_id];
+          if (!existing) {
+            translationsMap[row.event_id] = { primary: trObj, all: [trObj] };
+          } else {
+            existing.all.push(trObj);
+            // prefer the default language as "primary"
+            if (trObj.lang === DEFAULT_LANGUAGE) {
+              existing.primary = trObj;
             }
-          });
-        }
+          }
+        });
 
         const corrMap: Record<string, { group_event_id: string; correlation_type?: string | null }[]> = {};
-        if (eventIds.length) {
-          const { data: corrRows } = await supabase
-            .from("event_group_event_correlated")
-            .select("event_id, group_event_id, correlation_type")
-            .in("event_id", eventIds);
-          (corrRows ?? []).forEach((row: any) => {
-            if (!row?.event_id || !row?.group_event_id) return;
-            corrMap[row.event_id] = corrMap[row.event_id] || [];
-            corrMap[row.event_id].push({
-              group_event_id: row.group_event_id,
-              correlation_type: row.correlation_type ?? "related",
-            });
+        (corrRows ?? []).forEach((row: any) => {
+          if (!row?.event_id || !row?.group_event_id) return;
+          corrMap[row.event_id] = corrMap[row.event_id] || [];
+          corrMap[row.event_id].push({
+            group_event_id: row.group_event_id,
+            correlation_type: row.correlation_type ?? "related",
           });
-        }
+        });
 
         const mediaMap: Record<string, GroupEventMediaItem[]> = {};
-        if (eventIds.length) {
-          const { data: mediaRows } = await supabase
-            .from("v_media_attachments_expanded")
-            .select(
-              "id,media_id,entity_type,role,title,caption,alt_text,is_primary,sort_order,public_url,source_url,media_type,event_id",
-            )
-            .eq("entity_type", "event")
-            .in("event_id", eventIds)
-            .order("sort_order", { ascending: true });
-          (mediaRows ?? []).forEach((row: any) => {
-            if (!row?.event_id) return;
-            mediaMap[row.event_id] = mediaMap[row.event_id] || [];
-            mediaMap[row.event_id].push({
-              id: row.id,
-              media_id: row.media_id ?? undefined,
-              role: row.role ?? "gallery",
-              kind: normalizeMediaKind(row.media_type),
-              public_url: row.public_url ?? "",
-              source_url: row.source_url ?? "",
-              title: row.title ?? "",
-              caption: row.caption ?? "",
-              alt_text: row.alt_text ?? "",
-              sort_order: row.sort_order ?? undefined,
-              is_primary: !!row.is_primary,
-              tempId: row.id,
-            });
+        (mediaRows ?? []).forEach((row: any) => {
+          if (!row?.event_id) return;
+          mediaMap[row.event_id] = mediaMap[row.event_id] || [];
+          mediaMap[row.event_id].push({
+            id: row.id,
+            media_id: row.media_id ?? undefined,
+            role: row.role ?? "gallery",
+            kind: normalizeMediaKind(row.media_type),
+            public_url: row.public_url ?? "",
+            source_url: row.source_url ?? "",
+            title: row.title ?? "",
+            caption: row.caption ?? "",
+            alt_text: row.alt_text ?? "",
+            sort_order: row.sort_order ?? undefined,
+            is_primary: !!row.is_primary,
+            tempId: row.id,
           });
-        }
+        });
 
         const typeOptionsFromEvents: { id: string; label: string }[] = [];
         const mapped: JourneyEventEditor[] = rows.map((row) => {

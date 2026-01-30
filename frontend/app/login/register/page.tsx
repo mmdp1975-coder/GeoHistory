@@ -203,6 +203,25 @@ export default function RegisterPage() {
 
       // Nessun update su public.profiles qui:
       // il profilo viene creato dal trigger, persona/lang restano NULL per ora.
+      // Best-effort: allineo subito profiles con i dati scelti.
+      if (userAny?.id) {
+        try {
+          await fetch("/api/register/profile", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              id: userAny.id,
+              full_name: fullName || null,
+              first_name: firstName.trim() || null,
+              last_name: lastName.trim() || null,
+              username,
+              persona_id: personaId || null,
+            }),
+          });
+        } catch {
+          // ignore: profile bootstrap best effort
+        }
+      }
       setSuccess(true);
     } catch (err: any) {
       const rawMessage: string = err?.message ?? "Registration failed.";

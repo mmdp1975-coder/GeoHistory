@@ -40,6 +40,31 @@ export function useCurrentUser(): CurrentUserState {
     isAdminOrMod: false,
   });
 
+  async function ensureProfileFromAuth(user: any, personaId?: string | null) {
+    try {
+      if (!user?.id) return;
+      const fullName = (user.user_metadata?.full_name || "").trim() || null;
+      const firstName = (user.user_metadata?.first_name || "").trim() || null;
+      const lastName = (user.user_metadata?.last_name || "").trim() || null;
+      const username = (user.user_metadata?.username || user.email || "").trim() || null;
+      const payload = {
+        id: user.id,
+        full_name: fullName,
+        first_name: firstName,
+        last_name: lastName,
+        username,
+        persona_id: personaId ?? user.user_metadata?.persona_id ?? null,
+      };
+      await fetch("/api/register/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // best effort: profile bootstrap
+    }
+  }
+
   // Evita doppio run in StrictMode dev
   const didRunRef = useRef(false);
 
@@ -67,11 +92,22 @@ export function useCurrentUser(): CurrentUserState {
         }
 
         // 2) Profile (persona_id)
-        const { data: profile, error: profErr } = await supabase
+        let { data: profile, error: profErr } = await supabase
           .from("profiles")
           .select("id, persona_id")
           .eq("id", user.id)
           .maybeSingle();
+        if (profErr || !profile) {
+          // best-effort bootstrap (e.g. trigger missing or RLS blocked at signup)
+          await ensureProfileFromAuth(user);
+          const retry = await supabase
+            .from("profiles")
+            .select("id, persona_id")
+            .eq("id", user.id)
+            .maybeSingle();
+          profile = retry.data ?? null;
+          profErr = retry.error ?? null;
+        }
         if (profErr || !profile) {
           setState({
             checking: false,
@@ -79,32 +115,29 @@ export function useCurrentUser(): CurrentUserState {
             userId: user.id,
             profile: null,
             persona: null,
-            personaCode: "",
+            personaCode: "USER",
             isAdminOrMod: false,
           });
           return;
         }
 
         // 3) Persona (code)
-        const { data: persona, error: persErr } = await supabase
-          .from("personas")
-          .select("id, code")
-          .eq("id", (profile as Profile).persona_id)
-          .maybeSingle();
-        if (persErr || !persona) {
-          setState({
-            checking: false,
-            error: "Persona non trovata.",
-            userId: user.id,
-            profile: profile as Profile,
-            persona: null,
-            personaCode: "",
-            isAdminOrMod: false,
-          });
-          return;
+        let persona: Persona | null = null;
+        let code = "USER";
+        if ((profile as Profile).persona_id) {
+          const { data: personaData, error: persErr } = await supabase
+            .from("personas")
+            .select("id, code")
+            .eq("id", (profile as Profile).persona_id)
+            .maybeSingle();
+          if (!persErr && personaData) {
+            persona = personaData as Persona;
+            code = (persona?.code ?? "").trim().toUpperCase() || "USER";
+          }
+        } else if (user.user_metadata?.persona_id) {
+          await ensureProfileFromAuth(user, user.user_metadata.persona_id);
         }
 
-        const code = (persona?.code ?? "").trim().toUpperCase();
         const isPrivileged = code.startsWith("ADMIN") || code.startsWith("MOD");
 
         setState({
@@ -112,7 +145,7 @@ export function useCurrentUser(): CurrentUserState {
           error: null,
           userId: user.id,
           profile: profile as Profile,
-          persona: persona as Persona,
+          persona,
           personaCode: code,
           isAdminOrMod: isPrivileged,
         });

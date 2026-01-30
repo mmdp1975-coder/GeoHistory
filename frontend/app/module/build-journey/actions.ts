@@ -543,6 +543,70 @@ export type SaveJourneyEventsPayload = {
   delete_event_ids?: string[];
 };
 
+export type LoadJourneyEventsPayload = {
+  group_event_id: string;
+};
+
+export type LoadJourneyEventsResult = {
+  rows: any[];
+  translations: any[];
+  correlations: any[];
+  media: any[];
+};
+
+export async function loadJourneyEvents(
+  payload: LoadJourneyEventsPayload,
+): Promise<LoadJourneyEventsResult> {
+  if (!payload?.group_event_id) {
+    throw new Error("group_event_id mancante.");
+  }
+  const { data: evData, error: evError } = await sb()
+    .from(T.ev_ge)
+    .select(
+      "event_id, added_by_user_ref, events_list!inner(id,created_at,year_from,year_to,era,exact_date,country,location,continent,latitude,longitude,geom,source_event_id,image_url,images,event_types_id, event_types!fk_event_types (id))",
+    )
+    .eq("group_event_id", payload.group_event_id)
+    .order("created_at", { ascending: true });
+  if (evError) throw new Error(`event_group_event select: ${evError.message}`);
+  const rows = (evData ?? []) as any[];
+  const eventIds = rows
+    .map((row) => row.event_id || row.events_list?.id)
+    .filter((id): id is string => Boolean(id));
+
+  let translations: any[] = [];
+  let correlations: any[] = [];
+  let media: any[] = [];
+
+  if (eventIds.length) {
+    const { data: trData, error: trError } = await sb()
+      .from(T.ev_trans)
+      .select("id, event_id, lang, title, description_short, description, wikipedia_url, video_url")
+      .in("event_id", eventIds);
+    if (trError) throw new Error(`event_translations select: ${trError.message}`);
+    translations = (trData ?? []) as any[];
+
+    const { data: corrData, error: corrError } = await sb()
+      .from(T.ev_corr)
+      .select("event_id, group_event_id, correlation_type")
+      .in("event_id", eventIds);
+    if (corrError) throw new Error(`event_group_event_correlated select: ${corrError.message}`);
+    correlations = (corrData ?? []) as any[];
+
+    const { data: mediaData, error: mediaError } = await sb()
+      .from("v_media_attachments_expanded")
+      .select(
+        "id,media_id,entity_type,role,title,caption,alt_text,is_primary,sort_order,public_url,source_url,media_type,event_id",
+      )
+      .eq("entity_type", "event")
+      .in("event_id", eventIds)
+      .order("sort_order", { ascending: true });
+    if (mediaError) throw new Error(`event media select: ${mediaError.message}`);
+    media = (mediaData ?? []) as any[];
+  }
+
+  return { rows, translations, correlations, media };
+}
+
 async function insertRow(table: string, record: any) {
   const { data, error } = await sb().from(table).insert(record).select().single();
   if (error) throw new Error(`${table} insert: ${error.message}`);
