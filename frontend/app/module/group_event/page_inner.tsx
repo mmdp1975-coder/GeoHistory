@@ -848,7 +848,7 @@ useEffect(() => {
 }, [queryLang, supabase]);
 
 const [ge, setGe] = useState<AnyObj | null>(null);
-const [geTr, setGeTr] = useState<{ title?: string; pitch?: string; description?: string; video_url?: string; lang?: string } | null>(null);
+ const [geTr, setGeTr] = useState<{ title?: string; description?: string; lang?: string } | null>(null);
 
 const resolvedLang = useMemo(
   () => geTr?.lang?.toLowerCase?.() || desiredLang,
@@ -966,6 +966,15 @@ const selectedIndexRef = useRef(0);
 const ignoreNextSelectedIndexRef = useRef(false);
 const ttsCacheRef = useRef<Map<string, ArrayBuffer>>(new Map());
 const prefetchAbortRef = useRef<AbortController | null>(null);
+const jingleTimerRef = useRef<number | null>(null);
+const jinglePlayedRef = useRef(false);
+const jingleAudioRef = useRef<HTMLAudioElement | null>(null);
+const jingleSrcRef = useRef<string | null>(null);
+const jinglePrimedRef = useRef(false);
+const jinglePlayingRef = useRef(false);
+const jingleCtxRef = useRef<AudioContext | null>(null);
+const jingleGainRef = useRef<GainNode | null>(null);
+const jingleIntervalRef = useRef<number | null>(null);
 
 useEffect(() => {
   isPlayingRef.current = isPlaying;
@@ -978,6 +987,14 @@ const ttsLang = useMemo(() => {
   const v = (resolvedLang || desiredLang || "it").toString().slice(0, 2).toLowerCase();
   return v || "it";
 }, [resolvedLang, desiredLang]);
+const loadingClipSrc = useMemo(
+  () => (ttsLang.startsWith("it") ? "/audio/IT_audio.m4a" : "/audio/EN_audio.m4a"),
+  [ttsLang]
+);
+const journeyTitleForSpeech = useMemo(
+  () => (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString(),
+  [journeyTitle, geTr, ge]
+);
 
 function formatExactDateForSpeech(value?: string | null, lang?: string) {
   if (!value) return "";
@@ -991,32 +1008,70 @@ function formatExactDateForSpeech(value?: string | null, lang?: string) {
   }
 }
 
-function buildIntroText(lang: string, description: string) {
+function buildIntroText(lang: string, description: string, title: string) {
   const desc = (description || "").trim();
+  const safeTitle = (title || "").trim() || (lang.startsWith("it") ? "questo viaggio" : "this journey");
   if (lang.startsWith("it")) {
-    return desc
-      ? `Benvenuto in questo journey. ${desc} Iniziamo dal primo evento.`
-      : "Benvenuto in questo journey. Iniziamo dal primo evento.";
+    return desc ? `${safeTitle}. ${desc}` : `${safeTitle}.`;
   }
-  return desc
-    ? `Welcome to this journey. ${desc} Let's start with the first event.`
-    : "Welcome to this journey. Let's start with the first event.";
+  return desc ? `${safeTitle}. ${desc}` : `${safeTitle}.`;
+}
+
+function formatSpeechPeriod(ev: EventVM, lang: string) {
+  const isIt = lang.startsWith("it");
+  const from = typeof ev.year_from === "number" ? Math.abs(ev.year_from) : null;
+  const to = typeof ev.year_to === "number" ? Math.abs(ev.year_to) : null;
+  const era = normEra(ev.era);
+  const bcSuffix = isIt ? "avanti Cristo" : "before Christ";
+
+  if (from != null && to != null) {
+    if (from === to) {
+      if (era === "BC") return isIt ? `${from} ${bcSuffix}` : `${from} ${bcSuffix}`;
+      return `${from}`;
+    }
+    if (era === "BC") {
+      return isIt ? `tra il ${from} e il ${to} ${bcSuffix}` : `between ${from} and ${to} ${bcSuffix}`;
+    }
+    return isIt ? `tra il ${from} e il ${to}` : `between ${from} and ${to}`;
+  }
+
+  const single = from ?? to ?? parseExactDateYear(ev.exact_date);
+  if (single != null) {
+    if (era === "BC") return isIt ? `${single} ${bcSuffix}` : `${single} ${bcSuffix}`;
+    return `${single}`;
+  }
+
+  return isIt ? "un periodo non precisato" : "an unspecified period";
 }
 
 function buildEventSpeechText(ev: EventVM, lang: string) {
-  const dateText = ev.exact_date ? formatExactDateForSpeech(ev.exact_date, lang) : formatEventRange(ev);
+  const isIt = lang.startsWith("it");
   const place = ev.location ? ev.location : "";
-  const title = ev.title || (lang.startsWith("it") ? "Evento" : "Event");
-  const description = ev.description || "";
-  const dash = place ? ` - ${place}` : "";
-  return `${dateText}${dash}. ${title}. ${description}`.trim();
+  const title = ev.title || (isIt ? "Evento" : "Event");
+  const description = (ev.description || "").trim();
+
+  if (ev.exact_date) {
+    const dateText = formatExactDateForSpeech(ev.exact_date, lang);
+    const placeChunk = place ? (isIt ? `, a ${place}` : `, in ${place}`) : "";
+    const lead = isIt ? `Il ${dateText}` : `On ${dateText}`;
+    const base = `${title}. ${lead}${placeChunk}.`;
+    return description ? `${base} ${description}` : base;
+  }
+
+  const period = formatSpeechPeriod(ev, lang);
+  const lead = isIt
+    ? (period.startsWith("tra ") ? `Nel periodo ${period}` : `Nel ${period}`)
+    : (period.startsWith("between ") ? `In the period ${period}` : `In ${period}`);
+  const placeChunk = place ? (isIt ? `, a ${place}` : `, in ${place}`) : "";
+  const base = `${title}. ${lead}${placeChunk}.`;
+  return description ? `${base} ${description}` : base;
 }
 
 const buildQueueFrom = useCallback(
   (startIndex: number, includeIntro: boolean) => {
     const items: Array<{ kind: "intro" | "event"; index?: number; text: string }> = [];
     if (includeIntro) {
-      items.push({ kind: "intro", text: buildIntroText(ttsLang, journeyDescription) });
+      items.push({ kind: "intro", text: buildIntroText(ttsLang, journeyDescription, journeyTitleForSpeech) });
     }
     for (let i = startIndex; i < rows.length; i += 1) {
       const ev = rows[i];
@@ -1024,7 +1079,7 @@ const buildQueueFrom = useCallback(
     }
     return items;
   },
-  [rows, journeyDescription, ttsLang]
+  [rows, journeyDescription, ttsLang, journeyTitleForSpeech]
 );
 
 const buildTtsCacheKey = useCallback(
@@ -1046,15 +1101,136 @@ const abortCurrentAudio = useCallback(() => {
   }
 }, []);
 
+const stopJingle = useCallback(() => {
+  if (jingleTimerRef.current != null) {
+    window.clearTimeout(jingleTimerRef.current);
+    jingleTimerRef.current = null;
+  }
+  if (jingleIntervalRef.current != null) {
+    window.clearInterval(jingleIntervalRef.current);
+    jingleIntervalRef.current = null;
+  }
+  if (jingleGainRef.current) {
+    try { jingleGainRef.current.gain.value = 0; } catch {}
+  }
+  jinglePlayedRef.current = false;
+  jinglePrimedRef.current = false;
+  jinglePlayingRef.current = false;
+  const audio = jingleAudioRef.current;
+  if (audio) {
+    audio.loop = false;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = true;
+  }
+}, []);
+
+const fadeOutJingle = useCallback((durationMs = 400) => {
+  const audio = jingleAudioRef.current;
+  if (!audio) return;
+  const startVol = audio.volume ?? 1;
+  const steps = 6;
+  const stepMs = Math.max(30, Math.floor(durationMs / steps));
+  let i = 0;
+  if (jingleTimerRef.current != null) {
+    window.clearTimeout(jingleTimerRef.current);
+    jingleTimerRef.current = null;
+  }
+  const tick = () => {
+    i += 1;
+    const next = startVol * (1 - i / steps);
+    audio.volume = Math.max(0, next);
+    if (i >= steps) {
+      stopJingle();
+      return;
+    }
+    jingleTimerRef.current = window.setTimeout(tick, stepMs);
+  };
+  tick();
+}, [stopJingle]);
+
 const stopAllPlayback = useCallback(() => {
   abortCurrentAudio();
   queueRef.current = [];
   currentQueuePosRef.current = 0;
   playStartIndexRef.current = null;
   setIsBuffering(false);
-}, [abortCurrentAudio]);
+  stopJingle();
+}, [abortCurrentAudio, stopJingle]);
 
 useEffect(() => () => stopAllPlayback(), [stopAllPlayback]);
+
+const ensureJingleContext = useCallback(() => {
+  if (jingleCtxRef.current) return jingleCtxRef.current;
+  const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  jingleCtxRef.current = ctx;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.15;
+  gain.connect(ctx.destination);
+  jingleGainRef.current = gain;
+  return ctx;
+}, []);
+
+const startWebAudioJingle = useCallback(() => {
+  if (jingleIntervalRef.current != null) return;
+  const ctx = ensureJingleContext();
+  if (!ctx || !jingleGainRef.current) return;
+  void ctx.resume().catch(() => {});
+  const playNote = (freq: number, startAt: number, duration = 0.12, type: OscillatorType = "sine") => {
+    const osc = ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    osc.connect(jingleGainRef.current as GainNode);
+    osc.start(startAt);
+    osc.stop(startAt + duration);
+  };
+  const tick = () => {
+    const now = ctx.currentTime;
+    // Soft "loading" pulse: two low blips
+    playNote(280, now + 0.00, 0.12);
+    playNote(360, now + 0.18, 0.10);
+  };
+  tick();
+  jingleIntervalRef.current = window.setInterval(tick, 900);
+}, [ensureJingleContext]);
+
+const startJingleLoop = useCallback(() => {
+  const audio = jingleAudioRef.current;
+  if (!audio) return;
+  audio.src = loadingClipSrc;
+  audio.currentTime = 0;
+  audio.volume = 1.0;
+  audio.muted = false;
+  audio.loop = true;
+  jinglePlayingRef.current = true;
+  void audio.play().catch(() => {
+    jinglePlayingRef.current = false;
+  });
+}, [loadingClipSrc]);
+
+const primeJingleOnPlay = useCallback(() => {
+  const ctx = ensureJingleContext();
+  if (ctx) void ctx.resume().catch(() => {});
+  const audio = jingleAudioRef.current;
+  if (!audio || jinglePrimedRef.current) return;
+  audio.src = loadingClipSrc;
+  audio.muted = true;
+  audio.volume = 0.0;
+  audio.currentTime = 0;
+  void audio.play().then(() => {
+    jinglePrimedRef.current = true;
+    audio.pause();
+    audio.currentTime = 0;
+  }).catch(() => {});
+}, [ensureJingleContext, loadingClipSrc]);
+
+useEffect(() => {
+  if (!isBuffering) return;
+  if (jinglePlayingRef.current) return;
+  startJingleLoop();
+}, [isBuffering, startJingleLoop, stopJingle]);
 
 const playSegment = useCallback(
   async (pos: number) => {
@@ -1080,9 +1256,8 @@ const playSegment = useCallback(
           signal: controller.signal,
         });
         if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`TTS ${res.status}: ${errText}`);
-        }
+        throw new Error(`TTS ${res.status}`);
+      }
         buf = await res.arrayBuffer();
         ttsCacheRef.current.set(cacheKey, buf);
       }
@@ -1094,7 +1269,18 @@ const playSegment = useCallback(
       audioUrlRef.current = url;
       audio.src = url;
       audio.currentTime = 0;
+      await new Promise<void>((resolve) => {
+        const onReady = () => {
+          audio.removeEventListener("canplay", onReady);
+          audio.removeEventListener("canplaythrough", onReady);
+          resolve();
+        };
+        audio.addEventListener("canplay", onReady);
+        audio.addEventListener("canplaythrough", onReady);
+        window.setTimeout(resolve, 800);
+      });
       await audio.play();
+      fadeOutJingle(450);
     } catch (err: any) {
       if (controller.signal.aborted) return;
       console.error("[GE] TTS error:", err?.message || err);
@@ -1180,10 +1366,12 @@ const togglePlay = useCallback(() => {
     if (!prev) {
       playStartIndexRef.current = selectedIndexRef.current;
       ignoreNextSelectedIndexRef.current = true;
+      primeJingleOnPlay();
+      startJingleLoop();
     }
     return !prev;
   });
-}, []);
+}, [primeJingleOnPlay]);
 
 const prefetchFirstSegment = useCallback(
   async (index: number) => {
@@ -1226,8 +1414,8 @@ useEffect(() => {
 }, [rows.length, prefetchFirstSegment]);
 
 const prefetchIntroSegment = useCallback(async () => {
-  if (!journeyDescription) return;
-  const text = buildIntroText(ttsLang, journeyDescription);
+  if (!journeyDescription && !journeyTitleForSpeech) return;
+  const text = buildIntroText(ttsLang, journeyDescription, journeyTitleForSpeech);
   const cacheKey = buildTtsCacheKey(text);
   if (ttsCacheRef.current.has(cacheKey)) return;
   prefetchAbortRef.current?.abort();
@@ -1246,7 +1434,7 @@ const prefetchIntroSegment = useCallback(async () => {
       ttsCacheRef.current.set(cacheKey, buf);
     }
   } catch {}
-}, [journeyDescription, ttsLang, voice, tone, buildTtsCacheKey]);
+}, [journeyDescription, journeyTitleForSpeech, ttsLang, voice, tone, buildTtsCacheKey]);
 
 useEffect(() => {
   if (isPlayingRef.current) return;
@@ -1524,7 +1712,7 @@ useEffect(() => {
  let geTrData: any = null;
  const { data: geTrExact } = await supabase
  .from("group_event_translations")
- .select("title, pitch, description, video_url, lang")
+        .select("title, description, lang")
  .eq("group_event_id", gid)
  .eq("lang", desiredLang)
  .maybeSingle();
@@ -1532,7 +1720,7 @@ useEffect(() => {
  else {
  const { data: geTrAny } = await supabase
  .from("group_event_translations")
- .select("title, pitch, description, video_url, lang")
+          .select("title, description, lang")
  .eq("group_event_id", gid)
  .limit(1);
  geTrData = geTrAny?.[0] || null;
@@ -1542,7 +1730,7 @@ useEffect(() => {
  .from("v_journey")
  .select(
  `event_id, group_event_id, description, lang, title, wikipedia_url,
- continent, country, era, exact_date, id, latitude, longitude, year_from, year_to,
+ location, continent, country, era, exact_date, id, latitude, longitude, year_from, year_to,
  journey_title, journey_description, journey_media, journey_media_first, event_media, event_media_first, event_type_icon`
  )
  .eq("group_event_id", gid);
@@ -1550,7 +1738,7 @@ useEffect(() => {
 
  const vms: EventVM[] = (vjRows ?? []).map((r: any) => {
  const eventId = r.event_id ?? r.id;
- const location = r.city ?? r.region ?? r.country ?? r.continent ?? null;
+ const location = r.location ?? r.country ?? r.continent ?? null;
  const eventMedia: MediaItem[] = Array.isArray(r.event_media)
    ? (r.event_media as any[]).map(coerceMediaItem).filter(Boolean) as MediaItem[]
    : [];
@@ -2113,37 +2301,20 @@ useEffect(() => {
  const ev = rows[selectedIndex];
  if (!ev || !gid) { setConcurrentOther([]); return; }
  const s = buildTimelineSpan(ev);
- if (!s) { setConcurrentOther([]); return; }
+ if (!s) return "";
  // Normalizza: DB ha anni positivi + campo era (BC/AD)
- const era = normEra(ev.era);
  const minSigned = Math.floor(s.min);
  const maxSigned = Math.ceil(s.max);
  const minAbs = Math.min(Math.abs(minSigned), Math.abs(maxSigned));
  const maxAbs = Math.max(Math.abs(minSigned), Math.abs(maxSigned));
 
- const { data, error } = await supabase
- .from("event_group_event")
- .select(`
-   event_id,
-   group_event_id,
-   group_events!inner(id, visibility, workflow_state),
-   events_list!inner(
-     id,
-     year_from,
-     year_to,
-     era,
-     exact_date,
-     latitude,
-     longitude,
-     image_url,
-     event_translations!left(title,lang)
-   )
- `)
- .neq("group_event_id", gid)
-.eq("events_list.era", era)
-.eq("group_events.visibility", "public")
-.eq("group_events.workflow_state", "published")
-.limit(400);
+ let query = supabase
+ .from("v_concurrent_events")
+ .select("event_id, group_event_id, year_from, year_to, era, exact_date, latitude, longitude, image_url, title, lang")
+ .neq("group_event_id", gid);
+ const era = ev.era ? normEra(ev.era) : null;
+ if (era) query = query.or(`era.eq.${era},era.is.null`);
+ const { data, error } = await query.limit(400);
 if (error) { setConcurrentOther([]); return; }
 
  const pickTitle = (translations: any[], lang: string) => {
@@ -2157,49 +2328,72 @@ if (error) { setConcurrentOther([]); return; }
    return first?.title ?? null;
  };
 
-const items = (data || []).map((r: any) => {
-const evRow = (r as any).events_list || (r as any);
-const translations = Array.isArray(evRow.event_translations) ? evRow.event_translations : [];
- const title =
-  pickTitle(translations, (desiredLang || "").toLowerCase()) ||
-  evRow.title ||
-  (evRow.location ?? evRow.country ?? evRow.continent ?? "Event");
- const yy: EventVM = {
- id: String(evRow.id),
- title: String(title ?? "Event"),
- description: "",
- wiki_url: null,
- video_url: null,
- order_key: 0,
- latitude: evRow.latitude ?? null,
- longitude: evRow.longitude ?? null,
- era: evRow.era ?? null,
- year_from: evRow.year_from ?? null,
- year_to: evRow.year_to ?? null,
- exact_date: evRow.exact_date ?? null,
- location: evRow.location ?? evRow.country ?? evRow.continent ?? null,
- image_url: evRow.image_url ?? null,
- } as any;
- const spn = buildTimelineSpan(yy);
- return {
-   evId: String(evRow.id),
-   geId: String((r as any).group_event_id ?? ""),
-   geTitle: null,
-   evTitle: String(yy.title || "Event"),
-   span: spn,
-   startYear: spn?.start,
-   ev: yy,
- } as any;
-}).filter((x) => x.geId && x.evId);
+ const grouped = new Map<string, any>();
+ (data || []).forEach((r: any) => {
+   const key = `${r.group_event_id}:${r.event_id}`;
+   if (!grouped.has(key)) {
+     grouped.set(key, {
+       event_id: r.event_id,
+       group_event_id: r.group_event_id,
+       year_from: r.year_from ?? null,
+       year_to: r.year_to ?? null,
+       era: r.era ?? null,
+       exact_date: r.exact_date ?? null,
+       latitude: r.latitude ?? null,
+       longitude: r.longitude ?? null,
+       image_url: r.image_url ?? null,
+       translations: [],
+     });
+   }
+   const g = grouped.get(key);
+   if (r.title) g.translations.push({ title: r.title, lang: r.lang });
+ });
+
+ const items = Array.from(grouped.values()).map((r: any) => {
+   const translations = Array.isArray(r.translations) ? r.translations : [];
+   const title =
+     pickTitle(translations, (desiredLang || "").toLowerCase()) ||
+     "Event";
+   const yy: EventVM = {
+     id: String(r.event_id),
+     title: String(title ?? "Event"),
+     description: "",
+     wiki_url: null,
+     video_url: null,
+     order_key: 0,
+     latitude: r.latitude ?? null,
+     longitude: r.longitude ?? null,
+     era: r.era ?? null,
+     year_from: r.year_from ?? null,
+     year_to: r.year_to ?? null,
+     exact_date: r.exact_date ?? null,
+     location: null,
+     image_url: r.image_url ?? null,
+   } as any;
+   const spn = buildTimelineSpan(yy);
+   return {
+     evId: String(r.event_id),
+     geId: String(r.group_event_id ?? ""),
+     geTitle: null,
+     evTitle: String(yy.title || "Event"),
+     span: spn,
+     startYear: spn?.start,
+     ev: yy,
+   } as any;
+ }).filter((x) => x && x.geId && x.evId);
  // filtro su span reale; se manca span includo comunque
- const center = (s.min + s.max) / 2;
+ if (!s) { setConcurrentOther([]); return; }
  const overlapping = items.filter((it) => {
- if (it.span) return spansOverlap(s, it.span as any, 0);
- return true;
+ if (!it.span) return false;
+ const from = it.span.min;
+ const to = it.span.max;
+ const inFrom = from >= s.min && from <= s.max;
+ const inTo = to >= s.min && to <= s.max;
+ return inFrom || inTo;
  });
  overlapping.sort((a, b) => {
- const da = a.startYear != null ? Math.abs((a.startYear as any) - center) : Number.POSITIVE_INFINITY;
- const db = b.startYear != null ? Math.abs((b.startYear as any) - center) : Number.POSITIVE_INFINITY;
+ const da = a.startYear != null ? a.startYear : Number.POSITIVE_INFINITY;
+ const db = b.startYear != null ? b.startYear : Number.POSITIVE_INFINITY;
  return da - db;
  });
  setConcurrentOther(overlapping.slice(0, 20));
@@ -2208,6 +2402,9 @@ const translations = Array.isArray(evRow.event_translations) ? evRow.event_trans
 }, [rows, selectedIndex, gid, supabase, resolvedLang, desiredLang]);
 
 const selectedEvent = rows[selectedIndex];
+const concurrentDisplay = useMemo(() => {
+ return concurrentOther || [];
+}, [concurrentOther]);
 const related = (() => {
  const sel = rows[selectedIndex];
  return sel ? corrByEvent[sel.id] ?? [] : [];
@@ -2980,9 +3177,9 @@ const mapTextureStyle: CSSProperties = {
         <div className="text-[12px] font-semibold text-slate-800">
           {tUI(uiLang, "journey.concurrent.title")}
         </div>
-        {concurrentOther && concurrentOther.length ? (
+        {concurrentDisplay && concurrentDisplay.length ? (
           <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
-            {concurrentOther.map((c) => {
+            {concurrentDisplay.map((c) => {
               const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
               return (
                 <button
@@ -3192,6 +3389,7 @@ const mapTextureStyle: CSSProperties = {
  </div>
 
   <audio ref={audioRef} preload="none" className="hidden" />
+  <audio ref={jingleAudioRef} preload="auto" className="hidden" />
 
   {/* Overlay/Full-screen player */}
   <QuizOverlay open={quizOpen} onClose={closeQuiz} src={quizUrl} />
@@ -3205,4 +3403,39 @@ const mapTextureStyle: CSSProperties = {
   />
 </div>
   );
+}
+function buildJingleDataUri() {
+  const sampleRate = 22050;
+  const durationSec = 0.25;
+  const freq = 880;
+  const numSamples = Math.floor(sampleRate * durationSec);
+  const dataSize = numSamples * 2;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, "WAVE");
+  writeStr(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM
+  view.setUint16(20, 1, true); // format
+  view.setUint16(22, 1, true); // channels
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeStr(36, "data");
+  view.setUint32(40, dataSize, true);
+  const amp = 0.4;
+  for (let i = 0; i < numSamples; i += 1) {
+    const t = i / sampleRate;
+    const sample = Math.sin(2 * Math.PI * freq * t) * amp;
+    view.setInt16(44 + i * 2, sample * 32767, true);
+  }
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return `data:audio/wav;base64,${btoa(binary)}`;
 }

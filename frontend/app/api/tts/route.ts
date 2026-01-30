@@ -1,9 +1,5 @@
 export async function POST(req: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (process.env.NODE_ENV !== "production") {
-    const safeKey = apiKey ? `${apiKey.slice(0, 6)}...${apiKey.slice(-4)}` : "missing";
-    console.log("[TTS] OPENAI_API_KEY", safeKey, "len", apiKey?.length ?? 0);
-  }
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
       status: 500,
@@ -92,11 +88,7 @@ export async function POST(req: Request) {
 
     if (!result.ok) {
       return new Response(
-        JSON.stringify({
-          error: "OpenAI TTS error",
-          detail: result.errText,
-          status: result.status,
-        }),
+        JSON.stringify({ error: "OpenAI TTS error", status: result.status }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" },
@@ -115,7 +107,7 @@ export async function POST(req: Request) {
     return new Response(
       JSON.stringify({
         error: "OpenAI TTS error",
-        detail: err?.message || String(err),
+        detail: process.env.NODE_ENV === "development" ? err?.message || String(err) : undefined,
       }),
       {
         status: 500,
