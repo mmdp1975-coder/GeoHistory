@@ -276,6 +276,21 @@ function normalizeMediaUrl(raw?: string | null) {
   return encodeURI(withForwardSlashes);
 }
 
+function parseStorageFromUrl(url: string) {
+  try {
+    const withoutQuery = url.split("?")[0];
+    const marker = "/storage/v1/object/public/";
+    const idx = withoutQuery.indexOf(marker);
+    if (idx === -1) return null;
+    const tail = withoutQuery.slice(idx + marker.length);
+    const [bucket, ...rest] = tail.split("/");
+    if (!bucket || !rest.length) return null;
+    return { bucket, path: rest.join("/") };
+  } catch {
+    return null;
+  }
+}
+
 function normalizeMediaItem(m: MediaItem): MediaItem {
   const normalizedUrl = normalizeMediaUrl(m.url || null);
   const normalizedPreview = normalizeMediaUrl(m.preview || null);
@@ -795,7 +810,8 @@ function Collapsible({
 /* ===================== Pagina ===================== */
 export default function GroupEventModulePage() {
  const router = useRouter();
- const sp = useSearchParams();
+const sp = useSearchParams();
+const debugPlayer = sp.get("debug") === "1";
  const supabase = useMemo(() => createClientComponentClient(), []);
  const { userId } = useCurrentUser();
  const isLg = useIsLg();
@@ -985,6 +1001,11 @@ const jingleGainRef = useRef<GainNode | null>(null);
 const jingleIntervalRef = useRef<number | null>(null);
 const playAfterSelectRef = useRef(false);
 const ignoreNextSeekRef = useRef(false);
+const playOnSelectRef = useRef(false);
+const manualSeekUntilRef = useRef(0);
+const introSkippedRef = useRef(false);
+const manualSeekTargetRef = useRef<number | null>(null);
+const manualSeekIndexRef = useRef<number | null>(null);
 const [audioSource, setAudioSource] = useState<string>("");
 const [audioCurrentTime, setAudioCurrentTime] = useState(0);
 const [audioDuration, setAudioDuration] = useState(0);
@@ -1031,6 +1052,29 @@ const audioSourceOptions = useMemo(() => {
 const selectedAudioSource = audioSourceOptions.find((opt) => opt.value === audioSource) ?? audioSourceOptions[0];
 const selectedAudioUrl = (selectedAudioSource as any)?.url as string | undefined;
 const selectedAudioTimeline = (selectedAudioSource as any)?.timeline as any | undefined;
+
+const audioEventStarts = useMemo(() => {
+  const map = new Map<string, number>();
+  const segments = selectedAudioTimeline?.segments as any[] | undefined;
+  if (Array.isArray(segments)) {
+    segments.forEach((seg) => {
+      if (seg?.eventId && String(seg.kind || "") === "event_header" && Number.isFinite(seg.start)) {
+        const key = String(seg.eventId);
+        if (!map.has(key)) {
+          map.set(key, Math.max(0, Number(seg.start)));
+        }
+      }
+    });
+  }
+  return map;
+}, [selectedAudioTimeline]);
+
+const firstEventStart = useMemo(() => {
+  const segments = selectedAudioTimeline?.segments as any[] | undefined;
+  if (!Array.isArray(segments)) return null;
+  const header = segments.find((seg) => String(seg?.kind || "") === "event_header" && Number.isFinite(seg.start));
+  return header ? Math.max(0, Number(header.start)) : null;
+}, [selectedAudioTimeline]);
 const hasMp3Audio = journeyAudioTracks.length > 0;
 const isMp3Mode = hasMp3Audio && !!selectedAudioUrl;
 const selectedAudioLang =
@@ -1289,6 +1333,59 @@ useEffect(() => {
 }, [audioSource, selectedAudioUrl, isMp3Mode, stopAllPlayback]);
 
 useEffect(() => {
+  if (!selectedAudioUrl) return;
+  if (selectedAudioTimeline && Array.isArray(selectedAudioTimeline?.segments)) return;
+  const storage = parseStorageFromUrl(selectedAudioUrl);
+  if (!storage) return;
+
+  (async () => {
+    const { data, error } = await supabase
+      .from("media_assets")
+      .select("id,storage_bucket,storage_path,metadata")
+      .eq("storage_bucket", storage.bucket)
+      .eq("storage_path", storage.path)
+      .maybeSingle();
+    if (error || !data) return;
+    const timeline = (data as any)?.metadata?.audio_timeline ?? null;
+    if (!timeline) return;
+    setJourneyAudioTracks((prev) =>
+      prev.map((track) =>
+        track.url === selectedAudioUrl ? { ...track, timeline } : track
+      ),
+    );
+  })();
+}, [selectedAudioUrl, selectedAudioTimeline, supabase]);
+
+useEffect(() => {
+  const missing = journeyAudioTracks.filter((t) => t.url && !t.timeline);
+  if (!missing.length) return;
+  (async () => {
+    const updates = new Map<string, any>();
+    for (const track of missing) {
+      const storage = parseStorageFromUrl(track.url);
+      if (!storage) continue;
+      const { data } = await supabase
+        .from("media_assets")
+        .select("metadata")
+        .eq("storage_bucket", storage.bucket)
+        .eq("storage_path", storage.path)
+        .maybeSingle();
+      const timeline = (data as any)?.metadata?.audio_timeline ?? null;
+      if (timeline) {
+        updates.set(track.url, timeline);
+      }
+    }
+    if (updates.size) {
+      setJourneyAudioTracks((prev) =>
+        prev.map((track) =>
+          updates.has(track.url) ? { ...track, timeline: updates.get(track.url) } : track,
+        ),
+      );
+    }
+  })();
+}, [journeyAudioTracks, supabase]);
+
+useEffect(() => {
   if (!autoScrollActive) {
     if (autoScrollTimerRef.current) {
       window.clearTimeout(autoScrollTimerRef.current);
@@ -1359,33 +1456,43 @@ useEffect(() => () => stopAllPlayback(), [stopAllPlayback]);
 const syncSelectedIndexFromTime = useCallback(
   (time: number, duration: number) => {
     if (!rows.length || !duration || duration <= 0) return;
-  const timeline = audioTimeline?.cumulative;
-  if (timeline && timeline.length) {
-    const segIndex = timeline.findIndex((t) => time <= t);
-    const safeSegIndex = segIndex === -1 ? timeline.length - 1 : segIndex;
-    const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
-    if (segmentsMeta && segmentsMeta.length) {
-      let targetEventIndex: number | null = null;
-      for (let i = safeSegIndex; i >= 0; i -= 1) {
-        const seg = segmentsMeta[i];
-        if (seg?.kind === "event" && Number.isFinite(seg.index)) {
-          targetEventIndex = Number(seg.index);
-          break;
-        }
+    if (Date.now() < manualSeekUntilRef.current) return;
+    if (manualSeekTargetRef.current != null) {
+      const target = manualSeekTargetRef.current;
+      if (time < Math.max(0, target - 0.25)) {
+        return;
       }
-      if (targetEventIndex == null) {
-        targetEventIndex = 0;
-      }
-      if (targetEventIndex < 0) targetEventIndex = 0;
-      if (targetEventIndex >= rows.length) targetEventIndex = rows.length - 1;
-      if (targetEventIndex !== selectedIndexRef.current) {
-        ignoreNextSeekRef.current = true;
-        autoAdvanceRef.current = true;
-        setSelectedIndex(targetEventIndex);
-        setTimeout(() => { autoAdvanceRef.current = false; }, 0);
-      }
-      return;
+      manualSeekTargetRef.current = null;
+      manualSeekIndexRef.current = null;
     }
+    const timeline = audioTimeline?.cumulative;
+    if (timeline && timeline.length) {
+      const segIndex = timeline.findIndex((t) => time <= t);
+      const safeSegIndex = segIndex === -1 ? timeline.length - 1 : segIndex;
+      const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
+      if (segmentsMeta && segmentsMeta.length) {
+        let targetEventId: string | null = null;
+        for (let i = safeSegIndex; i >= 0; i -= 1) {
+          const seg = segmentsMeta[i];
+          if (seg?.eventId && String(seg.kind || "").startsWith("event")) {
+            targetEventId = String(seg.eventId);
+            break;
+          }
+        }
+        const targetEventIndex =
+          targetEventId
+            ? rows.findIndex((r) => r.id === targetEventId)
+            : -1;
+        const resolvedIndex =
+          targetEventIndex >= 0 ? targetEventIndex : 0;
+        if (resolvedIndex !== selectedIndexRef.current) {
+          ignoreNextSeekRef.current = true;
+          autoAdvanceRef.current = true;
+          setSelectedIndex(resolvedIndex);
+          setTimeout(() => { autoAdvanceRef.current = false; }, 0);
+        }
+        return;
+      }
     let idx = safeSegIndex;
     let eventIndex = idx - (audioTimeline?.hasIntro ? 1 : 0);
     if (eventIndex < 0) eventIndex = 0;
@@ -1805,41 +1912,67 @@ const renderAudioMeta = useCallback(() => {
     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
       <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">Evento {countLabel}</span>
       {timeLabel ? <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">{timeLabel}</span> : null}
+      {debugPlayer ? (
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-900">
+          idx:{selectedIndex} t:{audioCurrentTime.toFixed(1)} first:{firstEventStart ?? "-"}
+        </span>
+      ) : null}
     </div>
   );
-}, [rows.length, selectedIndex, audioCurrentTime, audioDuration]);
+}, [rows.length, selectedIndex, audioCurrentTime, audioDuration, debugPlayer, firstEventStart]);
 
 const getEventStartTime = useCallback(
   (index: number) => {
-    if (!audioTimeline?.cumulative?.length) return 0;
-    const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
-    if (segmentsMeta && segmentsMeta.length) {
-      const match = segmentsMeta.find((s) => s?.kind === "event" && Number(s?.index) === index);
-      if (match && Number.isFinite(match.start)) {
-        return Math.max(0, Number(match.start));
-      }
+    const targetId = rows[index]?.id;
+    if (targetId && audioEventStarts.has(String(targetId))) {
+      return audioEventStarts.get(String(targetId)) ?? 0;
     }
+    if (!audioTimeline?.cumulative?.length) return 0;
     const offset = audioTimeline.hasIntro ? 1 : 0;
     const segIndex = Math.max(0, Math.min(index + offset, audioTimeline.cumulative.length - 1));
     const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
     return Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
   },
-  [audioTimeline],
+  [audioTimeline, rows, audioEventStarts],
 );
 
 const seekToEventIndex = useCallback(
-  (nextIndex: number) => {
+  (nextIndex: number, opts?: { autoplay?: boolean }) => {
+    if (debugPlayer) {
+      console.log(
+        `[GE] seekToEventIndex next=${nextIndex} autoplay=${!!opts?.autoplay} sel=${selectedIndex} time=${audioCurrentTime.toFixed(2)}`,
+      );
+    }
+    manualSeekUntilRef.current = Date.now() + 1500;
+    selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
     if (!isMp3Mode) return;
     if (!audioTimeline?.cumulative?.length) return;
     const audio = audioRef.current;
     if (!audio) return;
     const target = getEventStartTime(nextIndex);
+    manualSeekTargetRef.current = Number.isFinite(target) ? target : 0;
+    manualSeekIndexRef.current = nextIndex;
+    if (debugPlayer) {
+      const targetId = rows[nextIndex]?.id ?? "";
+      console.log(
+        `[GE] seek target=${target.toFixed(2)} eventId=${targetId} ready=${audio.readyState}`,
+      );
+    }
     if (Number.isFinite(target)) {
       audio.currentTime = target;
       setAudioCurrentTime(target);
-      if (isPlayingRef.current) {
+      window.setTimeout(() => {
+        if (!audioRef.current) return;
+        if (manualSeekTargetRef.current == null) return;
+        const drift = Math.abs(audioRef.current.currentTime - target);
+        if (drift > 0.5) {
+          audioRef.current.currentTime = target;
+        }
+      }, 200);
+      if (opts?.autoplay || isPlayingRef.current) {
         void audio.play().catch(() => {});
+        setIsPlaying(true);
       }
     }
   },
@@ -1849,14 +1982,38 @@ const seekToEventIndex = useCallback(
 const handlePrevEvent = useCallback(() => {
   if (!rows.length) return;
   const nextIndex = (selectedIndex - 1 + rows.length) % rows.length;
-  seekToEventIndex(nextIndex);
+  seekToEventIndex(nextIndex, { autoplay: true });
 }, [rows.length, selectedIndex, seekToEventIndex]);
 
 const handleNextEvent = useCallback(() => {
   if (!rows.length) return;
-  const nextIndex = (selectedIndex + 1) % rows.length;
-  seekToEventIndex(nextIndex);
-}, [rows.length, selectedIndex, seekToEventIndex]);
+  if (isMp3Mode && firstEventStart != null && selectedIndex === 0 && !introSkippedRef.current) {
+    const audioTime = audioRef.current?.currentTime ?? audioCurrentTime;
+    if (audioTime < Math.max(0, firstEventStart - 0.25)) {
+      if (debugPlayer) {
+        console.log(
+          `[GE] nextEvent intro->first sel=${selectedIndex} time=${audioTime.toFixed(2)} first=${firstEventStart}`,
+        );
+      }
+      introSkippedRef.current = true;
+      seekToEventIndex(0, { autoplay: true });
+      return;
+    }
+  }
+  const nextIndex = Math.min(rows.length - 1, selectedIndex + 1);
+  if (debugPlayer) {
+    console.log(`[GE] nextEvent normal sel=${selectedIndex} next=${nextIndex}`);
+  }
+  seekToEventIndex(nextIndex, { autoplay: true });
+}, [rows.length, selectedIndex, seekToEventIndex, isMp3Mode, audioCurrentTime, firstEventStart, debugPlayer]);
+
+const handleSelectEvent = useCallback(
+  (nextIndex: number) => {
+    playOnSelectRef.current = true;
+    seekToEventIndex(nextIndex, { autoplay: true });
+  },
+  [seekToEventIndex],
+);
 
 const renderMapPlayerBox = useCallback(
   (opts?: { compact?: boolean }) => (
@@ -2348,27 +2505,28 @@ let audioTracks = jmNormalized
   })
   .filter((t) => t.url);
 
-if (!audioTracks.length) {
-  const { data: audioRows, error: audioErr } = await supabase
-    .from("v_media_attachments_expanded")
-    .select("public_url,source_url,storage_path,media_type,asset_metadata")
-    .eq("group_event_id", gid)
-    .eq("entity_type", "group_event")
-    .eq("media_type", "audio")
-    .order("sort_order", { ascending: true });
-  if (audioErr) {
-    console.warn("[GE] audio media lookup error:", audioErr.message);
-  } else {
-    audioTracks = (audioRows ?? [])
-      .map((row: any) => {
-        const src = row.public_url || row.source_url || row.storage_path || "";
-        const normalized = normalizeMediaUrl(src);
-        const lang = extractLangFromFilename(normalized || src);
-        const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
-        const timeline = row.asset_metadata?.audio_timeline ?? null;
-        return { lang, url: normalized || src, label, timeline };
-      })
-      .filter((t) => t.url);
+const { data: audioRows, error: audioErr } = await supabase
+  .from("v_media_attachments_expanded")
+  .select("public_url,source_url,storage_path,media_type,asset_metadata")
+  .eq("group_event_id", gid)
+  .eq("entity_type", "group_event")
+  .eq("media_type", "audio")
+  .order("sort_order", { ascending: true });
+if (audioErr) {
+  console.warn("[GE] audio media lookup error:", audioErr.message);
+} else if (audioRows?.length) {
+  const attachmentTracks = (audioRows ?? [])
+    .map((row: any) => {
+      const src = row.public_url || row.source_url || row.storage_path || "";
+      const normalized = normalizeMediaUrl(src);
+      const lang = extractLangFromFilename(normalized || src);
+      const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
+      const timeline = row.asset_metadata?.audio_timeline ?? null;
+      return { lang, url: normalized || src, label, timeline };
+    })
+    .filter((t) => t.url);
+  if (attachmentTracks.length) {
+    audioTracks = attachmentTracks;
   }
 }
 
@@ -2597,7 +2755,7 @@ if (!map || !mapReady || !gid) return;
  try { (marker as any).setZIndex?.(idx === selectedIndex ? 1000 : 0); } catch {}
 
  el.addEventListener("click", () => {
-   setSelectedIndex(idx);
+   handleSelectEvent(idx);
    if (mapMode === "fullscreen") showPopup(ev);
  });
 
@@ -3241,7 +3399,7 @@ const mapTextureStyle: CSSProperties = {
   <button
   key={ev.id}
   ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
-  onClick={() => setSelectedIndex(idx)}
+  onClick={() => handleSelectEvent(idx)}
   className={`shrink-0 w-[52vw] md:w-[220px] max-w-[260px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
   active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
   }`}
@@ -3563,7 +3721,7 @@ const mapTextureStyle: CSSProperties = {
               <button
                 key={ev.id}
                 ref={(el) => { if (el) listItemRefs.current.set(ev.id, el); }}
-                onClick={() => setSelectedIndex(idx)}
+                onClick={() => handleSelectEvent(idx)}
                 className={`w-full rounded-xl border px-3 py-2 text-left transition ${
                   active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
                 }`}

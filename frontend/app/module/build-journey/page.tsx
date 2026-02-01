@@ -463,12 +463,64 @@ const TTS_VOICE_OPTIONS: { value: string; label: string }[] = [
   { value: "shimmer", label: "Shimmer" },
 ];
 
-const TTS_TONE_OPTIONS: { value: string; labelIt: string; labelEn: string; hint: string }[] = [
-  { value: "kids_friendly", labelIt: "Simpatico per bambini", labelEn: "Kids friendly", hint: "friendly, playful, clear and warm" },
-  { value: "narrator", labelIt: "Narratore", labelEn: "Narrator", hint: "calm, documentary narrator" },
-  { value: "enthusiastic", labelIt: "Entusiasta", labelEn: "Enthusiastic", hint: "energetic and engaging" },
-  { value: "calm", labelIt: "Calmo", labelEn: "Calm", hint: "calm and steady" },
-  { value: "neutral", labelIt: "Neutrale", labelEn: "Neutral", hint: "neutral and balanced" },
+const TTS_TONE_OPTIONS: {
+  value: string;
+  labelIt: string;
+  labelEn: string;
+  hint: string;
+  promptIt: string;
+  promptEn: string;
+}[] = [
+  {
+    value: "kids_friendly",
+    labelIt: "Simpatico per bambini",
+    labelEn: "Kids friendly",
+    hint: "friendly, playful, clear and warm",
+    promptIt:
+      "Usa un tono allegro e giocoso, adatto ai bambini: intonazione vivace, sorriso nella voce, frasi semplici e ritmo leggermente sostenuto.",
+    promptEn:
+      "Use a playful, cheerful, kid-friendly tone: lively intonation, a smile in the voice, simple phrasing, and a slightly upbeat pace.",
+  },
+  {
+    value: "narrator",
+    labelIt: "Narratore",
+    labelEn: "Narrator",
+    hint: "calm, documentary narrator",
+    promptIt:
+      "Tono da narratore documentaristico: voce autorevole, calma, scandita con chiarezza e ritmo controllato.",
+    promptEn:
+      "Documentary narrator tone: authoritative, calm voice, clear articulation, measured pace.",
+  },
+  {
+    value: "enthusiastic",
+    labelIt: "Entusiasta",
+    labelEn: "Enthusiastic",
+    hint: "energetic and engaging",
+    promptIt:
+      "Tono altamente entusiasta ed energico: intonazione dinamica, ritmo vivace, emozione positiva evidente.",
+    promptEn:
+      "Highly enthusiastic and energetic tone: dynamic intonation, upbeat pace, clearly positive excitement.",
+  },
+  {
+    value: "calm",
+    labelIt: "Calmo",
+    labelEn: "Calm",
+    hint: "calm and steady",
+    promptIt:
+      "Tono molto calmo e rassicurante: voce morbida, ritmo lento, intonazione dolce.",
+    promptEn:
+      "Very calm, reassuring tone: soft voice, slower pace, gentle intonation.",
+  },
+  {
+    value: "neutral",
+    labelIt: "Neutrale",
+    labelEn: "Neutral",
+    hint: "neutral and balanced",
+    promptIt:
+      "Tono neutrale e bilanciato: chiaro, naturale, senza enfasi particolare.",
+    promptEn:
+      "Neutral, balanced tone: clear, natural delivery without extra emphasis.",
+  },
 ];
 
 const normEra = (era?: string | null): "AD" | "BC" | null => {
@@ -565,19 +617,17 @@ const formatFromToChunk = (ev: JourneyEventEditor, lang: string) => {
   return isIt ? "in un periodo non precisato" : "in an unspecified period";
 };
 
-const buildEventSpeechText = (ev: JourneyEventEditor, lang: string, index: number) => {
+const buildEventSpeechParts = (ev: JourneyEventEditor, lang: string) => {
   const isIt = lang.startsWith("it");
   const place = ev.event.location ? ev.event.location : "";
   const tr = getEventTranslationForLang(ev, lang);
   const title = tr.title || (isIt ? "Evento" : "Event");
   const description = (tr.description || tr.description_short || "").trim();
-  const marker = isIt ? `Inizio evento ${index + 1}.` : `Event ${index + 1}.`;
 
   const timeChunk = formatFromToChunk(ev, lang);
   const placeChunk = place ? `, ${place}` : "";
-  const base = `${title}. ${timeChunk}${placeChunk}.`;
-  const body = description ? `${base} ${description}` : base;
-  return `${marker} ${body}`;
+  const header = `${title}. ${timeChunk}${placeChunk}.`;
+  return { header, description };
 };
 
 
@@ -972,26 +1022,41 @@ export default function BuildJourneyPage() {
   );
 
   const buildJourneySpeechSegments = useCallback(
-    (lang: string) => {
+    (lang: string, tone: string) => {
       const tr = getJourneyTranslationForLang(lang);
       const title = tr.title?.trim() || bestTitleForAuto?.trim() || "Journey";
       const description = tr.description?.trim() || ge.description?.trim() || "";
-      const segments: Array<{ kind: "intro" | "event" | "pause"; index?: number; eventId?: string | null; text: string }> = [];
+      const segments: Array<{
+        kind: "intro" | "event_header" | "event_desc" | "pause";
+        index?: number;
+        eventId?: string | null;
+        text: string;
+      }> = [];
       if (title || description) {
         segments.push({
           kind: "intro",
           text: buildIntroText(lang, description, title),
         });
+        segments.push({ kind: "pause", text: "..." });
       }
       const ordered = sortedEvents.length ? sortedEvents : journeyEvents;
       ordered.forEach((ev, idx) => {
-        const text = buildEventSpeechText(ev, lang, idx);
-        if (text) {
+        const parts = buildEventSpeechParts(ev, lang);
+        const eventId = ev.event_id ?? ev.tempId ?? null;
+        if (parts.header) {
           segments.push({
-            kind: "event",
+            kind: "event_header",
             index: idx,
-            eventId: ev.event_id ?? ev.tempId ?? null,
-            text,
+            eventId,
+            text: parts.header,
+          });
+        }
+        if (parts.description) {
+          segments.push({
+            kind: "event_desc",
+            index: idx,
+            eventId,
+            text: parts.description,
           });
         }
         if (idx < ordered.length - 1) {
@@ -1009,8 +1074,8 @@ export default function BuildJourneyPage() {
       setAudioError(isItalian ? "Seleziona un journey prima di generare l'audio." : "Select a journey before generating audio.");
       return;
     }
-    const segmentsIt = buildJourneySpeechSegments("it");
-    const segmentsEn = buildJourneySpeechSegments("en");
+    const segmentsIt = buildJourneySpeechSegments("it", audioTone);
+    const segmentsEn = buildJourneySpeechSegments("en", audioTone);
     const textIt = segmentsIt.map((s) => s.text).join("\n\n").trim();
     const textEn = segmentsEn.map((s) => s.text).join("\n\n").trim();
     if (!textIt && !textEn) {
@@ -1028,11 +1093,17 @@ export default function BuildJourneyPage() {
         throw new Error("Auth session missing!");
       }
       const toneEntry = TTS_TONE_OPTIONS.find((opt) => opt.value === audioTone);
-      const toneInstruction = toneEntry ? `${toneEntry.value} (${toneEntry.hint})` : audioTone;
       const results: string[] = [];
       const attachments: Array<{ lang: "it" | "en"; url: string }> = [];
-      const runOne = async (lang: "it" | "en", text: string, segments: { kind: "intro" | "event" | "pause"; index?: number; eventId?: string | null; text: string }[]) => {
+      const runOne = async (
+        lang: "it" | "en",
+        text: string,
+        segments: { kind: "intro" | "event_header" | "event_desc" | "pause"; index?: number; eventId?: string | null; text: string }[],
+      ) => {
         if (!text) return;
+        const toneInstruction = toneEntry
+          ? (lang === "it" ? toneEntry.promptIt : toneEntry.promptEn)
+          : audioTone;
         const res = await fetch("/api/journey-audio", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -1171,6 +1242,10 @@ export default function BuildJourneyPage() {
                       try {
                         const { data: sessionData } = await supabase.auth.getSession();
                         const accessToken = sessionData?.session?.access_token ?? null;
+                        const toneEntry = TTS_TONE_OPTIONS.find((opt) => opt.value === audioTone);
+                        const toneInstruction = toneEntry
+                          ? (isItalian ? toneEntry.promptIt : toneEntry.promptEn)
+                          : audioTone;
                         const res = await fetch("/api/tts", {
                           method: "POST",
                           headers: {
@@ -1181,7 +1256,7 @@ export default function BuildJourneyPage() {
                             text: sampleText,
                             lang: isItalian ? "it" : "en",
                             voice: audioVoice || DEFAULT_TTS_VOICE,
-                            tone: "neutral",
+                            tone: toneInstruction || DEFAULT_TTS_TONE,
                           }),
                         });
                         if (!res.ok) {

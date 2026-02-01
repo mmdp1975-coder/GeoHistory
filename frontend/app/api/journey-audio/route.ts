@@ -125,6 +125,19 @@ const findOrCreateMediaAsset = async (params: {
     throw new Error(`media_assets lookup failed: ${existingError.message}`);
   }
   if (existing?.id) {
+    await supabaseAdmin
+      .from("media_assets")
+      .update({
+        public_url: publicUrl,
+        source_url: sourceUrl ?? publicUrl,
+        media_type: "audio",
+        status: "ready",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] asset updated", { assetId: existing.id, storagePath });
+    }
     return existing.id as string;
   }
   const { data: inserted, error: insertError } = await supabaseAdmin
@@ -142,6 +155,9 @@ const findOrCreateMediaAsset = async (params: {
     .single();
   if (insertError) {
     throw new Error(`media_assets insert failed: ${insertError.message}`);
+  }
+  if (process.env.NODE_ENV === "development") {
+    console.log("[journey-audio] asset inserted", { assetId: inserted.id, storagePath });
   }
   return inserted.id as string;
 };
@@ -161,7 +177,12 @@ const ensureMediaAttachment = async (params: {
   if (existingError && existingError.code !== "PGRST116") {
     throw new Error(`media_attachments lookup failed: ${existingError.message}`);
   }
-  if (existing?.id) return existing.id as string;
+  if (existing?.id) {
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] attachment exists", { attachmentId: existing.id, mediaId });
+    }
+    return existing.id as string;
+  }
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from("media_attachments")
     .insert({
@@ -177,6 +198,9 @@ const ensureMediaAttachment = async (params: {
     .single();
   if (insertError) {
     throw new Error(`media_attachments insert failed: ${insertError.message}`);
+  }
+  if (process.env.NODE_ENV === "development") {
+    console.log("[journey-audio] attachment inserted", { attachmentId: inserted.id, mediaId });
   }
   return inserted.id as string;
 };
@@ -195,6 +219,16 @@ export async function POST(req: Request) {
     payload = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  if (process.env.NODE_ENV === "development") {
+    console.log("[journey-audio] payload", {
+      journeyId: payload?.journeyId,
+      lang: payload?.lang,
+      voice: payload?.voice,
+      tone: payload?.tone,
+      textLen: typeof payload?.text === "string" ? payload.text.length : 0,
+      segments: Array.isArray(payload?.segments) ? payload.segments.length : 0,
+    });
   }
 
   const text = typeof payload?.text === "string" ? payload.text.trim() : "";
@@ -273,6 +307,13 @@ export async function POST(req: Request) {
       for (const seg of segments) {
         const input = typeof seg?.text === "string" ? seg.text.trim() : "";
         if (!input) continue;
+        if (process.env.NODE_ENV === "development") {
+          console.log("[journey-audio] segment", {
+            kind: seg?.kind,
+            index: seg?.index,
+            len: input.length,
+          });
+        }
         const result = await callOpenAI(input);
         if (!result.ok) {
           return NextResponse.json(
@@ -309,6 +350,9 @@ export async function POST(req: Request) {
 
     const merged = concatArrayBuffers(buffers);
     await ensureAudioBucket();
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] bucket ok", { bucket: AUDIO_BUCKET });
+    }
 
     const safeTitle = sanitizeFilePart(title);
     const langSuffix = lang ? `_${lang}` : "";
@@ -324,6 +368,9 @@ export async function POST(req: Request) {
     if (uploadError) {
       return NextResponse.json({ error: uploadError.message }, { status: 400 });
     }
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] uploaded", { path: data?.path || storagePath });
+    }
     const { data: pub } = supabaseAdmin.storage.from(AUDIO_BUCKET).getPublicUrl(data?.path || storagePath);
     const publicUrl = pub?.publicUrl || "";
     const assetId = await findOrCreateMediaAsset({
@@ -331,7 +378,71 @@ export async function POST(req: Request) {
       publicUrl,
       sourceUrl: publicUrl,
     });
-    await ensureMediaAttachment({ groupEventId: journeyId, mediaId: assetId });
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] asset", { assetId });
+    }
+    const attachmentId = await ensureMediaAttachment({ groupEventId: journeyId, mediaId: assetId });
+    if (process.env.NODE_ENV === "development") {
+      console.log("[journey-audio] attachment ok", { groupEventId: journeyId });
+    }
+
+    // Remove previous audio attachments for same lang on this journey, keep only latest.
+    const cleanupLangSuffix = lang ? `_${lang}.mp3` : "";
+    if (cleanupLangSuffix) {
+      const { data: oldAudioRows, error: oldAudioErr } = await supabaseAdmin
+        .from("v_media_attachments_expanded")
+        .select("id,media_id,storage_path,public_url")
+        .eq("group_event_id", journeyId)
+        .eq("entity_type", "group_event")
+        .eq("media_type", "audio");
+      if (oldAudioErr) {
+        console.warn("[journey-audio] cleanup lookup error:", oldAudioErr.message);
+      } else {
+        const toDelete = (oldAudioRows ?? [])
+          .filter((row: any) => {
+            const path = (row.storage_path || row.public_url || "").toString();
+            return (
+              row.media_id !== assetId &&
+              path.toLowerCase().endsWith(cleanupLangSuffix)
+            );
+          })
+          .map((row: any) => row.id)
+          .filter(Boolean);
+        if (toDelete.length) {
+          const { error: delErr } = await supabaseAdmin.from("media_attachments").delete().in("id", toDelete);
+          if (delErr) {
+            console.warn("[journey-audio] cleanup delete error:", delErr.message);
+          }
+        }
+      }
+    }
+
+    // Remove previous files in storage for same lang (keep only latest file).
+    if (cleanupLangSuffix) {
+      try {
+        const { data: listed, error: listErr } = await supabaseAdmin.storage
+          .from(AUDIO_BUCKET)
+          .list(journeyId, { limit: 100 });
+        if (listErr) {
+          console.warn("[journey-audio] storage list error:", listErr.message);
+        } else if (listed?.length) {
+          const toRemove = listed
+            .map((item) => item?.name)
+            .filter((name): name is string => !!name)
+            .filter((name) => name.toLowerCase().endsWith(cleanupLangSuffix))
+            .map((name) => `${journeyId}/${name}`)
+            .filter((path) => path !== (data?.path || storagePath));
+          if (toRemove.length) {
+            const { error: delErr } = await supabaseAdmin.storage.from(AUDIO_BUCKET).remove(toRemove);
+            if (delErr) {
+              console.warn("[journey-audio] storage remove error:", delErr.message);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn("[journey-audio] storage cleanup error:", err?.message || err);
+      }
+    }
 
     if (timelineSegments.length) {
       const { data: existingMeta } = await supabaseAdmin
@@ -355,9 +466,12 @@ export async function POST(req: Request) {
           },
         })
         .eq("id", assetId);
+      if (process.env.NODE_ENV === "development") {
+        console.log("[journey-audio] timeline saved", { segments: timelineSegments.length });
+      }
     }
 
-    return NextResponse.json({ ok: true, fileName, publicUrl, assetId });
+    return NextResponse.json({ ok: true, fileName, publicUrl, assetId, attachmentId });
   } catch (err: any) {
     return NextResponse.json(
       {
