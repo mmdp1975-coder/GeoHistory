@@ -23,6 +23,7 @@ type MediaItem = {
  mime?: string | null;
  lang?: string | null;
  sort_order?: number | null;
+ metadata?: any;
 };
 
 type EventCore = {
@@ -297,6 +298,7 @@ function normalizeMediaItem(m: MediaItem): MediaItem {
     type: looksVideo ? "video" : looksAudio ? "audio" : m.type,
     url: normalizedUrl || m.url,
     preview: fallbackPreview || null,
+    metadata: m.metadata,
   };
 }
 
@@ -338,6 +340,7 @@ function coerceMediaItem(raw: any): MediaItem | null {
     url: typeof url === "string" ? url : "",
     preview: typeof previewOrThumb === "string" ? previewOrThumb : null,
     source: raw.source_url ?? raw.public_url ?? raw.url ?? null,
+    metadata: raw.asset_metadata ?? raw.metadata ?? raw.attachment_metadata ?? null,
     mime: raw.mime ?? raw.media_type ?? null,
     lang: raw.lang ?? null,
     sort_order: raw.sort_order ?? null,
@@ -873,7 +876,7 @@ const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
 const [journeyDescription, setJourneyDescription] = useState<string>("");
 const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
 const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
-const [journeyAudioTracks, setJourneyAudioTracks] = useState<Array<{ lang: "it" | "en" | null; url: string; label: string }>>([]);
+const [journeyAudioTracks, setJourneyAudioTracks] = useState<Array<{ lang: "it" | "en" | null; url: string; label: string; timeline?: any }>>([]);
 const [selectedIndex, setSelectedIndex] = useState(0);
 const [loading, setLoading] = useState(true);
 const [isPlaying, setIsPlaying] = useState(false);
@@ -1022,10 +1025,12 @@ const audioSourceOptions = useMemo(() => {
     label: t.label,
     url: t.url,
     lang: t.lang,
+    timeline: t.timeline,
   }));
 }, [journeyAudioTracks]);
 const selectedAudioSource = audioSourceOptions.find((opt) => opt.value === audioSource) ?? audioSourceOptions[0];
 const selectedAudioUrl = (selectedAudioSource as any)?.url as string | undefined;
+const selectedAudioTimeline = (selectedAudioSource as any)?.timeline as any | undefined;
 const hasMp3Audio = journeyAudioTracks.length > 0;
 const isMp3Mode = hasMp3Audio && !!selectedAudioUrl;
 const selectedAudioLang =
@@ -1047,6 +1052,15 @@ const hasIntroSegment = useMemo(() => {
 }, [journeyTitleForSpeech, journeyDescription]);
 
 const audioTimeline = useMemo(() => {
+  const overrideSegments = selectedAudioTimeline?.segments;
+  if (Array.isArray(overrideSegments) && overrideSegments.length) {
+    const cumulative = overrideSegments.map((s: any) => Number(s?.end) || 0);
+    return {
+      cumulative,
+      hasIntro: !!selectedAudioTimeline?.hasIntro,
+      segments: overrideSegments,
+    };
+  }
   if (!audioDuration || !rows.length) return null;
   const lang = (selectedAudioLang || "it").toString();
   const segments: string[] = [];
@@ -1066,7 +1080,15 @@ const audioTimeline = useMemo(() => {
     cumulative.push(acc);
   });
   return { cumulative, hasIntro: hasIntroSegment };
-}, [audioDuration, rows, hasIntroSegment, journeyDescription, journeyTitleForSpeech, selectedAudioLang]);
+}, [
+  audioDuration,
+  rows,
+  hasIntroSegment,
+  journeyDescription,
+  journeyTitleForSpeech,
+  selectedAudioLang,
+  selectedAudioTimeline,
+]);
 
 function formatExactDateForSpeech(value?: string | null, lang?: string) {
   if (!value) return "";
@@ -1303,15 +1325,24 @@ useEffect(() => {
 useEffect(() => {
   if (!isMp3Mode) return;
   if (!audioTimeline?.cumulative?.length) return;
+  const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
   if (ignoreNextSeekRef.current) {
     ignoreNextSeekRef.current = false;
     return;
   }
   const audio = audioRef.current;
   if (!audio) return;
-  const segIndex = selectedIndex + (audioTimeline?.hasIntro ? 1 : 0);
-  const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
-  const target = Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+  let target = 0;
+  if (segmentsMeta && segmentsMeta.length) {
+    const match = segmentsMeta.find((s) => s?.kind === "event" && Number(s?.index) === selectedIndex);
+    if (match && Number.isFinite(match.start)) {
+      target = Math.max(0, Number(match.start));
+    }
+  } else {
+    const segIndex = selectedIndex + (audioTimeline?.hasIntro ? 1 : 0);
+    const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
+    target = Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+  }
   if (Number.isFinite(target) && Math.abs((audio.currentTime || 0) - target) > 0.25) {
     const wasPlaying = isPlayingRef.current;
     audio.pause();
@@ -1328,21 +1359,45 @@ useEffect(() => () => stopAllPlayback(), [stopAllPlayback]);
 const syncSelectedIndexFromTime = useCallback(
   (time: number, duration: number) => {
     if (!rows.length || !duration || duration <= 0) return;
-    const timeline = audioTimeline?.cumulative;
-    if (timeline && timeline.length) {
-      const segIndex = timeline.findIndex((t) => time <= t);
-      let idx = segIndex === -1 ? timeline.length - 1 : segIndex;
-      let eventIndex = idx - (audioTimeline?.hasIntro ? 1 : 0);
-      if (eventIndex < 0) eventIndex = 0;
-      if (eventIndex >= rows.length) eventIndex = rows.length - 1;
-      if (eventIndex !== selectedIndexRef.current) {
+  const timeline = audioTimeline?.cumulative;
+  if (timeline && timeline.length) {
+    const segIndex = timeline.findIndex((t) => time <= t);
+    const safeSegIndex = segIndex === -1 ? timeline.length - 1 : segIndex;
+    const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
+    if (segmentsMeta && segmentsMeta.length) {
+      let targetEventIndex: number | null = null;
+      for (let i = safeSegIndex; i >= 0; i -= 1) {
+        const seg = segmentsMeta[i];
+        if (seg?.kind === "event" && Number.isFinite(seg.index)) {
+          targetEventIndex = Number(seg.index);
+          break;
+        }
+      }
+      if (targetEventIndex == null) {
+        targetEventIndex = 0;
+      }
+      if (targetEventIndex < 0) targetEventIndex = 0;
+      if (targetEventIndex >= rows.length) targetEventIndex = rows.length - 1;
+      if (targetEventIndex !== selectedIndexRef.current) {
         ignoreNextSeekRef.current = true;
         autoAdvanceRef.current = true;
-        setSelectedIndex(eventIndex);
+        setSelectedIndex(targetEventIndex);
         setTimeout(() => { autoAdvanceRef.current = false; }, 0);
       }
       return;
     }
+    let idx = safeSegIndex;
+    let eventIndex = idx - (audioTimeline?.hasIntro ? 1 : 0);
+    if (eventIndex < 0) eventIndex = 0;
+    if (eventIndex >= rows.length) eventIndex = rows.length - 1;
+    if (eventIndex !== selectedIndexRef.current) {
+      ignoreNextSeekRef.current = true;
+      autoAdvanceRef.current = true;
+      setSelectedIndex(eventIndex);
+      setTimeout(() => { autoAdvanceRef.current = false; }, 0);
+    }
+    return;
+  }
     const segments = rows.length + (hasIntroSegment ? 1 : 0);
     if (segments <= 0) return;
     const segLen = duration / segments;
@@ -1750,22 +1805,6 @@ const renderAudioMeta = useCallback(() => {
     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
       <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">Evento {countLabel}</span>
       {timeLabel ? <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">{timeLabel}</span> : null}
-      {audioDuration > 0 ? (
-        <input
-          type="range"
-          min={0}
-          max={Math.floor(audioDuration)}
-          value={Math.min(audioCurrentTime, audioDuration)}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            setAudioCurrentTime(next);
-            const audio = audioRef.current;
-            if (audio) audio.currentTime = next;
-          }}
-          className="h-2 w-[140px] accent-indigo-500"
-          aria-label="Seek audio"
-        />
-      ) : null}
     </div>
   );
 }, [rows.length, selectedIndex, audioCurrentTime, audioDuration]);
@@ -1773,6 +1812,13 @@ const renderAudioMeta = useCallback(() => {
 const getEventStartTime = useCallback(
   (index: number) => {
     if (!audioTimeline?.cumulative?.length) return 0;
+    const segmentsMeta = (audioTimeline as any)?.segments as any[] | undefined;
+    if (segmentsMeta && segmentsMeta.length) {
+      const match = segmentsMeta.find((s) => s?.kind === "event" && Number(s?.index) === index);
+      if (match && Number.isFinite(match.start)) {
+        return Math.max(0, Number(match.start));
+      }
+    }
     const offset = audioTimeline.hasIntro ? 1 : 0;
     const segIndex = Math.max(0, Math.min(index + offset, audioTimeline.cumulative.length - 1));
     const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
@@ -2297,14 +2343,15 @@ let audioTracks = jmNormalized
     const src = m.url || m.preview || "";
     const lang = extractLangFromFilename(src);
     const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
-    return { lang, url: src, label };
+    const timeline = m.metadata?.audio_timeline ?? null;
+    return { lang, url: src, label, timeline };
   })
   .filter((t) => t.url);
 
 if (!audioTracks.length) {
   const { data: audioRows, error: audioErr } = await supabase
     .from("v_media_attachments_expanded")
-    .select("public_url,source_url,storage_path,media_type")
+    .select("public_url,source_url,storage_path,media_type,asset_metadata")
     .eq("group_event_id", gid)
     .eq("entity_type", "group_event")
     .eq("media_type", "audio")
@@ -2318,7 +2365,8 @@ if (!audioTracks.length) {
         const normalized = normalizeMediaUrl(src);
         const lang = extractLangFromFilename(normalized || src);
         const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
-        return { lang, url: normalized || src, label };
+        const timeline = row.asset_metadata?.audio_timeline ?? null;
+        return { lang, url: normalized || src, label, timeline };
       })
       .filter((t) => t.url);
   }

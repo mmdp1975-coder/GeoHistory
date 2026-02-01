@@ -38,6 +38,48 @@ const concatArrayBuffers = (buffers: ArrayBuffer[]) => {
   return merged.buffer;
 };
 
+const findId3Offset = (data: Uint8Array) => {
+  if (data.length < 10) return 0;
+  if (data[0] !== 0x49 || data[1] !== 0x44 || data[2] !== 0x33) return 0;
+  const size =
+    ((data[6] & 0x7f) << 21) |
+    ((data[7] & 0x7f) << 14) |
+    ((data[8] & 0x7f) << 7) |
+    (data[9] & 0x7f);
+  return 10 + size;
+};
+
+const estimateMp3DurationSeconds = (buffer: ArrayBuffer) => {
+  const data = new Uint8Array(buffer);
+  const offset = findId3Offset(data);
+  const len = data.length;
+  const bitrateTableV1L3 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
+  const bitrateTableV2L3 = [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0];
+  const sampleRateTable = {
+    "1": [44100, 48000, 32000],
+    "2": [22050, 24000, 16000],
+    "2.5": [11025, 12000, 8000],
+  } as const;
+  for (let i = offset; i < len - 4; i += 1) {
+    if (data[i] !== 0xff || (data[i + 1] & 0xe0) !== 0xe0) continue;
+    const versionBits = (data[i + 1] >> 3) & 0x03;
+    const layerBits = (data[i + 1] >> 1) & 0x03;
+    if (layerBits !== 0x01) continue; // Layer III only
+    const version =
+      versionBits === 0x03 ? "1" : versionBits === 0x02 ? "2" : versionBits === 0x00 ? "2.5" : null;
+    if (!version) continue;
+    const bitrateIndex = (data[i + 2] >> 4) & 0x0f;
+    const sampleIndex = (data[i + 2] >> 2) & 0x03;
+    const bitrate =
+      version === "1" ? bitrateTableV1L3[bitrateIndex] : bitrateTableV2L3[bitrateIndex];
+    const sampleRate = sampleRateTable[version][sampleIndex] ?? 0;
+    if (!bitrate || !sampleRate) continue;
+    const dataBytes = len - offset;
+    return (dataBytes * 8) / (bitrate * 1000);
+  }
+  return 0;
+};
+
 const sanitizeFilePart = (value: string) =>
   value
     .toLowerCase()
@@ -156,6 +198,7 @@ export async function POST(req: Request) {
   }
 
   const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+  const segments = Array.isArray(payload?.segments) ? payload.segments : null;
   const lang = typeof payload?.lang === "string" ? payload.lang.trim() : "";
   const voice = typeof payload?.voice === "string" ? payload.voice.trim() : "";
   const tone = typeof payload?.tone === "string" ? payload.tone.trim() : "";
@@ -222,17 +265,46 @@ export async function POST(req: Request) {
   };
 
   try {
-    const chunks = splitTextForTts(text, TTS_MAX_CHARS);
     const buffers: ArrayBuffer[] = [];
-    for (const chunk of chunks) {
-      const result = await callOpenAI(chunk);
-      if (!result.ok) {
-        return NextResponse.json(
-          { error: "OpenAI TTS error", status: result.status },
-          { status: 500 },
-        );
+    const timelineSegments: Array<{ kind: string; index?: number; eventId?: string | null; start: number; end: number }> = [];
+    let cursor = 0;
+
+    if (segments && segments.length) {
+      for (const seg of segments) {
+        const input = typeof seg?.text === "string" ? seg.text.trim() : "";
+        if (!input) continue;
+        const result = await callOpenAI(input);
+        if (!result.ok) {
+          return NextResponse.json(
+            { error: "OpenAI TTS error", status: result.status },
+            { status: 500 },
+          );
+        }
+        const duration = estimateMp3DurationSeconds(result.arrayBuffer);
+        const start = cursor;
+        const end = Math.max(start, start + (Number.isFinite(duration) ? duration : 0));
+        cursor = end;
+        timelineSegments.push({
+          kind: seg.kind || "event",
+          index: Number.isFinite(seg.index) ? Number(seg.index) : undefined,
+          eventId: seg.eventId ?? null,
+          start,
+          end,
+        });
+        buffers.push(result.arrayBuffer);
       }
-      buffers.push(result.arrayBuffer);
+    } else {
+      const chunks = splitTextForTts(text, TTS_MAX_CHARS);
+      for (const chunk of chunks) {
+        const result = await callOpenAI(chunk);
+        if (!result.ok) {
+          return NextResponse.json(
+            { error: "OpenAI TTS error", status: result.status },
+            { status: 500 },
+          );
+        }
+        buffers.push(result.arrayBuffer);
+      }
     }
 
     const merged = concatArrayBuffers(buffers);
@@ -260,6 +332,30 @@ export async function POST(req: Request) {
       sourceUrl: publicUrl,
     });
     await ensureMediaAttachment({ groupEventId: journeyId, mediaId: assetId });
+
+    if (timelineSegments.length) {
+      const { data: existingMeta } = await supabaseAdmin
+        .from("media_assets")
+        .select("metadata")
+        .eq("id", assetId)
+        .maybeSingle();
+      const baseMeta = (existingMeta as any)?.metadata || {};
+      const hasIntro = timelineSegments.some((s) => s.kind === "intro");
+      await supabaseAdmin
+        .from("media_assets")
+        .update({
+          metadata: {
+            ...baseMeta,
+            audio_timeline: {
+              version: 1,
+              hasIntro,
+              segments: timelineSegments,
+              total: cursor,
+            },
+          },
+        })
+        .eq("id", assetId);
+    }
 
     return NextResponse.json({ ok: true, fileName, publicUrl, assetId });
   } catch (err: any) {

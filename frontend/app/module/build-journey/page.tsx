@@ -971,25 +971,34 @@ export default function BuildJourneyPage() {
     [translations, translation],
   );
 
-  const buildJourneySpeechText = useCallback(
+  const buildJourneySpeechSegments = useCallback(
     (lang: string) => {
       const tr = getJourneyTranslationForLang(lang);
       const title = tr.title?.trim() || bestTitleForAuto?.trim() || "Journey";
       const description = tr.description?.trim() || ge.description?.trim() || "";
-      const sections: string[] = [];
+      const segments: Array<{ kind: "intro" | "event" | "pause"; index?: number; eventId?: string | null; text: string }> = [];
       if (title || description) {
-        sections.push(buildIntroText(lang, description, title));
+        segments.push({
+          kind: "intro",
+          text: buildIntroText(lang, description, title),
+        });
       }
       const ordered = sortedEvents.length ? sortedEvents : journeyEvents;
-      const pauseToken = "...";
       ordered.forEach((ev, idx) => {
         const text = buildEventSpeechText(ev, lang, idx);
-        if (text) sections.push(text.trim());
+        if (text) {
+          segments.push({
+            kind: "event",
+            index: idx,
+            eventId: ev.event_id ?? ev.tempId ?? null,
+            text,
+          });
+        }
         if (idx < ordered.length - 1) {
-          sections.push(pauseToken);
+          segments.push({ kind: "pause", text: "..." });
         }
       });
-      return sections.map((s) => s.trim()).filter(Boolean).join("\n\n");
+      return segments;
     },
     [bestTitleForAuto, ge.description, getJourneyTranslationForLang, journeyEvents, sortedEvents],
   );
@@ -1000,8 +1009,10 @@ export default function BuildJourneyPage() {
       setAudioError(isItalian ? "Seleziona un journey prima di generare l'audio." : "Select a journey before generating audio.");
       return;
     }
-    const textIt = buildJourneySpeechText("it");
-    const textEn = buildJourneySpeechText("en");
+    const segmentsIt = buildJourneySpeechSegments("it");
+    const segmentsEn = buildJourneySpeechSegments("en");
+    const textIt = segmentsIt.map((s) => s.text).join("\n\n").trim();
+    const textEn = segmentsEn.map((s) => s.text).join("\n\n").trim();
     if (!textIt && !textEn) {
       setAudioError(isItalian ? "Nessun contenuto disponibile per generare l'audio." : "No content available for audio.");
       return;
@@ -1020,13 +1031,14 @@ export default function BuildJourneyPage() {
       const toneInstruction = toneEntry ? `${toneEntry.value} (${toneEntry.hint})` : audioTone;
       const results: string[] = [];
       const attachments: Array<{ lang: "it" | "en"; url: string }> = [];
-      const runOne = async (lang: "it" | "en", text: string) => {
+      const runOne = async (lang: "it" | "en", text: string, segments: { kind: "intro" | "event" | "pause"; index?: number; eventId?: string | null; text: string }[]) => {
         if (!text) return;
         const res = await fetch("/api/journey-audio", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
           body: JSON.stringify({
             text,
+            segments,
             lang,
             voice: audioVoice || DEFAULT_TTS_VOICE,
             tone: toneInstruction || DEFAULT_TTS_TONE,
@@ -1044,8 +1056,8 @@ export default function BuildJourneyPage() {
         }
         results.push(fileLabel);
       };
-      await runOne("it", textIt);
-      await runOne("en", textEn);
+      await runOne("it", textIt, segmentsIt);
+      await runOne("en", textEn, segmentsEn);
       if (attachments.length) {
         setGroupEventMedia((prev) => {
           const existingUrls = new Set(prev.map((item) => item.public_url || item.source_url || ""));
@@ -1092,7 +1104,7 @@ export default function BuildJourneyPage() {
     audioTone,
     audioVoice,
     bestTitleForAuto,
-    buildJourneySpeechText,
+    buildJourneySpeechSegments,
     isItalian,
     selectedJourneyId,
     supabase,
