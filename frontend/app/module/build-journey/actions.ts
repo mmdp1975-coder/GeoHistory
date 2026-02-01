@@ -25,7 +25,7 @@ import OpenAI from "openai";
 
 type Visibility = "private" | "public";
 type MediaRole = "cover" | "attachment" | "gallery" | "poster" | "context" | (string & {});
-export type MediaKind = "image" | "video" | "other";
+export type MediaKind = "image" | "video" | "audio" | "other";
 type MediaAssetType = "image" | "video" | "audio" | "document";
 
 export type GroupEventMediaEntry = {
@@ -93,6 +93,7 @@ function ts() {
 function toMediaAssetType(kind?: MediaKind | null): MediaAssetType {
   if (kind === "video") return "video";
   if (kind === "image") return "image";
+  if (kind === "audio") return "audio";
   // Bucket anything unknown/other as document to fit the enum.
   return "document";
 }

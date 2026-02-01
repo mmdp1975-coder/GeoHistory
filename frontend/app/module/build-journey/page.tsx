@@ -103,6 +103,7 @@ type GroupEventMediaItem = GroupEventMediaEntry & {
 const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
   { value: "image", label: "Immagine" },
   { value: "video", label: "Video" },
+  { value: "audio", label: "Audio" },
   { value: "other", label: "Altro" },
 ];
 
@@ -357,14 +358,22 @@ const createEmptyEventEditor = (): JourneyEventEditor => ({
 
 const isProbablyVideo = (url?: string | null, kind?: MediaKind | null) => {
   if (kind === "video") return true;
+  if (kind === "audio") return false;
   if (!url) return false;
   return /\.(mp4|mov|webm|m4v|avi|mkv)(\?|#|$)/i.test(url);
+};
+
+const isProbablyAudio = (url?: string | null, kind?: MediaKind | null) => {
+  if (kind === "audio") return true;
+  if (!url) return false;
+  return /\.(mp3|wav|m4a|aac|ogg)(\?|#|$)/i.test(url);
 };
 
 const buildAcceptFromKind = (kind?: MediaKind | null) => {
   if (kind === "video") return "video/*";
   if (kind === "image") return "image/*";
-  return "image/*,video/*";
+  if (kind === "audio") return "audio/*";
+  return "image/*,video/*,audio/*";
 };
 
 const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
@@ -439,6 +448,136 @@ const normalizeYearForEra = (year?: number | null, era?: "AD" | "BC" | null): nu
 const formatYearWithEra = (year?: number | null, era?: "AD" | "BC" | null): string | null => {
   if (year == null) return null;
   return era === "BC" ? `${year} BC` : `${year}`;
+};
+
+const DEFAULT_TTS_VOICE = "alloy";
+const DEFAULT_TTS_TONE = "neutral";
+const TTS_MAX_CHARS = 3500;
+
+const TTS_VOICE_OPTIONS: { value: string; label: string }[] = [
+  { value: "alloy", label: "Alloy" },
+  { value: "echo", label: "Echo" },
+  { value: "fable", label: "Fable" },
+  { value: "onyx", label: "Onyx" },
+  { value: "nova", label: "Nova" },
+  { value: "shimmer", label: "Shimmer" },
+];
+
+const TTS_TONE_OPTIONS: { value: string; labelIt: string; labelEn: string; hint: string }[] = [
+  { value: "kids_friendly", labelIt: "Simpatico per bambini", labelEn: "Kids friendly", hint: "friendly, playful, clear and warm" },
+  { value: "narrator", labelIt: "Narratore", labelEn: "Narrator", hint: "calm, documentary narrator" },
+  { value: "enthusiastic", labelIt: "Entusiasta", labelEn: "Enthusiastic", hint: "energetic and engaging" },
+  { value: "calm", labelIt: "Calmo", labelEn: "Calm", hint: "calm and steady" },
+  { value: "neutral", labelIt: "Neutrale", labelEn: "Neutral", hint: "neutral and balanced" },
+];
+
+const normEra = (era?: string | null): "AD" | "BC" | null => {
+  if (era === "AD" || era === "BC") return era;
+  return null;
+};
+
+const parseExactDateYear = (value?: string | null): number | null => {
+  if (!value) return null;
+  const match = value.match(/(\d{3,4})/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  if (!Number.isFinite(year)) return null;
+  return year;
+};
+
+const formatExactDateForSpeech = (value?: string | null, lang?: string) => {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    const locale = (lang || "it").startsWith("it") ? "it-IT" : "en-US";
+    return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(d);
+  } catch {
+    return value || "";
+  }
+};
+
+const buildIntroText = (lang: string, description: string, title: string) => {
+  const desc = (description || "").trim();
+  const safeTitle = (title || "").trim() || (lang.startsWith("it") ? "questo viaggio" : "this journey");
+  if (lang.startsWith("it")) {
+    return desc ? `${safeTitle}. ${desc}` : `${safeTitle}.`;
+  }
+  return desc ? `${safeTitle}. ${desc}` : `${safeTitle}.`;
+};
+
+const formatSpeechPeriod = (ev: JourneyEventEditor, lang: string) => {
+  const isIt = lang.startsWith("it");
+  const from = typeof ev.event.year_from === "number" ? Math.abs(ev.event.year_from) : null;
+  const to = typeof ev.event.year_to === "number" ? Math.abs(ev.event.year_to) : null;
+  const era = normEra(ev.event.era);
+  const bcSuffix = isIt ? "avanti Cristo" : "before Christ";
+
+  if (from != null && to != null) {
+    if (from === to) {
+      if (era === "BC") return `${from} ${bcSuffix}`;
+      return `${from}`;
+    }
+    if (era === "BC") {
+      return isIt ? `tra il ${from} e il ${to} ${bcSuffix}` : `between ${from} and ${to} ${bcSuffix}`;
+    }
+    return isIt ? `tra il ${from} e il ${to}` : `between ${from} and ${to}`;
+  }
+
+  const single = from ?? to ?? parseExactDateYear(ev.event.exact_date);
+  if (single != null) {
+    if (era === "BC") return `${single} ${bcSuffix}`;
+    return `${single}`;
+  }
+
+  return isIt ? "un periodo non precisato" : "an unspecified period";
+};
+
+const getEventTranslationForLang = (ev: JourneyEventEditor, lang: string) => {
+  const normalized = (lang || DEFAULT_LANGUAGE).slice(0, 2).toLowerCase();
+  const fromAll = ev.translations_all?.find((tr) => (tr.lang || DEFAULT_LANGUAGE).slice(0, 2).toLowerCase() === normalized);
+  return fromAll || ev.translation;
+};
+
+const formatFromToChunk = (ev: JourneyEventEditor, lang: string) => {
+  const isIt = lang.startsWith("it");
+  const from = typeof ev.event.year_from === "number" ? Math.abs(ev.event.year_from) : null;
+  const to = typeof ev.event.year_to === "number" ? Math.abs(ev.event.year_to) : null;
+  const era = normEra(ev.event.era);
+  const bcSuffix = isIt ? "avanti Cristo" : "before Christ";
+  if (from != null && to != null) {
+    if (from === to) {
+      return era === "BC"
+        ? (isIt ? `nel ${from} ${bcSuffix}` : `in ${from} ${bcSuffix}`)
+        : (isIt ? `nel ${from}` : `in ${from}`);
+    }
+    if (era === "BC") {
+      return isIt ? `dal ${from} al ${to} ${bcSuffix}` : `from ${from} to ${to} ${bcSuffix}`;
+    }
+    return isIt ? `dal ${from} al ${to}` : `from ${from} to ${to}`;
+  }
+  const single = from ?? to ?? parseExactDateYear(ev.event.exact_date);
+  if (single != null) {
+    return era === "BC"
+      ? (isIt ? `nel ${single} ${bcSuffix}` : `in ${single} ${bcSuffix}`)
+      : (isIt ? `nel ${single}` : `in ${single}`);
+  }
+  return isIt ? "in un periodo non precisato" : "in an unspecified period";
+};
+
+const buildEventSpeechText = (ev: JourneyEventEditor, lang: string, index: number) => {
+  const isIt = lang.startsWith("it");
+  const place = ev.event.location ? ev.event.location : "";
+  const tr = getEventTranslationForLang(ev, lang);
+  const title = tr.title || (isIt ? "Evento" : "Event");
+  const description = (tr.description || tr.description_short || "").trim();
+  const marker = isIt ? `Inizio evento ${index + 1}.` : `Event ${index + 1}.`;
+
+  const timeChunk = formatFromToChunk(ev, lang);
+  const placeChunk = place ? `, ${place}` : "";
+  const base = `${title}. ${timeChunk}${placeChunk}.`;
+  const body = description ? `${base} ${description}` : base;
+  return `${marker} ${body}`;
 };
 
 
@@ -533,6 +672,20 @@ export default function BuildJourneyPage() {
   const [newJourneyLog, setNewJourneyLog] = useState("");
   const [newJourneyPendingPayload, setNewJourneyPendingPayload] = useState<any | null>(null);
   const [newJourneyCopyMessage, setNewJourneyCopyMessage] = useState<string | null>(null);
+  const [audioGenerating, setAudioGenerating] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioOk, setAudioOk] = useState<string | null>(null);
+  const [audioProgress, setAudioProgress] = useState<{ current: number; total: number } | null>(null);
+  const [audioVoice, setAudioVoice] = useState<string>(DEFAULT_TTS_VOICE);
+  const [audioTone, setAudioTone] = useState<string>(DEFAULT_TTS_TONE);
+  const [audioModalOpen, setAudioModalOpen] = useState(false);
+  const [audioElapsed, setAudioElapsed] = useState(0);
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState(false);
+  const [voicePreviewError, setVoicePreviewError] = useState<string | null>(null);
+  const audioTimerRef = useRef<number | null>(null);
+  const audioStartRef = useRef<number | null>(null);
+  const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
   const newJourneyPollRef = useRef<number | null>(null);
   const newJourneyTokenRef = useRef<string | null>(null);
   const newJourneyRefreshRef = useRef<number | null>(null);
@@ -547,6 +700,10 @@ export default function BuildJourneyPage() {
   const lastAutoCodeRef = useRef<string>("");
   const isAdminProfile = personaCode.startsWith("ADMIN");
   const isItalian = (langCode || "").toLowerCase().startsWith("it");
+  const ttsLang = useMemo(() => {
+    const raw = (selectedTranslationLang || translation.lang || langCode || DEFAULT_LANGUAGE).toString().slice(0, 2).toLowerCase();
+    return raw === "it" ? "it" : "en";
+  }, [selectedTranslationLang, translation.lang, langCode]);
   const bestTitleForAuto = useMemo(() => {
     const preferred =
       translation.title?.trim() ||
@@ -610,6 +767,7 @@ export default function BuildJourneyPage() {
     () => [
       { value: "image" as MediaKind, label: tUI(langCode, "build.media.kind.image") },
       { value: "video" as MediaKind, label: tUI(langCode, "build.media.kind.video") },
+      { value: "audio" as MediaKind, label: "Audio" },
       { value: "other" as MediaKind, label: tUI(langCode, "build.media.kind.other") },
     ],
     [langCode],
@@ -747,6 +905,360 @@ export default function BuildJourneyPage() {
     () => journeyEvents.find((ev) => ev.tempId === selectedEventTempId) ?? null,
     [journeyEvents, selectedEventTempId],
   );
+  const canGenerateAudio =
+    !audioGenerating &&
+    !!selectedJourneyId &&
+    (!!translation.title?.trim() || !!translation.description?.trim() || journeyEvents.length > 0);
+
+  useEffect(() => {
+    if (!audioGenerating) {
+      if (audioTimerRef.current) {
+        window.clearInterval(audioTimerRef.current);
+        audioTimerRef.current = null;
+      }
+      if (audioStartRef.current) {
+        const elapsedSeconds = Math.max(0, Math.floor((Date.now() - audioStartRef.current) / 1000));
+        setAudioElapsed(elapsedSeconds);
+        audioStartRef.current = null;
+      }
+      return;
+    }
+    if (audioStartRef.current == null) {
+      audioStartRef.current = Date.now();
+      setAudioElapsed(0);
+    }
+    if (audioTimerRef.current != null) return;
+    audioTimerRef.current = window.setInterval(() => {
+      const startedAt = audioStartRef.current;
+      if (!startedAt) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      setAudioElapsed(elapsedSeconds);
+    }, 1000);
+    return () => {
+      if (audioTimerRef.current) {
+        window.clearInterval(audioTimerRef.current);
+        audioTimerRef.current = null;
+      }
+    };
+  }, [audioGenerating]);
+
+  useEffect(() => {
+    if (!audioModalOpen && !audioGenerating) {
+      setAudioElapsed(0);
+      setAudioError(null);
+      setAudioOk(null);
+      setAudioProgress(null);
+      setVoicePreviewError(null);
+    }
+  }, [audioModalOpen, audioGenerating]);
+
+  useEffect(() => {
+    return () => {
+      if (voicePreviewUrl) {
+        URL.revokeObjectURL(voicePreviewUrl);
+      }
+    };
+  }, [voicePreviewUrl]);
+
+  const getJourneyTranslationForLang = useCallback(
+    (lang: string) => {
+      const normalized = (lang || DEFAULT_LANGUAGE).slice(0, 2).toLowerCase();
+      const fromAll = translations.find((tr) => (tr.lang || DEFAULT_LANGUAGE).slice(0, 2).toLowerCase() === normalized);
+      if (fromAll) return fromAll;
+      if ((translation.lang || DEFAULT_LANGUAGE).slice(0, 2).toLowerCase() === normalized) return translation;
+      return translation;
+    },
+    [translations, translation],
+  );
+
+  const buildJourneySpeechText = useCallback(
+    (lang: string) => {
+      const tr = getJourneyTranslationForLang(lang);
+      const title = tr.title?.trim() || bestTitleForAuto?.trim() || "Journey";
+      const description = tr.description?.trim() || ge.description?.trim() || "";
+      const sections: string[] = [];
+      if (title || description) {
+        sections.push(buildIntroText(lang, description, title));
+      }
+      const ordered = sortedEvents.length ? sortedEvents : journeyEvents;
+      const pauseToken = "...";
+      ordered.forEach((ev, idx) => {
+        const text = buildEventSpeechText(ev, lang, idx);
+        if (text) sections.push(text.trim());
+        if (idx < ordered.length - 1) {
+          sections.push(pauseToken);
+        }
+      });
+      return sections.map((s) => s.trim()).filter(Boolean).join("\n\n");
+    },
+    [bestTitleForAuto, ge.description, getJourneyTranslationForLang, journeyEvents, sortedEvents],
+  );
+
+  const handleGenerateJourneyAudio = useCallback(async () => {
+    if (audioGenerating) return;
+    if (!selectedJourneyId) {
+      setAudioError(isItalian ? "Seleziona un journey prima di generare l'audio." : "Select a journey before generating audio.");
+      return;
+    }
+    const textIt = buildJourneySpeechText("it");
+    const textEn = buildJourneySpeechText("en");
+    if (!textIt && !textEn) {
+      setAudioError(isItalian ? "Nessun contenuto disponibile per generare l'audio." : "No content available for audio.");
+      return;
+    }
+    setAudioGenerating(true);
+    setAudioError(null);
+    setAudioOk(null);
+    setAudioProgress(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token ?? null;
+      if (!accessToken) {
+        throw new Error("Auth session missing!");
+      }
+      const toneEntry = TTS_TONE_OPTIONS.find((opt) => opt.value === audioTone);
+      const toneInstruction = toneEntry ? `${toneEntry.value} (${toneEntry.hint})` : audioTone;
+      const results: string[] = [];
+      const attachments: Array<{ lang: "it" | "en"; url: string }> = [];
+      const runOne = async (lang: "it" | "en", text: string) => {
+        if (!text) return;
+        const res = await fetch("/api/journey-audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({
+            text,
+            lang,
+            voice: audioVoice || DEFAULT_TTS_VOICE,
+            tone: toneInstruction || DEFAULT_TTS_TONE,
+            journeyId: selectedJourneyId,
+            title: translation.title || bestTitleForAuto || DEFAULT_BASE_NAME,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`TTS ${res.status}`);
+        }
+        const data = (await res.json()) as { ok?: boolean; publicUrl?: string; fileName?: string };
+        const fileLabel = data.publicUrl || data.fileName || "MP3";
+        if (data.publicUrl) {
+          attachments.push({ lang, url: data.publicUrl });
+        }
+        results.push(fileLabel);
+      };
+      await runOne("it", textIt);
+      await runOne("en", textEn);
+      if (attachments.length) {
+        setGroupEventMedia((prev) => {
+          const existingUrls = new Set(prev.map((item) => item.public_url || item.source_url || ""));
+          const next = [...prev];
+          attachments.forEach((att) => {
+            if (existingUrls.has(att.url)) return;
+            next.push({
+              tempId: buildTempMediaId(),
+              kind: "audio",
+              role: "gallery",
+              public_url: att.url,
+              source_url: att.url,
+              title: att.lang === "it" ? "Audio IT" : "Audio EN",
+              caption: "",
+              alt_text: "",
+              is_primary: false,
+              sort_order: next.length + 1,
+              sourceType: "url",
+              localFile: null,
+              previewUrl: null,
+              uploading: false,
+              uploadError: null,
+            });
+          });
+          return next;
+        });
+      }
+      if (results.length) {
+        setAudioOk(
+          isItalian ? `File MP3 salvati: ${results.join(" | ")}` : `MP3 saved: ${results.join(" | ")}`,
+        );
+      }
+    } catch (err: any) {
+      const message = err?.message || String(err);
+      setAudioError(
+        isItalian ? `Errore durante la generazione audio: ${message}` : `Audio generation failed: ${message}`,
+      );
+    } finally {
+      setAudioGenerating(false);
+      setAudioProgress(null);
+    }
+  }, [
+    audioGenerating,
+    audioTone,
+    audioVoice,
+    bestTitleForAuto,
+    buildJourneySpeechText,
+    isItalian,
+    selectedJourneyId,
+    supabase,
+    ttsLang,
+    translation.title,
+  ]);
+
+  const renderAudioModal = () => {
+    if (!audioModalOpen || !isAdminProfile) return null;
+    const canStart = canGenerateAudio;
+    const sampleText = isItalian
+      ? "Ciao, sono la tua voce narrante. Questo e un breve esempio."
+      : "Hi, I'm your narrator voice. This is a short example.";
+    return (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 px-4 py-6">
+        <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b border-neutral-200 px-6 py-4">
+            <div>
+              <p className="text-lg font-semibold text-neutral-900">
+                {isItalian ? "Genera audio MP3" : "Generate MP3 audio"}
+              </p>
+              <p className="mt-1 text-sm text-neutral-600">
+                {isItalian ? "Scegli voce e tono, poi avvia la generazione." : "Choose voice and tone, then start."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setAudioModalOpen(false)}
+              disabled={audioGenerating}
+            >
+              {tUI(langCode, "build.actions.close")}
+            </button>
+          </div>
+          <div className="space-y-4 px-6 py-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                  {isItalian ? "Voce" : "Voice"}
+                </label>
+                <select
+                  value={audioVoice}
+                  onChange={(e) => setAudioVoice(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                >
+                  {TTS_VOICE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold shadow-sm transition ${
+                      voicePreviewLoading
+                        ? "border-neutral-200 bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                        : "border-cyan-200 bg-white text-cyan-700 hover:border-cyan-300 hover:bg-cyan-50"
+                    }`}
+                    onClick={async () => {
+                      if (voicePreviewLoading) return;
+                      setVoicePreviewLoading(true);
+                      setVoicePreviewError(null);
+                      try {
+                        const { data: sessionData } = await supabase.auth.getSession();
+                        const accessToken = sessionData?.session?.access_token ?? null;
+                        const res = await fetch("/api/tts", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                          },
+                          body: JSON.stringify({
+                            text: sampleText,
+                            lang: isItalian ? "it" : "en",
+                            voice: audioVoice || DEFAULT_TTS_VOICE,
+                            tone: "neutral",
+                          }),
+                        });
+                        if (!res.ok) {
+                          const errText = await res.text().catch(() => "");
+                          throw new Error(`TTS ${res.status}${errText ? `: ${errText}` : ""}`);
+                        }
+                        const buf = await res.arrayBuffer();
+                        const blob = new Blob([buf], { type: "audio/mpeg" });
+                        const url = URL.createObjectURL(blob);
+                        if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
+                        setVoicePreviewUrl(url);
+                        setTimeout(() => {
+                          const audio = voicePreviewAudioRef.current;
+                          if (audio) {
+                            audio.currentTime = 0;
+                            void audio.play().catch(() => {});
+                          }
+                        }, 0);
+                      } catch (err: any) {
+                        const message = err?.message || String(err);
+                        setVoicePreviewError(
+                          isItalian ? `Errore anteprima voce: ${message}` : `Voice preview error: ${message}`,
+                        );
+                      } finally {
+                        setVoicePreviewLoading(false);
+                      }
+                    }}
+                    disabled={voicePreviewLoading}
+                  >
+                    {voicePreviewLoading ? (isItalian ? "Carico..." : "Loading...") : isItalian ? "Ascolta voce" : "Preview voice"}
+                  </button>
+                  <audio ref={voicePreviewAudioRef} src={voicePreviewUrl ?? undefined} controls className="h-8 w-full" />
+                  {voicePreviewError && (
+                    <span className="text-xs text-red-600">{voicePreviewError}</span>
+                  )}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                  {isItalian ? "Tono" : "Tone"}
+                </label>
+                <select
+                  value={audioTone}
+                  onChange={(e) => setAudioTone(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-semibold text-neutral-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                >
+                  {TTS_TONE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {isItalian ? opt.labelIt : opt.labelEn}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50/80 px-4 py-3 text-sm text-neutral-700">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                  {isItalian ? "Tempo trascorso" : "Elapsed"}
+                </span>
+                <span className="text-sm font-semibold text-neutral-700">{formatElapsed(audioElapsed)}</span>
+              </div>
+              {audioProgress && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  {isItalian ? `Segmento ${audioProgress.current}/${audioProgress.total}` : `Segment ${audioProgress.current}/${audioProgress.total}`}
+                </p>
+              )}
+              {audioOk && <p className="mt-2 text-xs text-emerald-700">{audioOk}</p>}
+              {audioError && <p className="mt-2 text-xs text-red-600">{audioError}</p>}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 border-t border-neutral-200 px-6 py-4">
+            <button
+              type="button"
+              className={`rounded-full px-4 py-2 text-xs font-semibold shadow-md transition ${
+                canStart
+                  ? "bg-gradient-to-r from-cyan-600 to-sky-500 text-white hover:shadow-lg"
+                  : "bg-neutral-200 text-neutral-500 cursor-not-allowed"
+              }`}
+              onClick={handleGenerateJourneyAudio}
+              disabled={!canStart}
+            >
+              {audioGenerating ? (isItalian ? "Generazione in corso..." : "Generating...") : isItalian ? "Avvia" : "Start"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
   const toolbarSelectedEventTab = selectedEventTempId ? eventTabMap[selectedEventTempId] ?? "details" : "details";
 
   const uploadMediaFile = useCallback(
@@ -3322,6 +3834,21 @@ export default function BuildJourneyPage() {
                 {isAdminProfile && (
                   <button
                     type="button"
+                    className={`h-8 w-full sm:w-[78px] rounded-full border px-2 text-[11px] font-semibold shadow-sm text-center flex items-center justify-center transition ${
+                      canGenerateAudio
+                        ? "border-cyan-200 bg-white text-cyan-700 hover:border-cyan-300 hover:bg-cyan-50"
+                        : "border-neutral-200 bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                    }`}
+                    onClick={() => setAudioModalOpen(true)}
+                    disabled={!canGenerateAudio}
+                    title={isItalian ? "Genera MP3 del journey" : "Generate journey MP3"}
+                  >
+                    MP3
+                  </button>
+                )}
+                {isAdminProfile && (
+                  <button
+                    type="button"
                     className="h-8 w-full sm:w-[78px] rounded-full border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
                     onClick={openNewJourneyModal}
                   >
@@ -3607,6 +4134,16 @@ export default function BuildJourneyPage() {
                               );
                             }
                             const showVideo = isProbablyVideo(previewUrl, media.kind);
+                            const showAudio = isProbablyAudio(previewUrl, media.kind);
+                            if (showAudio) {
+                              return (
+                                <audio
+                                  src={previewUrl}
+                                  controls
+                                  className="w-full"
+                                />
+                              );
+                            }
                             return showVideo ? (
                               <video
                                 src={previewUrl}
@@ -4429,6 +4966,16 @@ export default function BuildJourneyPage() {
                                         );
                                       }
                                       const showVideo = isProbablyVideo(previewUrl, m.kind);
+                                      const showAudio = isProbablyAudio(previewUrl, m.kind);
+                                      if (showAudio) {
+                                        return (
+                                          <audio
+                                            src={previewUrl}
+                                            controls
+                                            className="w-full"
+                                          />
+                                        );
+                                      }
                                       return showVideo ? (
                                         <video
                                           src={previewUrl}
@@ -4838,6 +5385,7 @@ export default function BuildJourneyPage() {
       {renderNewJourneyModal()}
       {renderNewJourneyLogDrawer()}
       {renderImportModal()}
+      {renderAudioModal()}
       {mapOverlayEventId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
           <div className="relative w-full max-w-5xl rounded-2xl bg-white shadow-2xl">

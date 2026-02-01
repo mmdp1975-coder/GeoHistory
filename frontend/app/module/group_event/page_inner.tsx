@@ -214,6 +214,12 @@ const OSM_STYLE: any = {
 
 type OverlayMode = "overlay" | "full";
 
+const isAudioMedia = (m: MediaItem | null | undefined) => {
+  if (!m) return false;
+  const t = (m.type || "").toLowerCase();
+  return t === "audio";
+};
+
 function getYouTubePreview(url?: string | null) {
   if (!url) return null;
   try {
@@ -254,7 +260,7 @@ function normalizeMediaUrl(raw?: string | null) {
   }
   const withForwardSlashes = url.replace(/\\/g, "/");
   // Supabase storage bucket paths without domain -> prepend public object path
-  const bucketMatch = withForwardSlashes.match(/^((journey-covers|media)\/.+)$/i);
+  const bucketMatch = withForwardSlashes.match(/^((journey-covers|media|journey-audio)\/.+)$/i);
   if (bucketMatch) {
     return `/storage/v1/object/public/${bucketMatch[1]}`;
   }
@@ -283,9 +289,12 @@ function normalizeMediaItem(m: MediaItem): MediaItem {
   const looksVideo =
     (m.type && m.type.toLowerCase() === "video") ||
     /youtu\.?be|vimeo\.com/i.test(normalizedUrl || m.url || "");
+  const looksAudio =
+    (m.type && m.type.toLowerCase() === "audio") ||
+    (m.mime && m.mime.toLowerCase().startsWith("audio/"));
   return {
     ...m,
-    type: looksVideo ? "video" : m.type,
+    type: looksVideo ? "video" : looksAudio ? "audio" : m.type,
     url: normalizedUrl || m.url,
     preview: fallbackPreview || null,
   };
@@ -311,10 +320,13 @@ function coerceMediaItem(raw: any): MediaItem | null {
     (typeof url === "string" && /youtu\.?be|vimeo\.com/i.test(url)) ||
     (typeof url === "string" && /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url)) ||
     (raw.media_type && String(raw.media_type).toLowerCase().startsWith("video/"));
+  const looksLikeAudio =
+    (raw.media_type && String(raw.media_type).toLowerCase().startsWith("audio/")) ||
+    (raw.type && String(raw.type).toLowerCase() === "audio");
   const type =
     raw.type ||
     raw.media_type ||
-    (looksLikeVideo ? "video" : "image");
+    (looksLikeVideo ? "video" : looksLikeAudio ? "audio" : "image");
   const previewOrThumb =
     preview ||
     (looksLikeVideo ? getYouTubePreview(typeof url === "string" ? url : "") : null) ||
@@ -861,6 +873,7 @@ const [journeyTitle, setJourneyTitle] = useState<string | null>(null);
 const [journeyDescription, setJourneyDescription] = useState<string>("");
 const [journeyMedia, setJourneyMedia] = useState<MediaItem[]>([]);
 const [journeyMediaFirst, setJourneyMediaFirst] = useState<string | null>(null);
+const [journeyAudioTracks, setJourneyAudioTracks] = useState<Array<{ lang: "it" | "en" | null; url: string; label: string }>>([]);
 const [selectedIndex, setSelectedIndex] = useState(0);
 const [loading, setLoading] = useState(true);
 const [isPlaying, setIsPlaying] = useState(false);
@@ -946,14 +959,6 @@ const [tone, setTone] = useState<TTSTone>(() => {
   }
 });
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem("geohistory_tts_voice", voice);
-    localStorage.setItem("geohistory_tts_tone", tone);
-  } catch {}
-}, [voice, tone]);
-
 const audioRef = useRef<HTMLAudioElement | null>(null);
 const abortRef = useRef<AbortController | null>(null);
 const queueRef = useRef<Array<{ kind: "intro" | "event"; index?: number; text: string }>>([]);
@@ -975,6 +980,29 @@ const jinglePlayingRef = useRef(false);
 const jingleCtxRef = useRef<AudioContext | null>(null);
 const jingleGainRef = useRef<GainNode | null>(null);
 const jingleIntervalRef = useRef<number | null>(null);
+const playAfterSelectRef = useRef(false);
+const ignoreNextSeekRef = useRef(false);
+const [audioSource, setAudioSource] = useState<string>("");
+const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+const [audioDuration, setAudioDuration] = useState(0);
+const [autoScrollActive, setAutoScrollActive] = useState(false);
+const autoScrollTimerRef = useRef<number | null>(null);
+
+useEffect(() => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("geohistory_tts_voice", voice);
+    localStorage.setItem("geohistory_tts_tone", tone);
+  } catch {}
+}, [voice, tone]);
+
+useEffect(() => {
+  if (!journeyAudioTracks.length) return;
+  if (audioSource) return;
+  const itIdx = journeyAudioTracks.findIndex((t) => t.lang === "it");
+  const nextIdx = itIdx >= 0 ? itIdx : 0;
+  setAudioSource(`mp3:${nextIdx}`);
+}, [journeyAudioTracks, audioSource]);
 
 useEffect(() => {
   isPlayingRef.current = isPlaying;
@@ -983,10 +1011,27 @@ useEffect(() => {
   selectedIndexRef.current = selectedIndex;
 }, [selectedIndex]);
 
+const enableTts = false;
 const ttsLang = useMemo(() => {
   const v = (resolvedLang || desiredLang || "it").toString().slice(0, 2).toLowerCase();
   return v || "it";
 }, [resolvedLang, desiredLang]);
+const audioSourceOptions = useMemo(() => {
+  return journeyAudioTracks.map((t, idx) => ({
+    value: `mp3:${idx}`,
+    label: t.label,
+    url: t.url,
+    lang: t.lang,
+  }));
+}, [journeyAudioTracks]);
+const selectedAudioSource = audioSourceOptions.find((opt) => opt.value === audioSource) ?? audioSourceOptions[0];
+const selectedAudioUrl = (selectedAudioSource as any)?.url as string | undefined;
+const hasMp3Audio = journeyAudioTracks.length > 0;
+const isMp3Mode = hasMp3Audio && !!selectedAudioUrl;
+const selectedAudioLang =
+  (selectedAudioSource as any)?.lang ||
+  (selectedAudioUrl && /\b_en\b|_en(\.|\/|$)/i.test(selectedAudioUrl) ? "en" : selectedAudioUrl && /\b_it\b|_it(\.|\/|$)/i.test(selectedAudioUrl) ? "it" : null) ||
+  ttsLang;
 const loadingClipSrc = useMemo(
   () => (ttsLang.startsWith("it") ? "/audio/IT_audio.m4a" : "/audio/EN_audio.m4a"),
   [ttsLang]
@@ -995,6 +1040,33 @@ const journeyTitleForSpeech = useMemo(
   () => (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString(),
   [journeyTitle, geTr, ge]
 );
+const hasIntroSegment = useMemo(() => {
+  const title = (journeyTitleForSpeech || "").trim();
+  const desc = (journeyDescription || "").trim();
+  return !!(title || desc);
+}, [journeyTitleForSpeech, journeyDescription]);
+
+const audioTimeline = useMemo(() => {
+  if (!audioDuration || !rows.length) return null;
+  const lang = (selectedAudioLang || "it").toString();
+  const segments: string[] = [];
+  if (hasIntroSegment) {
+    segments.push(buildIntroText(lang, journeyDescription, journeyTitleForSpeech));
+  }
+  rows.forEach((ev) => {
+    segments.push(buildEventSpeechText(ev, lang));
+  });
+  if (!segments.length) return null;
+  const weights = segments.map((s) => Math.max(80, (s || "").length));
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  const cumulative: number[] = [];
+  let acc = 0;
+  weights.forEach((w) => {
+    acc += (w / total) * audioDuration;
+    cumulative.push(acc);
+  });
+  return { cumulative, hasIntro: hasIntroSegment };
+}, [audioDuration, rows, hasIntroSegment, journeyDescription, journeyTitleForSpeech, selectedAudioLang]);
 
 function formatExactDateForSpeech(value?: string | null, lang?: string) {
   if (!value) return "";
@@ -1016,6 +1088,19 @@ function buildIntroText(lang: string, description: string, title: string) {
   }
   return desc ? `${safeTitle}. ${desc}` : `${safeTitle}.`;
 }
+
+const formatClockTime = (seconds?: number | null) => {
+  const s = Math.max(0, Math.floor(seconds ?? 0));
+  const mins = Math.floor(s / 60);
+  const secs = s % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const estimateSpeechSeconds = (text: string) => {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const secs = Math.round(words * 0.42);
+  return Math.max(5, secs || 5);
+};
 
 function formatSpeechPeriod(ev: EventVM, lang: string) {
   const isIt = lang.startsWith("it");
@@ -1158,7 +1243,125 @@ const stopAllPlayback = useCallback(() => {
   stopJingle();
 }, [abortCurrentAudio, stopJingle]);
 
+useEffect(() => {
+  if (!isMp3Mode) return;
+  const audio = audioRef.current;
+  if (!audio) return;
+  audio.pause();
+  audio.currentTime = 0;
+  setAudioCurrentTime(0);
+  setAudioDuration(0);
+  if (selectedAudioUrl) {
+    audio.src = selectedAudioUrl;
+  }
+  setIsPlaying(false);
+  setAutoScrollActive(false);
+  if (playAfterSelectRef.current && selectedAudioUrl) {
+    playAfterSelectRef.current = false;
+    window.setTimeout(() => {
+      audio.currentTime = 0;
+      void audio.play().then(() => setIsPlaying(true)).catch(() => {});
+    }, 0);
+  }
+  stopAllPlayback();
+}, [audioSource, selectedAudioUrl, isMp3Mode, stopAllPlayback]);
+
+useEffect(() => {
+  if (!autoScrollActive) {
+    if (autoScrollTimerRef.current) {
+      window.clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+    return;
+  }
+  if (!rows.length) return;
+  const lang = (selectedAudioLang || ttsLang || "it").toString();
+  const ev = rows[selectedIndex];
+  if (!ev) return;
+  const text = buildEventSpeechText(ev, lang);
+  const waitMs = estimateSpeechSeconds(text) * 1000;
+  if (autoScrollTimerRef.current) {
+    window.clearTimeout(autoScrollTimerRef.current);
+  }
+  autoScrollTimerRef.current = window.setTimeout(() => {
+    setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0));
+  }, waitMs);
+  return () => {
+    if (autoScrollTimerRef.current) {
+      window.clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+  };
+}, [autoScrollActive, rows, selectedIndex, selectedAudioLang, ttsLang]);
+
+useEffect(() => {
+  if (!isPlaying) {
+    setAutoScrollActive(false);
+  }
+}, [isPlaying]);
+
+useEffect(() => {
+  if (!isMp3Mode) return;
+  if (!audioTimeline?.cumulative?.length) return;
+  if (ignoreNextSeekRef.current) {
+    ignoreNextSeekRef.current = false;
+    return;
+  }
+  const audio = audioRef.current;
+  if (!audio) return;
+  const segIndex = selectedIndex + (audioTimeline?.hasIntro ? 1 : 0);
+  const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
+  const target = Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+  if (Number.isFinite(target) && Math.abs((audio.currentTime || 0) - target) > 0.25) {
+    const wasPlaying = isPlayingRef.current;
+    audio.pause();
+    audio.currentTime = target;
+    setAudioCurrentTime(target);
+    if (wasPlaying) {
+      void audio.play().catch(() => {});
+    }
+  }
+}, [selectedIndex, isMp3Mode, audioTimeline]);
+
 useEffect(() => () => stopAllPlayback(), [stopAllPlayback]);
+
+const syncSelectedIndexFromTime = useCallback(
+  (time: number, duration: number) => {
+    if (!rows.length || !duration || duration <= 0) return;
+    const timeline = audioTimeline?.cumulative;
+    if (timeline && timeline.length) {
+      const segIndex = timeline.findIndex((t) => time <= t);
+      let idx = segIndex === -1 ? timeline.length - 1 : segIndex;
+      let eventIndex = idx - (audioTimeline?.hasIntro ? 1 : 0);
+      if (eventIndex < 0) eventIndex = 0;
+      if (eventIndex >= rows.length) eventIndex = rows.length - 1;
+      if (eventIndex !== selectedIndexRef.current) {
+        ignoreNextSeekRef.current = true;
+        autoAdvanceRef.current = true;
+        setSelectedIndex(eventIndex);
+        setTimeout(() => { autoAdvanceRef.current = false; }, 0);
+      }
+      return;
+    }
+    const segments = rows.length + (hasIntroSegment ? 1 : 0);
+    if (segments <= 0) return;
+    const segLen = duration / segments;
+    if (!segLen || !Number.isFinite(segLen)) return;
+    let segIndex = Math.floor(time / segLen);
+    if (segIndex < 0) segIndex = 0;
+    if (segIndex >= segments) segIndex = segments - 1;
+    let eventIndex = segIndex - (hasIntroSegment ? 1 : 0);
+    if (eventIndex < 0) eventIndex = 0;
+    if (eventIndex >= rows.length) eventIndex = rows.length - 1;
+    if (eventIndex !== selectedIndexRef.current) {
+      ignoreNextSeekRef.current = true;
+      autoAdvanceRef.current = true;
+      setSelectedIndex(eventIndex);
+      setTimeout(() => { autoAdvanceRef.current = false; }, 0);
+    }
+  },
+  [rows.length, hasIntroSegment, audioTimeline],
+);
 
 const ensureJingleContext = useCallback(() => {
   if (jingleCtxRef.current) return jingleCtxRef.current;
@@ -1318,20 +1521,57 @@ const handleAudioEnded = useCallback(() => {
 useEffect(() => {
   const audio = audioRef.current;
   if (!audio) return;
-  const onEnded = () => handleAudioEnded();
+  const onEnded = () => {
+    if (isMp3Mode) {
+      setIsPlaying(false);
+      return;
+    }
+    handleAudioEnded();
+  };
   const onError = () => {
     console.warn("[GE] Audio element error");
     setIsPlaying(false);
   };
+  const onLoaded = () => {
+    if (!isMp3Mode) return;
+    const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
+    setAudioDuration(dur);
+  };
+  const onTime = () => {
+    if (!isMp3Mode) return;
+    const t = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    setAudioCurrentTime(t);
+    const dur = Number.isFinite(audio.duration) ? audio.duration : audioDuration;
+    if (dur) {
+      setAudioDuration(dur);
+      syncSelectedIndexFromTime(t, dur);
+    }
+  };
+  const onPlay = () => {
+    if (isMp3Mode) setIsPlaying(true);
+  };
+  const onPause = () => {
+    if (isMp3Mode) setIsPlaying(false);
+  };
   audio.addEventListener("ended", onEnded);
   audio.addEventListener("error", onError);
+  audio.addEventListener("loadedmetadata", onLoaded);
+  audio.addEventListener("timeupdate", onTime);
+  audio.addEventListener("play", onPlay);
+  audio.addEventListener("pause", onPause);
   return () => {
     audio.removeEventListener("ended", onEnded);
     audio.removeEventListener("error", onError);
+    audio.removeEventListener("loadedmetadata", onLoaded);
+    audio.removeEventListener("timeupdate", onTime);
+    audio.removeEventListener("play", onPlay);
+    audio.removeEventListener("pause", onPause);
   };
-}, [handleAudioEnded]);
+}, [handleAudioEnded, isMp3Mode, audioDuration, syncSelectedIndexFromTime]);
 
 useEffect(() => {
+  if (!enableTts) return;
+  if (isMp3Mode || hasMp3Audio) return;
   if (!isPlaying) {
     stopAllPlayback();
     return;
@@ -1345,9 +1585,11 @@ useEffect(() => {
   queueRef.current = buildQueueFrom(startIndex, includeIntro);
   currentQueuePosRef.current = 0;
   playSegment(0);
-}, [isPlaying, rows.length, buildQueueFrom, playSegment, stopAllPlayback]);
+}, [isPlaying, rows.length, buildQueueFrom, playSegment, stopAllPlayback, isMp3Mode, hasMp3Audio, enableTts]);
 
 useEffect(() => {
+  if (!enableTts) return;
+  if (isMp3Mode || hasMp3Audio) return;
   if (!isPlaying) return;
   if (ignoreNextSelectedIndexRef.current) {
     ignoreNextSelectedIndexRef.current = false;
@@ -1359,19 +1601,40 @@ useEffect(() => {
   queueRef.current = buildQueueFrom(selectedIndex, false);
   currentQueuePosRef.current = 0;
   playSegment(0);
-}, [selectedIndex, isPlaying, rows.length, buildQueueFrom, playSegment]);
+}, [selectedIndex, isPlaying, rows.length, buildQueueFrom, playSegment, isMp3Mode, hasMp3Audio, enableTts]);
 
 const togglePlay = useCallback(() => {
-  setIsPlaying((prev) => {
-    if (!prev) {
-      playStartIndexRef.current = selectedIndexRef.current;
-      ignoreNextSelectedIndexRef.current = true;
-      primeJingleOnPlay();
-      startJingleLoop();
+  if (hasMp3Audio) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!selectedAudioUrl && audioSourceOptions.length) {
+      setAudioSource(audioSourceOptions[0].value);
+      return;
     }
-    return !prev;
-  });
-}, [primeJingleOnPlay]);
+    if (!isPlayingRef.current) {
+      if (hasIntroSegment && rows.length) {
+        ignoreNextSeekRef.current = true;
+        setSelectedIndex(0);
+        audio.currentTime = 0;
+        setAudioCurrentTime(0);
+      }
+      if (selectedAudioUrl && audio.src !== selectedAudioUrl) {
+        audio.src = selectedAudioUrl;
+      }
+      if (!hasIntroSegment) {
+        audio.currentTime = audioCurrentTime || 0;
+      }
+      void audio.play().catch(() => {});
+      setIsPlaying(true);
+    } else {
+      audio.pause();
+      setIsPlaying(false);
+    }
+    return;
+  }
+  setAutoScrollActive((prev) => !prev);
+  setIsPlaying((prev) => !prev);
+}, [hasMp3Audio, selectedAudioUrl, audioCurrentTime, audioSourceOptions.length, audioSource, hasIntroSegment, rows.length]);
 
 const prefetchFirstSegment = useCallback(
   async (index: number) => {
@@ -1402,16 +1665,20 @@ const prefetchFirstSegment = useCallback(
 );
 
 useEffect(() => {
+  if (!enableTts) return;
+  if (isMp3Mode || hasMp3Audio) return;
   if (!rows.length) return;
   if (isPlayingRef.current) return;
   prefetchFirstSegment(selectedIndex);
-}, [rows.length, selectedIndex, prefetchFirstSegment]);
+}, [rows.length, selectedIndex, prefetchFirstSegment, isMp3Mode, hasMp3Audio, enableTts]);
 
 useEffect(() => {
+  if (!enableTts) return;
+  if (isMp3Mode || hasMp3Audio) return;
   if (!rows.length) return;
   if (isPlayingRef.current) return;
   prefetchFirstSegment(0);
-}, [rows.length, prefetchFirstSegment]);
+}, [rows.length, prefetchFirstSegment, isMp3Mode, hasMp3Audio, enableTts]);
 
 const prefetchIntroSegment = useCallback(async () => {
   if (!journeyDescription && !journeyTitleForSpeech) return;
@@ -1437,10 +1704,12 @@ const prefetchIntroSegment = useCallback(async () => {
 }, [journeyDescription, journeyTitleForSpeech, ttsLang, voice, tone, buildTtsCacheKey]);
 
 useEffect(() => {
+  if (!enableTts) return;
+  if (isMp3Mode || hasMp3Audio) return;
   if (isPlayingRef.current) return;
   if (selectedIndex !== 0) return;
   prefetchIntroSegment();
-}, [selectedIndex, prefetchIntroSegment]);
+}, [selectedIndex, prefetchIntroSegment, isMp3Mode, hasMp3Audio, enableTts]);
 
 const renderVoiceToneControls = useCallback(
   (opts?: { compact?: boolean }) => (
@@ -1472,6 +1741,162 @@ const renderVoiceToneControls = useCallback(
     </div>
   ),
   [voice, tone]
+);
+
+const renderAudioMeta = useCallback(() => {
+  const countLabel = rows.length ? `${selectedIndex + 1}/${rows.length}` : "0/0";
+  const timeLabel = `${formatClockTime(audioCurrentTime)} / ${audioDuration ? formatClockTime(audioDuration) : "--:--"}`;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">Evento {countLabel}</span>
+      {timeLabel ? <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">{timeLabel}</span> : null}
+      {audioDuration > 0 ? (
+        <input
+          type="range"
+          min={0}
+          max={Math.floor(audioDuration)}
+          value={Math.min(audioCurrentTime, audioDuration)}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            setAudioCurrentTime(next);
+            const audio = audioRef.current;
+            if (audio) audio.currentTime = next;
+          }}
+          className="h-2 w-[140px] accent-indigo-500"
+          aria-label="Seek audio"
+        />
+      ) : null}
+    </div>
+  );
+}, [rows.length, selectedIndex, audioCurrentTime, audioDuration]);
+
+const getEventStartTime = useCallback(
+  (index: number) => {
+    if (!audioTimeline?.cumulative?.length) return 0;
+    const offset = audioTimeline.hasIntro ? 1 : 0;
+    const segIndex = Math.max(0, Math.min(index + offset, audioTimeline.cumulative.length - 1));
+    const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
+    return Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+  },
+  [audioTimeline],
+);
+
+const seekToEventIndex = useCallback(
+  (nextIndex: number) => {
+    setSelectedIndex(nextIndex);
+    if (!isMp3Mode) return;
+    if (!audioTimeline?.cumulative?.length) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    const target = getEventStartTime(nextIndex);
+    if (Number.isFinite(target)) {
+      audio.currentTime = target;
+      setAudioCurrentTime(target);
+      if (isPlayingRef.current) {
+        void audio.play().catch(() => {});
+      }
+    }
+  },
+  [getEventStartTime, isMp3Mode, audioTimeline],
+);
+
+const handlePrevEvent = useCallback(() => {
+  if (!rows.length) return;
+  const nextIndex = (selectedIndex - 1 + rows.length) % rows.length;
+  seekToEventIndex(nextIndex);
+}, [rows.length, selectedIndex, seekToEventIndex]);
+
+const handleNextEvent = useCallback(() => {
+  if (!rows.length) return;
+  const nextIndex = (selectedIndex + 1) % rows.length;
+  seekToEventIndex(nextIndex);
+}, [rows.length, selectedIndex, seekToEventIndex]);
+
+const renderMapPlayerBox = useCallback(
+  (opts?: { compact?: boolean }) => (
+    <div className={`absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-white/40 bg-white/85 px-2 py-2 shadow ${mapMode === "fullscreen" ? "backdrop-blur" : ""}`}>
+      <button
+        onClick={toggleMapModeView}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+        aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          {mapMode === "fullscreen" ? (
+            <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          ) : (
+            <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          )}
+        </svg>
+      </button>
+      <button
+        onClick={handlePrevEvent}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+        aria-label="Evento precedente"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      <button
+        onClick={togglePlay}
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+        aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+      >
+        {isPlaying ? (
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+            <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+          </svg>
+        )}
+      </button>
+      <button
+        onClick={handleNextEvent}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+        aria-label="Evento successivo"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {audioSourceOptions.length ? (
+        <select
+          value={audioSource}
+          onChange={(e) => setAudioSource(e.target.value)}
+          className="h-8 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/40"
+          title="Audio"
+        >
+          {audioSourceOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {rows[selectedIndex]?.wiki_url ? (
+        <a
+          href={rows[selectedIndex]?.wiki_url as string}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+            <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Wiki
+        </a>
+      ) : null}
+      {renderAudioMeta()}
+    </div>
+  ),
+  [mapMode, rows, selectedIndex, isPlaying, renderAudioMeta, togglePlay, toggleMapModeView, audioSourceOptions, audioSource, handlePrevEvent, handleNextEvent],
 );
 
 
@@ -1854,8 +2279,55 @@ setGeTr(geTrData);
 setRows(vms);
 setJourneyTitle(j0?.journey_title ?? null);
 setJourneyDescription(journeyDesc);
- setJourneyMedia(jmNormalized);
- setJourneyMediaFirst(jmFirst);
+const extractLangFromFilename = (url: string): "it" | "en" | null => {
+  if (!url) return null;
+  const clean = url.split("?")[0].split("#")[0];
+  const file = clean.split("/").pop() || "";
+  const base = file.replace(/\.[a-z0-9]+$/i, "");
+  if (!base) return null;
+  const upper = base.toUpperCase();
+  if (upper.endsWith("IT")) return "it";
+  if (upper.endsWith("EN")) return "en";
+  return null;
+};
+
+let audioTracks = jmNormalized
+  .filter((m) => isAudioMedia(m))
+  .map((m) => {
+    const src = m.url || m.preview || "";
+    const lang = extractLangFromFilename(src);
+    const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
+    return { lang, url: src, label };
+  })
+  .filter((t) => t.url);
+
+if (!audioTracks.length) {
+  const { data: audioRows, error: audioErr } = await supabase
+    .from("v_media_attachments_expanded")
+    .select("public_url,source_url,storage_path,media_type")
+    .eq("group_event_id", gid)
+    .eq("entity_type", "group_event")
+    .eq("media_type", "audio")
+    .order("sort_order", { ascending: true });
+  if (audioErr) {
+    console.warn("[GE] audio media lookup error:", audioErr.message);
+  } else {
+    audioTracks = (audioRows ?? [])
+      .map((row: any) => {
+        const src = row.public_url || row.source_url || row.storage_path || "";
+        const normalized = normalizeMediaUrl(src);
+        const lang = extractLangFromFilename(normalized || src);
+        const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
+        return { lang, url: normalized || src, label };
+      })
+      .filter((t) => t.url);
+  }
+}
+
+const visualJourneyMedia = jmNormalized.filter((m) => !isAudioMedia(m));
+setJourneyMedia(visualJourneyMedia);
+setJourneyAudioTracks(audioTracks);
+setJourneyMediaFirst(jmFirst);
  if (eidParam) {
  const idx = vms.findIndex((ev) => ev.id === eidParam);
  setSelectedIndex(idx >= 0 ? idx : 0);
@@ -2427,7 +2899,7 @@ const journeyAndEventMedia = useMemo(() => {
   rows.forEach((ev) => {
     if (ev?.event_media?.length) collected.push(...ev.event_media);
   });
-  return collected;
+  return collected.filter((m) => !isAudioMedia(m));
 }, [journeyMedia, rows]);
 
  if (loading) {
@@ -2554,35 +3026,8 @@ const mapTextureStyle: CSSProperties = {
    {journeyDescription || "Nessuna descrizione disponibile."}
  </div>
  {/* Nuovo layout: Nav + Griglia 2 colonne (descrizione / media+sezioni) */}
-  <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
-    <button
-      onClick={() => setSelectedIndex((i) => rows.length ? (i - 1 + rows.length) % rows.length : 0)}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-      title="Previous"
-    >
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-    <button
-      onClick={togglePlay}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-      title={isPlaying ? "Pause" : "Play"}
-    >
-      {isPlaying ? (
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="5" width="4" height="14" fill="currentColor"/><rect x="14" y="5" width="4" height="14" fill="currentColor"/></svg>
-      ) : (
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M8 5l10 7-10 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      )}
-    </button>
-    {isBuffering ? <span className="text-[11px] text-slate-500">Buffering voice…</span> : null}
-    <button
-      onClick={() => setSelectedIndex((i) => rows.length ? (i + 1) % rows.length : 0)}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/90 backdrop-blur ring-1 ring-black/15 text-slate-700 shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition hover:bg-white hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
-      title="Next"
-    >
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-    {renderVoiceToneControls({ compact: true })}
-  </div>
+  <div className="mb-3" />
+
 
  <div className="hidden grid grid-cols-2 gap-3 items-start">
  {/* Colonna sinistra: Location + Descrizione + Link */}
@@ -2869,62 +3314,8 @@ const mapTextureStyle: CSSProperties = {
  Inizializzazione mappa.
  </div>
 )}
- <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
- <button
- onClick={toggleMapModeView}
- className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
- title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
- aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- {mapMode === "fullscreen" ? (
- <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- ) : (
- <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- )}
- </svg>
- </button>
- <button
- onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
- className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label="Evento precedente"
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- </svg>
- </button>
- <button
-  onClick={togglePlay}
-  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-  style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-  aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-  >
- {isPlaying ? (
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
- <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
- </svg>
- ) : (
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
- </svg>
- )}
-  </button>
-  {isBuffering ? <span className="text-[11px] text-slate-200">Buffering voice…</span> : null}
- <button
- onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
- className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
- style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
- aria-label="Evento successivo"
- >
- <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
- <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
- </svg>
- </button>
- {renderVoiceToneControls({ compact: true })}
- </div>
- </section>
+ {renderMapPlayerBox()}
+</section>
  </div>
 
  <section className="bg-white/70 backdrop-blur lg:hidden" style={mapTextureStyle}>
@@ -3216,73 +3607,7 @@ const mapTextureStyle: CSSProperties = {
         <Timeline3D />
       </div>
 
-      <div className="flex items-center gap-2 -mt-1 w-full">
-        <div className="flex items-center gap-2 min-w-0">
-          <button
-            onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label="Evento precedente"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <button
-            onClick={togglePlay}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-white shadow-[0_3px_12px_rgba(15,60,140,0.35)] transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-          >
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
-              </svg>
-            )}
-          </button>
-          {isBuffering ? <span className="text-[11px] text-slate-500">Buffering voice…</span> : null}
-          <button
-            onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            aria-label="Evento successivo"
-          >
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-              <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          {renderVoiceToneControls({ compact: true })}
-          {selectedEvent?.wiki_url ? (
-            <a
-              href={selectedEvent.wiki_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded-xl border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-medium text-blue-800 hover:bg-blue-50"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Wiki
-            </a>
-          ) : null}
-        </div>
-        <div className="ml-auto shrink-0 inline-flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-slate-700">
-            {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
-          </span>
-          <div
-            className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
-            title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
-          >
-            {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
-          </div>
-        </div>
-      </div>
+      <div className="h-2" />
 
       <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
                 <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
@@ -3312,72 +3637,7 @@ const mapTextureStyle: CSSProperties = {
             Inizializzazione mappa.
           </div>
         )}
-        <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
-          <button
-            onClick={toggleMapModeView}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            title={
-              mapMode === "normal"
-                ? "Schermo intero"
-                : "Riduci mappa"
-            }
-            aria-label={
-              mapMode === "normal"
-                ? "Schermo intero"
-                : "Riduci mappa"
-            }
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              {mapMode === "fullscreen" ? (
-                <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              ) : (
-                <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              )}
-            </svg>
-          </button>
-        </div>
-        {mapMode === "fullscreen" && (
-          <div className="absolute left-3 top-14 z-20 flex items-center gap-2 rounded-full bg-white/85 px-2 py-1 shadow">
-            <button
-              onClick={() => setSelectedIndex((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label="Evento precedente"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button
-              onClick={togglePlay}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-            >
-              {isPlaying ? (
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
-                </svg>
-              )}
-            </button>
-            {isBuffering ? <span className="text-[11px] text-slate-600">Buffering voice…</span> : null}
-            <button
-              onClick={() => setSelectedIndex((i) => (rows.length ? (i + 1) % rows.length : 0))}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label="Evento successivo"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-        )}
+        {renderMapPlayerBox()}
       </section>
     </section>
   </div>
