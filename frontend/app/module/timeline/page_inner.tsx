@@ -52,6 +52,7 @@ type GeWithCard = {
   is_favourite: boolean;
   avg_rating: number | null;
   ratings_count: number | null;
+  has_audio?: boolean;
 };
 
 const DEFAULT_FROM = -5000;
@@ -488,6 +489,23 @@ export default function TimelinePage() {
           );
         }
 
+        // Audio presence map (media_assets + media_attachments via view)
+        const audioSet = new Set<UUID>();
+        if (ids.length) {
+          const { data: audioRows, error: audioErr } = await supabase
+            .from("v_media_attachments_expanded")
+            .select("group_event_id, media_type")
+            .in("group_event_id", ids)
+            .eq("entity_type", "group_event")
+            .eq("media_type", "audio");
+          if (audioErr) throw audioErr;
+          (audioRows ?? []).forEach((row: any) => {
+            if (typeof row?.group_event_id === "string") {
+              audioSet.add(row.group_event_id);
+            }
+          });
+        }
+
         // Map → GeWithCard
         const mapped: GeWithCard[] = finalRows.map((r) => {
           const st = statsMap.get(r.journey_id);
@@ -503,6 +521,7 @@ export default function TimelinePage() {
             is_favourite: !!r.is_favourite,
             avg_rating: st?.avg_rating ?? null,
             ratings_count: st?.ratings_count ?? null,
+            has_audio: audioSet.has(r.journey_id),
           };
         });
 
@@ -1149,17 +1168,18 @@ export default function TimelinePage() {
           {cards.map((g) => {
             const isFav = favs.has(g.id);
             return (
-              <Scorecard
-                key={g.id}
-                href={`/module/group_event?gid=${encodeURIComponent(
-                  g.id
-                )}`}
-                title={g.title || g.slug || "Untitled"}
-                coverUrl={g.cover_url}
-                isFavourite={isFav}
-                onToggleFavourite={(event) =>
-                  toggleFavourite(event, g.id)
-                }
+                <Scorecard
+                  key={g.id}
+                  href={`/module/group_event?gid=${encodeURIComponent(
+                    g.id
+                  )}`}
+                  title={g.title || g.slug || "Untitled"}
+                  coverUrl={g.cover_url}
+                  isFavourite={isFav}
+                  hasAudio={g.has_audio}
+                  onToggleFavourite={(event) =>
+                    toggleFavourite(event, g.id)
+                  }
                 publishedAt={g.approved_at}
                 averageRating={g.avg_rating}
                 ratingsCount={g.ratings_count}

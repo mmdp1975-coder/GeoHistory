@@ -45,6 +45,7 @@ type JourneySummary = {
   yearFrom?: number | null;
   yearTo?: number | null;
   owner_profile_id?: string | null;
+  hasAudio?: boolean;
 };
 
 type VJourneyRow = {
@@ -771,6 +772,23 @@ export default function BuildJourneyPage() {
         .order("approved_at", { ascending: journeySort === "approved_asc" });
       if (error) throw error;
       const journeysFromView = (rows ?? []) as VJourneyRow[];
+
+      const journeyIds = journeysFromView.map((journey) => journey.journey_id);
+      const audioSet = new Set<string>();
+      if (journeyIds.length) {
+        const { data: audioRows, error: audioErr } = await supabase
+          .from("v_media_attachments_expanded")
+          .select("group_event_id, media_type")
+          .in("group_event_id", journeyIds)
+          .eq("entity_type", "group_event")
+          .eq("media_type", "audio");
+        if (audioErr) throw audioErr;
+        (audioRows ?? []).forEach((row: any) => {
+          if (typeof row?.group_event_id === "string") {
+            audioSet.add(row.group_event_id);
+          }
+        });
+      }
       setJourneys(
         journeysFromView.map((journey) => ({
           id: journey.journey_id,
@@ -781,9 +799,9 @@ export default function BuildJourneyPage() {
           yearFrom: journey.year_from_min,
           yearTo: journey.year_to_max,
           owner_profile_id: profile.id,
+          hasAudio: audioSet.has(journey.journey_id),
         }))
       );
-      const journeyIds = journeysFromView.map((journey) => journey.journey_id);
       const { data: visibilityRows, error: visibilityError } = await supabase
         .from("group_events")
         .select("id,visibility,workflow_state,requested_approval_at,approved_at,refused_at")
@@ -2830,6 +2848,7 @@ export default function BuildJourneyPage() {
                   eventsCount={journey.eventsCount ?? null}
                   yearFrom={journey.yearFrom ?? null}
                   yearTo={journey.yearTo ?? null}
+                  hasAudio={journey.hasAudio}
                   ctaLabel={tUI(langCode, "build.actions.edit")}
                   className="w-full"
                   liProps={{

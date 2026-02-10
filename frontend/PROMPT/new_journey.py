@@ -90,6 +90,7 @@ def responses_json(prompt: str) -> dict:
 
 
 STATUS_FILE: Path | None = None
+LAST_STYLE_RULES: str | None = None
 
 
 def utc_timestamp() -> str:
@@ -109,10 +110,14 @@ def log_stage(stage: str):
     print(f"STAGE:{stage}", flush=True)
     write_status({"status": "running", "stage": stage, "updated_at": utc_timestamp()})
 
-def run_prompt_1(title: str):
+def run_prompt_1(title: str, event_guideline: str | None):
     p1 = read_text(PROMPT_1_PATH)
     log_stage("PROMPT_1_START")
     prompt1 = p1.replace("<INSERISCI TITOLO DEL JOURNEY>", title)
+    prompt1 = prompt1.replace(
+        "<INSERISCI REGOLA EVENTI DALLA UI>",
+        event_guideline.strip() if event_guideline else "",
+    )
     json_a = extract_json(responses_text(prompt1))
     try:
         PROMPT_1_OUT_PATH.write_text(json.dumps(json_a, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -121,16 +126,69 @@ def run_prompt_1(title: str):
     log_stage("PROMPT_1_DONE")
     return json_a
 
-def run_prompt_2(audience: str, style: str, json_a: dict):
+def build_style_rules(audience: str, styles: str, detail_level: str) -> str:
+    audience_rules = {
+        "Ragazzi 10-15": "TARGET: Lessico semplice, frasi brevi, spiegazioni concrete.",
+        "Studenti 16-20": "TARGET: Lessico scolastico, frasi medie, 1 concetto chiave esplicitato.",
+        "Studenti universitari": "TARGET: Lessico disciplinare, frasi articolate, 1 concetto analitico.",
+        "Professori": "TARGET: Registro alto e denso, nessuna semplificazione.",
+        "Appassionati di storia": "TARGET: Tono coinvolgente ma accurato, dettagli concreti.",
+        "Storici / ricercatori": "TARGET: Registro tecnico e preciso, evita generalizzazioni.",
+    }
+    detail_rules = {
+        "breve": (
+            "DETTAGLIO EVENTI: ESATTAMENTE 3-4 frasi. Includi 1 fatto chiave + 1 conseguenza + 1 dettaglio concreto."
+            " DETTAGLIO JOURNEY: 6-8 frasi con periodo, area, attori e conseguenze."
+        ),
+        "medio": (
+            "DETTAGLIO EVENTI: ESATTAMENTE 6-7 frasi. Includi 2-3 fatti + 1 conseguenza + 1 dettaglio concreto."
+            " DETTAGLIO JOURNEY: 9-12 frasi con periodo, area, attori e conseguenze."
+        ),
+        "alto": (
+            "DETTAGLIO EVENTI: ESATTAMENTE 8-10 frasi. Includi 3-5 fatti + 1 implicazione di lungo periodo + 1 dettaglio concreto."
+            " DETTAGLIO JOURNEY: 12-15 frasi con periodo, area, attori e conseguenze."
+        ),
+    }
+    style_signals = {
+        "Documentaristico coinvolgente": "STILE DOMINANTE: Documentaristico coinvolgente. Tono neutro-autorevole, marcatori temporali espliciti.",
+        "Cronaca storica": "STILE DOMINANTE: Cronaca storica. Ordine cronologico chiaro, frasi asciutte.",
+        "Narrativo immersivo": "STILE DOMINANTE: Narrativo immersivo. Apertura con contesto/scena, lessico concreto.",
+        "Analitico-interpretativo": "STILE DOMINANTE: Analitico-interpretativo. 1 frase su cause e 1 su conseguenze.",
+        "Story-driven (light)": "STILE DOMINANTE: Story-driven (light). Ritmo scorrevole, 1 dettaglio umano.",
+    }
+    styles_list = [s.strip() for s in styles.split(",") if s.strip()]
+    lines: list[str] = []
+    if audience in audience_rules:
+        lines.append(audience_rules[audience])
+    lines.append(detail_rules.get(detail_level, "DETTAGLIO: 6-7 frasi per descrizione."))
+    dominant = styles_list[0] if styles_list else ""
+    if dominant and dominant in style_signals:
+        lines.append(style_signals[dominant])
+    extra = styles_list[1:]
+    if extra:
+        lines.append(f"ACCENTI: {', '.join(extra)} (leggeri).")
+    return "\n".join(lines)
+
+
+def run_prompt_2(audience: str, styles: str, detail_level: str, json_a: dict):
     p2 = read_text(PROMPT_2_PATH)
     log_stage("PROMPT_2_START")
+    style_rules = build_style_rules(audience, styles, detail_level)
+    global LAST_STYLE_RULES
+    LAST_STYLE_RULES = style_rules
     prompt2 = (
         p2.replace("<INSERISCI TARGET DALLA UI>", audience)
-          .replace("<INSERISCI STILE DALLA UI>", style)
+          .replace("<INSERISCI STILI DALLA UI>", styles)
+          .replace("<INSERISCI LIVELLO DETTAGLIO DALLA UI>", detail_level)
+          .replace("<REGOLE_STILISTICHE_DA_UI>", style_rules)
         + "\n\nJSON_INPUT_PROMPT_1=\n"
         + json.dumps(json_a, ensure_ascii=False)
     )
-    json_b = extract_json(responses_text(prompt2))
+    raw = responses_text(prompt2)
+    if raw.strip().startswith("TASK FAILED"):
+        print("TASK_FAILED_OUTPUT:" + json.dumps({"text": raw[:2000]}, ensure_ascii=False), flush=True)
+        raise RuntimeError(f"{raw.strip()} returned by model.")
+    json_b = extract_json(raw)
     try:
         PROMPT_2_OUT_PATH.write_text(json.dumps(json_b, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
@@ -151,9 +209,9 @@ def run_prompt_3(json_b: dict):
     log_stage("JSON_OUTPUT_READY")
     return json_c
 
-def run_pipeline(title: str, audience: str, style: str):
-    json_a = run_prompt_1(title)
-    json_b = run_prompt_2(audience, style, json_a)
+def run_pipeline(title: str, audience: str, styles: str, detail_level: str, event_guideline: str | None):
+    json_a = run_prompt_1(title, event_guideline)
+    json_b = run_prompt_2(audience, styles, detail_level, json_a)
     return run_prompt_3(json_b)
 
 # =========================
@@ -168,7 +226,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--title", required=True)
     parser.add_argument("--audience", required=True)
-    parser.add_argument("--style", required=True)
+    parser.add_argument("--styles", required=True)
+    parser.add_argument("--detail-level", required=True)
+    parser.add_argument("--event-guideline")
     parser.add_argument("--status-file")
     parser.add_argument("--step", choices=["1", "2", "3"])
     args = parser.parse_args()
@@ -179,20 +239,22 @@ def main():
 
     try:
         if args.step == "1":
-            payload = run_prompt_1(args.title)
+            payload = run_prompt_1(args.title, args.event_guideline)
         elif args.step == "2":
             if not PROMPT_1_OUT_PATH.exists():
                 raise RuntimeError("Missing OUTPUT_PROMPT_1.json")
             json_a = json.loads(PROMPT_1_OUT_PATH.read_text(encoding="utf-8"))
-            payload = run_prompt_2(args.audience, args.style, json_a)
+            payload = run_prompt_2(args.audience, args.styles, args.detail_level, json_a)
         elif args.step == "3":
             if not PROMPT_2_OUT_PATH.exists():
                 raise RuntimeError("Missing OUTPUT_PROMPT_2.json")
             json_b = json.loads(PROMPT_2_OUT_PATH.read_text(encoding="utf-8"))
             payload = run_prompt_3(json_b)
         else:
-            payload = run_pipeline(args.title, args.audience, args.style)
+            payload = run_pipeline(args.title, args.audience, args.styles, args.detail_level, args.event_guideline)
         write_status({"status": "done", "stage": "done", "updated_at": utc_timestamp()})
+        if LAST_STYLE_RULES:
+            print("STYLE_RULES:" + json.dumps({"rules": LAST_STYLE_RULES}, ensure_ascii=False))
         print("JSON_RESULT:" + json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     except Exception as exc:
         write_status({"status": "error", "stage": "error", "error": str(exc), "updated_at": utc_timestamp()})

@@ -10,7 +10,9 @@ export const runtime = "nodejs";
 type PromptPayload = {
   title?: string;
   audience?: string;
-  style?: string;
+  styles?: string[];
+  detailLevel?: string;
+  eventGuideline?: string;
   step?: "1" | "2" | "3";
 };
 
@@ -22,6 +24,7 @@ type JobStatus = {
   error?: string;
   message?: string;
   payload?: Record<string, unknown> | null;
+  style_rules?: string | null;
   updatedAt?: string;
 };
 
@@ -65,6 +68,21 @@ const parseJsonResult = (stdout?: string | null) => {
   }
 };
 
+const parseStyleRules = (stdout?: string | null) => {
+  if (!stdout) return null;
+  const marker = "STYLE_RULES:";
+  const idx = stdout.lastIndexOf(marker);
+  if (idx === -1) return null;
+  const raw = stdout.slice(idx + marker.length).trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { rules?: string };
+    return typeof parsed.rules === "string" ? parsed.rules : null;
+  } catch {
+    return null;
+  }
+};
+
 const updateJobStatus = (jobId: string, patch: Partial<JobStatus>) => {
   const prev = jobStatusStore.get(jobId) ?? { status: "running" };
   const next = { ...prev, ...patch, updatedAt: new Date().toISOString() } as JobStatus;
@@ -81,6 +99,16 @@ const buildScriptPath = () => {
   return path.join(baseDir, "frontend", "PROMPT", "new_journey.py");
 };
 
+const resolvePythonBin = () => {
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+  const baseDir = process.cwd();
+  const venvWin = path.join(baseDir, ".venv", "Scripts", "python.exe");
+  if (existsSync(venvWin)) return venvWin;
+  const venvUnix = path.join(baseDir, ".venv", "bin", "python");
+  if (existsSync(venvUnix)) return venvUnix;
+  return "python";
+};
+
 export async function POST(req: Request) {
   const guard = await requireAdmin(req);
   if (!guard.ok) return guard.response;
@@ -94,16 +122,23 @@ export async function POST(req: Request) {
 
   const title = payload.title?.trim();
   const audience = payload.audience?.trim();
-  const style = payload.style?.trim();
+  const styles = Array.isArray(payload.styles) ? payload.styles.map((s) => s?.trim()).filter(Boolean) : [];
+  const detailLevel = payload.detailLevel?.trim();
   const step = payload.step;
+  const eventGuideline = payload.eventGuideline?.trim();
 
-  if (!title || !audience || !style) {
-    return NextResponse.json({ error: "Missing title, audience, or style." }, { status: 400 });
+  if (!title || !audience || styles.length === 0 || !detailLevel || !eventGuideline) {
+    return NextResponse.json({ error: "Missing title, audience, styles, detail level, or event guideline." }, { status: 400 });
   }
 
   const scriptPath = buildScriptPath();
   const jobId = crypto.randomUUID();
-  const args = [scriptPath, "--title", title, "--audience", audience, "--style", style];
+  const args = [scriptPath, "--title", title, "--audience", audience];
+  args.push("--styles", styles.join(", "));
+  args.push("--detail-level", detailLevel);
+  if (eventGuideline) {
+    args.push("--event-guideline", eventGuideline);
+  }
   if (step) {
     args.push("--step", step);
   }
@@ -111,7 +146,7 @@ export async function POST(req: Request) {
   let stdout = "";
   let stderr = "";
 
-  const child = spawn(process.env.PYTHON_BIN || "python", args, { shell: false });
+  const child = spawn(resolvePythonBin(), args, { shell: false });
 
   const initialStage = step === "2" ? "prompt_2" : step === "3" ? "prompt_3" : "prompt_1";
   updateJobStatus(jobId, { status: "running", stage: initialStage, stdout: "", stderr: "" });
@@ -143,6 +178,7 @@ export async function POST(req: Request) {
       return;
     }
     const { payload, error } = parseJsonResult(stdout);
+    const styleRules = parseStyleRules(stdout);
     if (error) {
       updateJobStatus(jobId, {
         status: "error",
@@ -158,6 +194,7 @@ export async function POST(req: Request) {
       stage: "done",
       message: "JSON pronto.",
       payload,
+      ...(styleRules ? { style_rules: styleRules } : {}),
       stdout,
       stderr,
     });

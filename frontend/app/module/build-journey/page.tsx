@@ -48,6 +48,7 @@ type JourneySummary = {
   yearFrom?: number | null;
   yearTo?: number | null;
   owner_profile_id?: string | null;
+  hasAudio?: boolean;
 };
 
 type VJourneyRow = {
@@ -108,16 +109,12 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
 ];
 
 const NEW_JOURNEY_TARGET_OPTIONS = [
-  "Bambini (8-11 anni)",
-  "Ragazzi (12-15 anni)",
-  "Studenti (16-18 anni)",
-  "Pubblico generale",
-  "Famiglie (lettura condivisa)",
-  "Appassionati di storia",
+  "Ragazzi 10-15",
+  "Studenti 16-20",
   "Studenti universitari",
+  "Professori",
+  "Appassionati di storia",
   "Storici / ricercatori",
-  "Insegnanti / divulgatori",
-  "Accessibilita semplificata",
 ];
 
 const NEW_JOURNEY_STYLE_OPTIONS = [
@@ -125,18 +122,17 @@ const NEW_JOURNEY_STYLE_OPTIONS = [
   "Cronaca storica",
   "Narrativo immersivo",
   "Analitico-interpretativo",
-  "Socio-culturale",
-  "Politico-istituzionale",
-  "Economico-commerciale",
-  "Militare-strategico",
-  "Urbano-territoriale",
-  "Tecnologico-innovativo",
-  "Crisi e collasso",
-  "Transizione storica",
-  "Comparativo implicito",
-  "Sintetico editoriale",
   "Story-driven (light)",
 ];
+
+const NEW_JOURNEY_STYLE_BY_AUDIENCE: Record<string, string[]> = {
+  "Ragazzi 10-15": ["Narrativo immersivo", "Story-driven (light)"],
+  "Studenti 16-20": ["Documentaristico coinvolgente", "Cronaca storica"],
+  "Studenti universitari": ["Analitico-interpretativo", "Documentaristico coinvolgente"],
+  "Professori": ["Analitico-interpretativo", "Cronaca storica"],
+  "Appassionati di storia": ["Documentaristico coinvolgente", "Story-driven (light)"],
+  "Storici / ricercatori": ["Analitico-interpretativo", "Cronaca storica"],
+};
 
 const DEFAULT_MEDIA_ROLES = ["gallery", "cover", "poster", "context"];
 
@@ -705,7 +701,9 @@ export default function BuildJourneyPage() {
   const [newJourneyOpen, setNewJourneyOpen] = useState(false);
   const [newJourneyTitle, setNewJourneyTitle] = useState("");
   const [newJourneyAudience, setNewJourneyAudience] = useState("Appassionati di storia");
-  const [newJourneyStyle, setNewJourneyStyle] = useState("Narrativo immersivo");
+  const [newJourneyStyles, setNewJourneyStyles] = useState<string[]>([]);
+  const [newJourneyDetailLevel, setNewJourneyDetailLevel] = useState<"breve" | "medio" | "alto">("medio");
+  const [newJourneyEventGuideline, setNewJourneyEventGuideline] = useState("");
   const [newJourneyRunning, setNewJourneyRunning] = useState(false);
   const [newJourneyJobId, setNewJourneyJobId] = useState<string | null>(null);
   const [newJourneyError, setNewJourneyError] = useState<string | null>(null);
@@ -715,6 +713,7 @@ export default function BuildJourneyPage() {
   >("idle");
   const [newJourneyCompletedStep, setNewJourneyCompletedStep] = useState<number>(0);
   const [newJourneySummary, setNewJourneySummary] = useState<string>("");
+  const [newJourneyStyleRules, setNewJourneyStyleRules] = useState<string>("");
   const [newJourneyElapsed, setNewJourneyElapsed] = useState(0);
   const [newJourneyTotalElapsed, setNewJourneyTotalElapsed] = useState(0);
   const [newJourneyStepDurations, setNewJourneyStepDurations] = useState<Record<string, number>>({});
@@ -745,7 +744,12 @@ export default function BuildJourneyPage() {
   const newJourneyTotalStartRef = useRef<number | null>(null);
   const newJourneyStepStartRef = useRef<number | null>(null);
   const newJourneyTotalAccumRef = useRef<number>(0);
-  const newJourneyCanRun = !!newJourneyTitle.trim() && !!newJourneyAudience && !!newJourneyStyle && !newJourneyRunning;
+  const newJourneyCanRun =
+    !!newJourneyTitle.trim() &&
+    !!newJourneyAudience &&
+    newJourneyStyles.length > 0 &&
+    !!newJourneyEventGuideline.trim() &&
+    !newJourneyRunning;
   const lastAutoSlugRef = useRef<string>("");
   const lastAutoCodeRef = useRef<string>("");
   const isAdminProfile = personaCode.startsWith("ADMIN");
@@ -779,6 +783,18 @@ export default function BuildJourneyPage() {
     years.sort((a, b) => a - b);
     return years[0];
   }, [journeyEvents]);
+
+
+  useEffect(() => {
+    if (!newJourneyAudience) return;
+    const allowedStyles = NEW_JOURNEY_STYLE_BY_AUDIENCE[newJourneyAudience];
+    if (!allowedStyles || allowedStyles.length === 0) return;
+    setNewJourneyStyles((prev) => {
+      const filtered = prev.filter((style) => allowedStyles.includes(style));
+      if (filtered.length === 0) return [allowedStyles[0]];
+      return filtered;
+    });
+  }, [newJourneyAudience]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1705,6 +1721,20 @@ export default function BuildJourneyPage() {
         if (coverMap[groupId]) return;
         if (row.public_url) coverMap[groupId] = row.public_url as string;
       });
+
+      const audioSet = new Set<string>();
+      const { data: audioRows, error: audioErr } = await supabase
+        .from("v_media_attachments_expanded")
+        .select("group_event_id, media_type")
+        .in("group_event_id", ownerIds)
+        .eq("entity_type", "group_event")
+        .eq("media_type", "audio");
+      if (audioErr) throw audioErr;
+      (audioRows ?? []).forEach((row: any) => {
+        if (typeof row?.group_event_id === "string") {
+          audioSet.add(row.group_event_id);
+        }
+      });
       const journeyIds = journeysFromView.map((journey) => journey.journey_id);
       const { data: visibilityRows, error: visibilityError } = await supabase
         .from("group_events")
@@ -1744,6 +1774,7 @@ export default function BuildJourneyPage() {
           yearFrom: journey.year_from_min,
           yearTo: journey.year_to_max,
           owner_profile_id: profile.id,
+          hasAudio: audioSet.has(journey.journey_id),
         }))
       );
 
@@ -3529,6 +3560,9 @@ export default function BuildJourneyPage() {
         stderr: data?.stderr,
       });
       if (logText) setNewJourneyLog(logText);
+      if (typeof data?.style_rules === "string" && data.style_rules.trim()) {
+        setNewJourneyStyleRules(data.style_rules.trim());
+      }
 
       if (data?.status === "error") {
         setNewJourneyError(data?.error || "Errore durante l'avvio.");
@@ -3642,10 +3676,14 @@ export default function BuildJourneyPage() {
     setNewJourneyJobId(null);
     setNewJourneyCompletedStep(0);
     setNewJourneySummary("");
+    setNewJourneyStyleRules("");
     setNewJourneyElapsed(0);
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
+    setNewJourneyStyles([]);
+    setNewJourneyDetailLevel("medio");
+    setNewJourneyEventGuideline("");
     newJourneyTokenRef.current = null;
     newJourneyStepRef.current = null;
     newJourneyStepStartRef.current = null;
@@ -3665,10 +3703,14 @@ export default function BuildJourneyPage() {
     setNewJourneyCopyMessage(null);
     setNewJourneyJobId(null);
     setNewJourneySummary("");
+    setNewJourneyStyleRules("");
     setNewJourneyElapsed(0);
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
+    setNewJourneyStyles([]);
+    setNewJourneyDetailLevel("medio");
+    setNewJourneyEventGuideline("");
     newJourneyTokenRef.current = null;
     newJourneyStepRef.current = null;
     newJourneyStepStartRef.current = null;
@@ -3718,7 +3760,9 @@ export default function BuildJourneyPage() {
         body: JSON.stringify({
           title: newJourneyTitle.trim(),
           audience: newJourneyAudience,
-          style: newJourneyStyle,
+          styles: newJourneyStyles,
+          detailLevel: newJourneyDetailLevel,
+          eventGuideline: newJourneyEventGuideline.trim() || undefined,
           step,
         }),
       });
@@ -5103,10 +5147,8 @@ export default function BuildJourneyPage() {
       { value: "", label: "Seleziona un target" },
       ...NEW_JOURNEY_TARGET_OPTIONS.map((option) => ({ value: option, label: option })),
     ];
-    const styleOptions = [
-      { value: "", label: "Seleziona uno stile" },
-      ...NEW_JOURNEY_STYLE_OPTIONS.map((option) => ({ value: option, label: option })),
-    ];
+    const allowedStyles = NEW_JOURNEY_STYLE_BY_AUDIENCE[newJourneyAudience] || NEW_JOURNEY_STYLE_OPTIONS;
+    const styleOptions = allowedStyles.map((option) => ({ value: option, label: option }));
 
     const steps = [
       { id: "prompt_1", label: "Prompt 1: input base" },
@@ -5151,6 +5193,12 @@ export default function BuildJourneyPage() {
               onChange={setNewJourneyTitle}
               placeholder="Inserisci il titolo"
             />
+            <Input
+              label="Regola eventi"
+              value={newJourneyEventGuideline}
+              onChange={setNewJourneyEventGuideline}
+              placeholder='Esempio: "uno per ogni presidente"'
+            />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
               <Select
                 label="Target audience"
@@ -5160,12 +5208,49 @@ export default function BuildJourneyPage() {
                 className="sm:max-w-[240px] w-full"
               />
               <Select
-                label="Stile narrativo"
-                value={newJourneyStyle}
-                onChange={setNewJourneyStyle}
-                options={styleOptions}
-                className="sm:max-w-[240px] w-full"
+                label="Livello di dettaglio"
+                value={newJourneyDetailLevel}
+                onChange={(value) => setNewJourneyDetailLevel(value as "breve" | "medio" | "alto")}
+                options={[
+                  { value: "breve", label: "Breve" },
+                  { value: "medio", label: "Medio" },
+                  { value: "alto", label: "Alto" },
+                ]}
+                className="sm:max-w-[200px] w-full"
               />
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-neutral-700">Stili narrativi (seleziona 1 o più)</p>
+              <div className="flex flex-wrap gap-2">
+                {styleOptions
+                  .filter((opt) => opt.value)
+                  .map((option) => {
+                    const isActive = newJourneyStyles.includes(option.value);
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                          isActive
+                            ? "border-sky-500 bg-sky-50 text-sky-700"
+                            : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
+                        }`}
+                        onClick={() =>
+                          setNewJourneyStyles((prev) => {
+                            if (prev.includes(option.value)) {
+                              const next = prev.filter((style) => style !== option.value);
+                              return next.length ? next : prev;
+                            }
+                            return [...prev, option.value];
+                          })
+                        }
+                        aria-pressed={isActive}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+              </div>
             </div>
 
             <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 text-xs text-neutral-600">
@@ -5235,6 +5320,14 @@ export default function BuildJourneyPage() {
             {newJourneySummary && (
               <div className="max-h-48 overflow-auto rounded-2xl border border-neutral-200 bg-neutral-50/80 p-4 text-xs text-neutral-700 whitespace-pre-wrap">
                 {newJourneySummary}
+              </div>
+            )}
+            {newJourneyStyleRules && (
+              <div className="max-h-48 overflow-auto rounded-2xl border border-neutral-200 bg-white/80 p-4 text-xs text-neutral-700 whitespace-pre-wrap">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                  Regole stilistiche generate
+                </p>
+                {newJourneyStyleRules}
               </div>
             )}
 
@@ -5665,6 +5758,7 @@ export default function BuildJourneyPage() {
                   eventsCount={journey.eventsCount ?? null}
                   yearFrom={journey.yearFrom ?? null}
                   yearTo={journey.yearTo ?? null}
+                  hasAudio={journey.hasAudio}
                   ctaLabel={tUI(langCode, "build.actions.edit")}
                   className="w-full"
                   liProps={{

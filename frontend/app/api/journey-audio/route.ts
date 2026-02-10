@@ -5,6 +5,8 @@ import { supabaseAdmin } from "@/lib/supabaseServerClient";
 export const runtime = "nodejs";
 
 const TTS_MAX_CHARS = 3500;
+const PAUSE_INPUT = " ";
+const PAUSE_INSTRUCTIONS = "Silence only. No speech. Short pause.";
 
 const splitTextForTts = (text: string, maxChars: number) => {
   const chunks: string[] = [];
@@ -261,9 +263,10 @@ export async function POST(req: Request) {
     response_format: "mp3",
   };
 
-  const callOpenAI = async (input: string) => {
+  const callOpenAI = async (input: string, overrideInstructions?: string) => {
     const body: Record<string, any> = { ...baseBody, input };
-    if (instructions) body.instructions = instructions;
+    const finalInstructions = overrideInstructions ?? instructions;
+    if (finalInstructions) body.instructions = finalInstructions;
     const apiRes = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: {
@@ -305,7 +308,8 @@ export async function POST(req: Request) {
 
     if (segments && segments.length) {
       for (const seg of segments) {
-        const input = typeof seg?.text === "string" ? seg.text.trim() : "";
+        const isPause = String(seg?.kind || "") === "pause";
+        const input = isPause ? PAUSE_INPUT : typeof seg?.text === "string" ? seg.text.trim() : "";
         if (!input) continue;
         if (process.env.NODE_ENV === "development") {
           console.log("[journey-audio] segment", {
@@ -314,7 +318,7 @@ export async function POST(req: Request) {
             len: input.length,
           });
         }
-        const result = await callOpenAI(input);
+        const result = await callOpenAI(input, isPause ? PAUSE_INSTRUCTIONS : undefined);
         if (!result.ok) {
           return NextResponse.json(
             { error: "OpenAI TTS error", status: result.status },
@@ -386,33 +390,43 @@ export async function POST(req: Request) {
       console.log("[journey-audio] attachment ok", { groupEventId: journeyId });
     }
 
-    // Remove previous audio attachments for same lang on this journey, keep only latest.
+    // Remove previous audio attachments for same lang on this journey (keep only latest generated asset).
     const cleanupLangSuffix = lang ? `_${lang}.mp3` : "";
-    if (cleanupLangSuffix) {
-      const { data: oldAudioRows, error: oldAudioErr } = await supabaseAdmin
-        .from("v_media_attachments_expanded")
-        .select("id,media_id,storage_path,public_url")
-        .eq("group_event_id", journeyId)
-        .eq("entity_type", "group_event")
-        .eq("media_type", "audio");
-      if (oldAudioErr) {
-        console.warn("[journey-audio] cleanup lookup error:", oldAudioErr.message);
-      } else {
-        const toDelete = (oldAudioRows ?? [])
-          .filter((row: any) => {
-            const path = (row.storage_path || row.public_url || "").toString();
-            return (
-              row.media_id !== assetId &&
-              path.toLowerCase().endsWith(cleanupLangSuffix)
-            );
-          })
-          .map((row: any) => row.id)
-          .filter(Boolean);
-        if (toDelete.length) {
-          const { error: delErr } = await supabaseAdmin.from("media_attachments").delete().in("id", toDelete);
-          if (delErr) {
-            console.warn("[journey-audio] cleanup delete error:", delErr.message);
-          }
+    const { data: oldAudioRows, error: oldAudioErr } = await supabaseAdmin
+      .from("v_media_attachments_expanded")
+      .select("id,media_id,storage_path,public_url")
+      .eq("group_event_id", journeyId)
+      .eq("entity_type", "group_event")
+      .eq("media_type", "audio");
+    if (oldAudioErr) {
+      console.warn("[journey-audio] cleanup lookup error:", oldAudioErr.message);
+    } else {
+      const toDelete = (oldAudioRows ?? [])
+        .filter((row: any) => {
+          if (!cleanupLangSuffix) return false;
+          const path = (row.storage_path || row.public_url || "").toString().toLowerCase();
+          return row.media_id !== assetId && path.endsWith(cleanupLangSuffix);
+        })
+        .map((row: any) => row.id)
+        .filter(Boolean);
+      const toDeleteMediaIds = (oldAudioRows ?? [])
+        .filter((row: any) => {
+          if (!cleanupLangSuffix) return false;
+          const path = (row.storage_path || row.public_url || "").toString().toLowerCase();
+          return row.media_id && row.media_id !== assetId && path.endsWith(cleanupLangSuffix);
+        })
+        .map((row: any) => row.media_id)
+        .filter(Boolean);
+      if (toDelete.length) {
+        const { error: delErr } = await supabaseAdmin.from("media_attachments").delete().in("id", toDelete);
+        if (delErr) {
+          console.warn("[journey-audio] cleanup delete error:", delErr.message);
+        }
+      }
+      if (toDeleteMediaIds.length) {
+        const { error: assetErr } = await supabaseAdmin.from("media_assets").delete().in("id", toDeleteMediaIds);
+        if (assetErr) {
+          console.warn("[journey-audio] cleanup media_assets delete error:", assetErr.message);
         }
       }
     }
@@ -422,16 +436,17 @@ export async function POST(req: Request) {
       try {
         const { data: listed, error: listErr } = await supabaseAdmin.storage
           .from(AUDIO_BUCKET)
-          .list(journeyId, { limit: 100 });
+          .list(journeyId, { limit: 200 });
         if (listErr) {
           console.warn("[journey-audio] storage list error:", listErr.message);
         } else if (listed?.length) {
+          const keepPath = data?.path || storagePath;
           const toRemove = listed
             .map((item) => item?.name)
             .filter((name): name is string => !!name)
             .filter((name) => name.toLowerCase().endsWith(cleanupLangSuffix))
             .map((name) => `${journeyId}/${name}`)
-            .filter((path) => path !== (data?.path || storagePath));
+            .filter((path) => path !== keepPath);
           if (toRemove.length) {
             const { error: delErr } = await supabaseAdmin.storage.from(AUDIO_BUCKET).remove(toRemove);
             if (delErr) {

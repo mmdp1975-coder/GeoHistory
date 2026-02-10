@@ -1774,7 +1774,13 @@ const togglePlay = useCallback(() => {
       return;
     }
     if (!isPlayingRef.current) {
-      if (hasIntroSegment && rows.length) {
+      const resumeTime = Number.isFinite(audio.currentTime) ? audio.currentTime : audioCurrentTime || 0;
+      const shouldRestartIntro =
+        hasIntroSegment &&
+        rows.length > 0 &&
+        (audioCurrentTime || 0) <= 0.01 &&
+        (resumeTime || 0) <= 0.01;
+      if (shouldRestartIntro) {
         ignoreNextSeekRef.current = true;
         setSelectedIndex(0);
         audio.currentTime = 0;
@@ -1783,8 +1789,8 @@ const togglePlay = useCallback(() => {
       if (selectedAudioUrl && audio.src !== selectedAudioUrl) {
         audio.src = selectedAudioUrl;
       }
-      if (!hasIntroSegment) {
-        audio.currentTime = audioCurrentTime || 0;
+      if (!shouldRestartIntro) {
+        audio.currentTime = resumeTime || 0;
       }
       void audio.play().catch(() => {});
       setIsPlaying(true);
@@ -1926,6 +1932,18 @@ const getEventStartTime = useCallback(
     const targetId = rows[index]?.id;
     if (targetId && audioEventStarts.has(String(targetId))) {
       return audioEventStarts.get(String(targetId)) ?? 0;
+    }
+    const segments = (audioTimeline as any)?.segments as any[] | undefined;
+    if (Array.isArray(segments) && segments.length) {
+      const byIndex = segments.find(
+        (seg) =>
+          String(seg?.kind || "") === "event_header" &&
+          Number.isFinite(seg?.start) &&
+          Number(seg?.index) === index,
+      );
+      if (byIndex && Number.isFinite(byIndex.start)) {
+        return Math.max(0, Number(byIndex.start));
+      }
     }
     if (!audioTimeline?.cumulative?.length) return 0;
     const offset = audioTimeline.hasIntro ? 1 : 0;
@@ -2505,30 +2523,38 @@ let audioTracks = jmNormalized
   })
   .filter((t) => t.url);
 
-const { data: audioRows, error: audioErr } = await supabase
-  .from("v_media_attachments_expanded")
-  .select("public_url,source_url,storage_path,media_type,asset_metadata")
-  .eq("group_event_id", gid)
-  .eq("entity_type", "group_event")
-  .eq("media_type", "audio")
-  .order("sort_order", { ascending: true });
+  const { data: audioRows, error: audioErr } = await supabase
+    .from("v_media_attachments_expanded")
+    .select("public_url,source_url,storage_path,media_type,asset_metadata")
+    .eq("group_event_id", gid)
+    .eq("entity_type", "group_event")
+    .eq("media_type", "audio")
+    .order("sort_order", { ascending: true });
 if (audioErr) {
   console.warn("[GE] audio media lookup error:", audioErr.message);
 } else if (audioRows?.length) {
-  const attachmentTracks = (audioRows ?? [])
-    .map((row: any) => {
-      const src = row.public_url || row.source_url || row.storage_path || "";
-      const normalized = normalizeMediaUrl(src);
-      const lang = extractLangFromFilename(normalized || src);
-      const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
-      const timeline = row.asset_metadata?.audio_timeline ?? null;
-      return { lang, url: normalized || src, label, timeline };
-    })
-    .filter((t) => t.url);
-  if (attachmentTracks.length) {
-    audioTracks = attachmentTracks;
+    const attachmentTracks = (audioRows ?? [])
+      .map((row: any) => {
+        const src = row.public_url || row.source_url || row.storage_path || "";
+        const normalized = normalizeMediaUrl(src);
+        const lang = extractLangFromFilename(normalized || src);
+        const label = lang === "it" ? "Audio IT" : lang === "en" ? "Audio EN" : "Audio";
+        const timeline = row.asset_metadata?.audio_timeline ?? null;
+        return { lang, url: normalized || src, label, timeline };
+      })
+      .filter((t) => t.url);
+    if (attachmentTracks.length) {
+      const deduped: typeof attachmentTracks = [];
+      const seen = new Set<string>();
+      attachmentTracks.forEach((t) => {
+        const key = `${t.lang || "unk"}|${(t.url || "").split("?")[0]}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        deduped.push(t);
+      });
+      audioTracks = deduped;
+    }
   }
-}
 
 const visualJourneyMedia = jmNormalized.filter((m) => !isAudioMedia(m));
 setJourneyMedia(visualJourneyMedia);

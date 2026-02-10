@@ -43,6 +43,7 @@ type Joined = {
   j: JourneyRow;
   avg: number;
   cnt: number;
+  hasAudio?: boolean;
 };
 
 /** Type guard per StatsRow */
@@ -138,6 +139,23 @@ export default function RatingPage() {
         const jArr = ((jRowsRaw ?? []) as unknown[]).filter(isJourneyRow) as JourneyRow[];
         const jMap = new Map<string, JourneyRow>(jArr.map((r) => [r.journey_id, r]));
 
+        // Audio presence map (media_assets + media_attachments via view)
+        const audioSet = new Set<string>();
+        if (geIds.length) {
+          const { data: audioRows, error: audioErr } = await supabase
+            .from("v_media_attachments_expanded")
+            .select("group_event_id, media_type")
+            .in("group_event_id", geIds)
+            .eq("entity_type", "group_event")
+            .eq("media_type", "audio");
+          if (audioErr) throw audioErr;
+          (audioRows ?? []).forEach((row: any) => {
+            if (typeof row?.group_event_id === "string") {
+              audioSet.add(row.group_event_id);
+            }
+          });
+        }
+
         // 3) Join e ordinamento
         const joined = filtered
           .map((s) => {
@@ -147,6 +165,7 @@ export default function RatingPage() {
               j,
               avg: Number(s.avg_rating),
               cnt: Number(s.ratings_count ?? 0),
+              hasAudio: audioSet.has(s.group_event_id),
             } as Joined;
           })
           .filter(Boolean) as Joined[];
@@ -208,13 +227,14 @@ export default function RatingPage() {
       {/* Grid risultati */}
       {rows.length > 0 && (
         <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {rows.map(({ j, avg, cnt }) => (
+          {rows.map(({ j, avg, cnt, hasAudio }) => (
             <Scorecard
               key={j.journey_id}
               href={`/module/group_event?gid=${encodeURIComponent(j.journey_id)}`}
               title={j.translation_title ?? "Untitled"}
               coverUrl={j.journey_cover_url}
               isFavourite={j.is_favourite}
+              hasAudio={hasAudio}
               publishedAt={j.approved_at}
               averageRating={avg}
               ratingsCount={cnt}

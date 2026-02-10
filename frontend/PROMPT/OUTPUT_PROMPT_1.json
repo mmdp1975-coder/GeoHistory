@@ -1,266 +1,106 @@
 {
-  "journey_title_it": "Tutti i Papi",
-  "journey_title_en": "All the Popes",
+  "journey_title_it": "Gli Inca: dall'ascesa al crollo del Tawantinsuyu",
+  "journey_title_en": "The Inca: From Rise to Fall of the Tawantinsuyu",
   "events": [
     {
-      "titolo_evento_it": "Editto di Milano: libertà di culto per i cristiani",
-      "title_event_en": "Edict of Milan: Freedom of Worship for Christians",
+      "titolo_evento_it": "Formazione del Regno di Cusco",
+      "title_event_en": "Formation of the Kingdom of Cusco",
       "era": "AD",
-      "from": 313,
-      "to": 313,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Milan"
+      "from": 1200,
+      "to": 1438,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cusco"
     },
     {
-      "titolo_evento_it": "Editto di Tessalonica: il cristianesimo diventa religione di Stato",
-      "title_event_en": "Edict of Thessalonica: Christianity Becomes State Religion",
+      "titolo_evento_it": "Ascesa di Pachacuti e riforma statale del Tawantinsuyu",
+      "title_event_en": "Rise of Pachacuti and Tawantinsuyu State Reforms",
       "era": "AD",
-      "from": 380,
-      "to": 380,
-      "continent": "Europe",
-      "country": "Greece",
-      "location": "Thessaloniki"
+      "from": 1438,
+      "to": 1471,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cusco"
     },
     {
-      "titolo_evento_it": "Pontificato di Gregorio Magno",
-      "title_event_en": "Pontificate of Gregory the Great",
+      "titolo_evento_it": "Costruzione di Machu Picchu",
+      "title_event_en": "Construction of Machu Picchu",
       "era": "AD",
-      "from": 590,
-      "to": 604,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
+      "from": 1450,
+      "to": 1460,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Machu Picchu"
     },
     {
-      "titolo_evento_it": "Donazione di Pipino e nascita dello Stato della Chiesa",
-      "title_event_en": "Donation of Pepin and the Birth of the Papal States",
+      "titolo_evento_it": "Espansione imperiale sotto Topa Inca Yupanqui",
+      "title_event_en": "Imperial Expansion under Topa Inca Yupanqui",
       "era": "AD",
-      "from": 754,
-      "to": 756,
-      "continent": "Europe",
-      "country": "France",
-      "location": "Quierzy"
+      "from": 1471,
+      "to": 1493,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cusco"
     },
     {
-      "titolo_evento_it": "Incoronazione imperiale di Carlo Magno a San Pietro",
-      "title_event_en": "Imperial Coronation of Charlemagne at St. Peter's",
+      "titolo_evento_it": "Apogeo e riorganizzazione sotto Huayna Capac",
+      "title_event_en": "Imperial Apex and Reorganization under Huayna Capac",
       "era": "AD",
-      "from": 800,
-      "to": 800,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Scisma d'Oriente del 1054",
-      "title_event_en": "East–West Schism of 1054",
-      "era": "AD",
-      "from": 1054,
-      "to": 1054,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "In nomine Domini: riforma dell'elezione papale",
-      "title_event_en": "'In nomine Domini': Reform of Papal Election",
-      "era": "AD",
-      "from": 1059,
-      "to": 1059,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Dictatus Papae e affermazione del primato pontificio",
-      "title_event_en": "Dictatus Papae and the Assertion of Papal Primacy",
-      "era": "AD",
-      "from": 1075,
-      "to": 1075,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Canossa: la sottomissione di Enrico IV",
-      "title_event_en": "Canossa: The Submission of Henry IV",
-      "era": "AD",
-      "from": 1077,
-      "to": 1077,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Canossa"
-    },
-    {
-      "titolo_evento_it": "Concilio di Clermont e appello alla Prima Crociata",
-      "title_event_en": "Council of Clermont and the Call for the First Crusade",
-      "era": "AD",
-      "from": 1095,
-      "to": 1095,
-      "continent": "Europe",
-      "country": "France",
-      "location": "Clermont"
-    },
-    {
-      "titolo_evento_it": "Concordato di Worms: fine della lotta per le investiture",
-      "title_event_en": "Concordat of Worms: End of the Investiture Controversy",
-      "era": "AD",
-      "from": 1122,
-      "to": 1122,
-      "continent": "Europe",
-      "country": "Germany",
-      "location": "Worms"
-    },
-    {
-      "titolo_evento_it": "Quarto Concilio Lateranense",
-      "title_event_en": "Fourth Lateran Council",
-      "era": "AD",
-      "from": 1215,
-      "to": 1215,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Unam Sanctam e la supremazia spirituale papale",
-      "title_event_en": "Unam Sanctam and Papal Spiritual Supremacy",
-      "era": "AD",
-      "from": 1302,
-      "to": 1302,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Cattività avignonese del papato",
-      "title_event_en": "Avignon Papacy",
-      "era": "AD",
-      "from": 1309,
-      "to": 1377,
-      "continent": "Europe",
-      "country": "France",
-      "location": "Avignon"
-    },
-    {
-      "titolo_evento_it": "Inizio dello Scisma d'Occidente",
-      "title_event_en": "Beginning of the Western Schism",
-      "era": "AD",
-      "from": 1378,
-      "to": 1378,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
-    },
-    {
-      "titolo_evento_it": "Concilio di Costanza: fine dello Scisma d'Occidente",
-      "title_event_en": "Council of Constance: End of the Western Schism",
-      "era": "AD",
-      "from": 1414,
-      "to": 1418,
-      "continent": "Europe",
-      "country": "Germany",
-      "location": "Konstanz"
-    },
-    {
-      "titolo_evento_it": "Sacco di Roma del 1527",
-      "title_event_en": "Sack of Rome, 1527",
-      "era": "AD",
-      "from": 1527,
+      "from": 1493,
       "to": 1527,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
+      "continent": "South America",
+      "country": "Ecuador",
+      "location": "Quito"
     },
     {
-      "titolo_evento_it": "Concilio di Trento e la Riforma cattolica",
-      "title_event_en": "Council of Trent and the Catholic Reformation",
+      "titolo_evento_it": "Epidemie andine di vaiolo e crisi di successione",
+      "title_event_en": "Andean Smallpox Epidemics and Succession Crisis",
       "era": "AD",
-      "from": 1545,
-      "to": 1563,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Trento"
+      "from": 1524,
+      "to": 1530,
+      "continent": "South America",
+      "country": "Ecuador",
+      "location": "Quito"
     },
     {
-      "titolo_evento_it": "Concilio Vaticano I e il dogma dell'infallibilita",
-      "title_event_en": "First Vatican Council and the Dogma of Infallibility",
+      "titolo_evento_it": "Guerra civile tra Huáscar e Atahualpa",
+      "title_event_en": "Civil War between Huáscar and Atahualpa",
       "era": "AD",
-      "from": 1869,
-      "to": 1870,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
+      "from": 1529,
+      "to": 1532,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cusco"
     },
     {
-      "titolo_evento_it": "Breccia di Porta Pia e fine del potere temporale",
-      "title_event_en": "Capture of Rome and the End of Papal Temporal Power",
+      "titolo_evento_it": "Cattura di Atahualpa a Cajamarca e marcia su Cusco",
+      "title_event_en": "Capture of Atahualpa at Cajamarca and March on Cusco",
       "era": "AD",
-      "from": 1870,
-      "to": 1870,
-      "continent": "Europe",
-      "country": "Italy",
-      "location": "Rome"
+      "from": 1532,
+      "to": 1533,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cajamarca"
     },
     {
-      "titolo_evento_it": "Patti Lateranensi: nascita dello Stato della Citta del Vaticano",
-      "title_event_en": "Lateran Treaty: Birth of the Vatican City State",
+      "titolo_evento_it": "Assedio di Cusco guidato da Manco Inca",
+      "title_event_en": "Siege of Cusco led by Manco Inca",
       "era": "AD",
-      "from": 1929,
-      "to": 1929,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
+      "from": 1536,
+      "to": 1537,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Cusco"
     },
     {
-      "titolo_evento_it": "Concilio Vaticano II",
-      "title_event_en": "Second Vatican Council",
+      "titolo_evento_it": "Stato neo-inca di Vilcabamba e caduta finale dell'impero",
+      "title_event_en": "Neo-Inca State of Vilcabamba and the Final Fall",
       "era": "AD",
-      "from": 1962,
-      "to": 1965,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
-    },
-    {
-      "titolo_evento_it": "Elezione di Giovanni Paolo II",
-      "title_event_en": "Election of John Paul II",
-      "era": "AD",
-      "from": 1978,
-      "to": 1978,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
-    },
-    {
-      "titolo_evento_it": "Attentato a Giovanni Paolo II in Piazza San Pietro",
-      "title_event_en": "Assassination Attempt on John Paul II in St. Peter's Square",
-      "era": "AD",
-      "from": 1981,
-      "to": 1981,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
-    },
-    {
-      "titolo_evento_it": "Rinuncia di Benedetto XVI",
-      "title_event_en": "Resignation of Benedict XVI",
-      "era": "AD",
-      "from": 2013,
-      "to": 2013,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
-    },
-    {
-      "titolo_evento_it": "Elezione di Papa Francesco",
-      "title_event_en": "Election of Pope Francis",
-      "era": "AD",
-      "from": 2013,
-      "to": 2013,
-      "continent": "Europe",
-      "country": "Vatican City",
-      "location": "Vatican City"
+      "from": 1537,
+      "to": 1572,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "Vilcabamba"
     }
   ]
 }

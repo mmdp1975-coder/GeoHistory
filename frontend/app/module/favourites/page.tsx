@@ -46,6 +46,7 @@ type StatsRow = {
 type CardRow = JourneyRow & {
   avg_rating: number | null;
   ratings_count: number | null;
+  has_audio?: boolean;
 };
 
 const TIMELINE_PATH = "/module/timeline";
@@ -147,6 +148,23 @@ export default function FavouritesPage() {
       const statsArr = ((stats ?? []) as unknown[]).filter(isStatsRow) as StatsRow[];
       statsArr.forEach((s) => statsMap.set(s.group_event_id, s));
 
+      // Audio presence map (media_assets + media_attachments via view)
+      const audioSet = new Set<UUID>();
+      if (ids.length) {
+        const { data: audioRows, error: audioErr } = await supabase
+          .from("v_media_attachments_expanded")
+          .select("group_event_id, media_type")
+          .in("group_event_id", ids)
+          .eq("entity_type", "group_event")
+          .eq("media_type", "audio");
+        if (audioErr) throw audioErr;
+        (audioRows ?? []).forEach((row: any) => {
+          if (typeof row?.group_event_id === "string") {
+            audioSet.add(row.group_event_id);
+          }
+        });
+      }
+
       // c) Merge client-side
       const merged: CardRow[] = journeys.map((j) => {
         const s = statsMap.get(j.journey_id);
@@ -154,6 +172,7 @@ export default function FavouritesPage() {
           ...j,
           avg_rating: s?.avg_rating ?? null,
           ratings_count: s?.ratings_count ?? null,
+          has_audio: audioSet.has(j.journey_id),
         };
       });
 
@@ -275,6 +294,7 @@ export default function FavouritesPage() {
                   title={title}
                   coverUrl={j.journey_cover_url}
                   isFavourite={j.is_favourite}
+                  hasAudio={j.has_audio}
                   publishedAt={j.approved_at}
                   averageRating={j.avg_rating}
                   ratingsCount={j.ratings_count}

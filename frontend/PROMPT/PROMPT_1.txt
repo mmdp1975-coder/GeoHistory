@@ -1,4 +1,5 @@
 CREA IL JOURNEY: <INSERISCI TITOLO DEL JOURNEY>
+EVENT_GUIDELINE = <INSERISCI REGOLA EVENTI DALLA UI>
 
 PROMPT 1 — SELEZIONE EDITORIALE EVENTI (OUTPUT STRUTTURATO)
 1.ISTRUZIONE CRITICA DI BLOCCO TOTALE
@@ -31,13 +32,19 @@ TASK FAILED
   ]
 }
 5.NUMERO EVENTI
-5.1 Devi generare da 15 a 30 eventi.
-5.2 Se non riesci a generare almeno 15 eventi coerenti devi produrre SOLO:
-TASK FAILED
+5.1 EVENT_GUIDELINE Ã¨ obbligatoria e definisce la quantitÃ /struttura degli eventi (es. "uno per ogni presidente").
+5.2 Devi seguire EVENT_GUIDELINE in modo vincolante.
+5.3 Se non puoi rispettare EVENT_GUIDELINE devi produrre SOLO: TASK FAILED
+5.4 Se EVENT_GUIDELINE implica "uno per ogni <entitÃ >", devi:
+- includere esplicitamente il nome dell'entitÃ  nel titolo evento (es. "Presidenza di X").
+- coprire TUTTE le entitÃ  rilevanti senza omissioni o raggruppamenti.
 6.PRINCIPIO NARRATIVO OBBLIGATORIO
 6.1 Gli eventi devono avere contiguità logica e narrativa.
 6.2 Gli eventi devono essere scelti come se raccontassero una storia con un inizio uno sviluppo e una chiusura o apertura verso una fase successiva.
 6.3 È vietato assemblare eventi indipendenti o a elenco.
+6.4 Ogni evento deve derivare in modo riconoscibile da uno o più eventi precedenti (causa, conseguenza o trasformazione).
+6.5 Ogni evento deve preparare o influenzare in modo esplicito il successivo (catena causale).
+6.6 Se necessario inserisci eventi-ponte per garantire continuità e passaggi logici.
 7.REGOLE EVENTI BLOCCO TOTALE
 7.1 Gli eventi devono essere storici reali riconoscibili e verificabili.
 7.2 Vietato inventare eventi titoli luoghi o processi storici.
