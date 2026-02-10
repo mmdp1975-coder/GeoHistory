@@ -278,7 +278,7 @@ export function Scorecard({
           {audioAvailable ? (
             <div className="absolute left-3 top-3">
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-neutral-700 shadow"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow"
                 title={
                   langCode.toLowerCase().startsWith("it")
                     ? "Audio disponibile"
@@ -292,13 +292,12 @@ export function Scorecard({
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-3.5 w-3.5"
+                  className="h-4 w-4"
                   fill="currentColor"
                   aria-hidden
                 >
                   <path d="M5 9v6h4l5 4V5L9 9H5zm12.5 3a5.5 5.5 0 0 0-3.1-4.95l-.9 1.8A3.5 3.5 0 0 1 15.5 12a3.5 3.5 0 0 1-2 3.15l.9 1.8A5.5 5.5 0 0 0 17.5 12zm2.5 0a8 8 0 0 0-4.5-7.2l-.9 1.8A6 6 0 0 1 18 12a6 6 0 0 1-3.4 5.4l.9 1.8A8 8 0 0 0 20 12z" />
                 </svg>
-                Audio
               </span>
             </div>
           ) : null}
