@@ -85,6 +85,7 @@ export default function RegisterPage() {
   const [language, setLanguage] = useState("en");
 
   const [personas, setPersonas] = useState<Persona[]>([]);
+  const [personasLoadFailed, setPersonasLoadFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -112,9 +113,11 @@ export default function RegisterPage() {
           return code !== "ADMIN" && code !== "MOD" && code !== "MODERATOR";
         });
         setPersonas(filteredPersonas);
+        setPersonasLoadFailed(false);
       } catch (err) {
         console.warn("[register] personas load failed", err);
         setPersonas([]);
+        setPersonasLoadFailed(true);
       }
     })();
     return () => {
@@ -138,7 +141,10 @@ export default function RegisterPage() {
   function validate(): string | null {
     if (!accepted) return "You must accept Terms and Privacy.";
     if (!firstName.trim() || !lastName.trim()) return "Please provide your first and last name.";
-    if (personas.length > 0 && !personaId) return "Please select a persona.";
+    if (personasLoadFailed || personas.length === 0) {
+      return "Personas are currently unavailable. Please try again later.";
+    }
+    if (!personaId) return "Please select a persona.";
     if (!email.includes("@")) return "Please enter a valid email address.";
     const issue = passwordIssue(password);
     if (issue) return issue;
@@ -310,9 +316,12 @@ export default function RegisterPage() {
                 className={styles.input}
                 value={personaId}
                 onChange={(event) => setPersonaId(event.target.value)}
-                required={personas.length > 0}
+                required
+                disabled={loading || personas.length === 0}
               >
-                <option value="">Select persona.</option>
+                <option value="">
+                  {personas.length === 0 ? "No personas available." : "Select persona."}
+                </option>
                 {personas.map((persona) => (
                   <option key={persona.id} value={persona.id}>
                     {personaLabel(persona, locale)}

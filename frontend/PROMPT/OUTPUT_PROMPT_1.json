@@ -1,106 +1,256 @@
 {
-  "journey_title_it": "Gli Inca: dall'ascesa al crollo del Tawantinsuyu",
-  "journey_title_en": "The Inca: From Rise to Fall of the Tawantinsuyu",
+  "journey_title_it": "La Rinascita della Cina: da Impero a Potenza Globale (1912–Oggi)",
+  "journey_title_en": "China's Rebirth: From Empire to Global Power (1912–Today)",
   "events": [
     {
-      "titolo_evento_it": "Formazione del Regno di Cusco",
-      "title_event_en": "Formation of the Kingdom of Cusco",
+      "titolo_evento_it": "Proclamazione della Repubblica di Cina a Nanchino",
+      "title_event_en": "Proclamation of the Republic of China in Nanjing",
       "era": "AD",
-      "from": 1200,
-      "to": 1438,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cusco"
+      "from": 1912,
+      "to": 1912,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Nanjing"
     },
     {
-      "titolo_evento_it": "Ascesa di Pachacuti e riforma statale del Tawantinsuyu",
-      "title_event_en": "Rise of Pachacuti and Tawantinsuyu State Reforms",
+      "titolo_evento_it": "Frammentazione dell'era dei Signori della Guerra",
+      "title_event_en": "Warlord Era Fragmentation",
       "era": "AD",
-      "from": 1438,
-      "to": 1471,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cusco"
+      "from": 1916,
+      "to": 1925,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Beijing"
     },
     {
-      "titolo_evento_it": "Costruzione di Machu Picchu",
-      "title_event_en": "Construction of Machu Picchu",
+      "titolo_evento_it": "Spedizione del Nord e ascesa del governo nazionalista a Nanchino",
+      "title_event_en": "Northern Expedition and Rise of the Nanjing Nationalist Government",
       "era": "AD",
-      "from": 1450,
-      "to": 1460,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Machu Picchu"
+      "from": 1926,
+      "to": 1928,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Nanjing"
     },
     {
-      "titolo_evento_it": "Espansione imperiale sotto Topa Inca Yupanqui",
-      "title_event_en": "Imperial Expansion under Topa Inca Yupanqui",
+      "titolo_evento_it": "Incidente di Mukden e occupazione giapponese della Manciuria",
+      "title_event_en": "Mukden Incident and Japanese Occupation of Manchuria",
       "era": "AD",
-      "from": 1471,
-      "to": 1493,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cusco"
+      "from": 1931,
+      "to": 1932,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Shenyang"
     },
     {
-      "titolo_evento_it": "Apogeo e riorganizzazione sotto Huayna Capac",
-      "title_event_en": "Imperial Apex and Reorganization under Huayna Capac",
+      "titolo_evento_it": "Resistenza cinese nella Seconda guerra sino-giapponese",
+      "title_event_en": "Chinese Resistance in the Second Sino-Japanese War",
       "era": "AD",
-      "from": 1493,
-      "to": 1527,
-      "continent": "South America",
-      "country": "Ecuador",
-      "location": "Quito"
+      "from": 1937,
+      "to": 1945,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Chongqing"
     },
     {
-      "titolo_evento_it": "Epidemie andine di vaiolo e crisi di successione",
-      "title_event_en": "Andean Smallpox Epidemics and Succession Crisis",
+      "titolo_evento_it": "Ripresa della guerra civile tra nazionalisti e comunisti",
+      "title_event_en": "Renewed Civil War between Nationalists and Communists",
       "era": "AD",
-      "from": 1524,
-      "to": 1530,
-      "continent": "South America",
-      "country": "Ecuador",
-      "location": "Quito"
+      "from": 1945,
+      "to": 1948,
+      "continent": "Asia",
+      "country": "Republic of China",
+      "location": "Harbin"
     },
     {
-      "titolo_evento_it": "Guerra civile tra Huáscar e Atahualpa",
-      "title_event_en": "Civil War between Huáscar and Atahualpa",
+      "titolo_evento_it": "Proclamazione della Repubblica Popolare Cinese a Pechino",
+      "title_event_en": "Proclamation of the People's Republic of China in Beijing",
       "era": "AD",
-      "from": 1529,
-      "to": 1532,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cusco"
+      "from": 1949,
+      "to": 1949,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
     },
     {
-      "titolo_evento_it": "Cattura di Atahualpa a Cajamarca e marcia su Cusco",
-      "title_event_en": "Capture of Atahualpa at Cajamarca and March on Cusco",
+      "titolo_evento_it": "Intervento cinese nella Guerra di Corea dal fiume Yalu",
+      "title_event_en": "Chinese Intervention in the Korean War from the Yalu River",
       "era": "AD",
-      "from": 1532,
-      "to": 1533,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cajamarca"
+      "from": 1950,
+      "to": 1953,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Dandong"
     },
     {
-      "titolo_evento_it": "Assedio di Cusco guidato da Manco Inca",
-      "title_event_en": "Siege of Cusco led by Manco Inca",
+      "titolo_evento_it": "Primo Piano Quinquennale e industrializzazione pesante",
+      "title_event_en": "First Five-Year Plan and Heavy Industrialization",
       "era": "AD",
-      "from": 1536,
-      "to": 1537,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Cusco"
+      "from": 1953,
+      "to": 1957,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Anshan"
     },
     {
-      "titolo_evento_it": "Stato neo-inca di Vilcabamba e caduta finale dell'impero",
-      "title_event_en": "Neo-Inca State of Vilcabamba and the Final Fall",
+      "titolo_evento_it": "Il Grande balzo in avanti e la crisi economica",
+      "title_event_en": "The Great Leap Forward and Economic Crisis",
       "era": "AD",
-      "from": 1537,
-      "to": 1572,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "Vilcabamba"
+      "from": 1958,
+      "to": 1962,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "La Rivoluzione culturale e la lotta per il potere",
+      "title_event_en": "The Cultural Revolution and the Struggle for Power",
+      "era": "AD",
+      "from": 1966,
+      "to": 1976,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Il seggio ONU passa alla Repubblica Popolare Cinese",
+      "title_event_en": "UN Seat Transferred to the People's Republic of China",
+      "era": "AD",
+      "from": 1971,
+      "to": 1971,
+      "continent": "North America",
+      "country": "United States",
+      "location": "New York City"
+    },
+    {
+      "titolo_evento_it": "La visita di Nixon apre il disgelo sino-americano",
+      "title_event_en": "Nixon's Visit Opens Sino-American Rapprochement",
+      "era": "AD",
+      "from": 1972,
+      "to": 1972,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Terzo Plenum del 1978 e avvio delle riforme di Deng Xiaoping",
+      "title_event_en": "Third Plenum of 1978 and Launch of Deng Xiaoping's Reforms",
+      "era": "AD",
+      "from": 1978,
+      "to": 1978,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Zone Economiche Speciali: Shenzhen come laboratorio",
+      "title_event_en": "Special Economic Zones: Shenzhen as a Laboratory",
+      "era": "AD",
+      "from": 1979,
+      "to": 1984,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Shenzhen"
+    },
+    {
+      "titolo_evento_it": "Proteste di Tiananmen e ricalibrazione delle riforme",
+      "title_event_en": "Tiananmen Protests and Recalibration of Reforms",
+      "era": "AD",
+      "from": 1989,
+      "to": 1989,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Il 'Viaggio nel Sud' rilancia l'apertura economica",
+      "title_event_en": "The 'Southern Tour' Reignites Economic Opening",
+      "era": "AD",
+      "from": 1992,
+      "to": 1992,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Shenzhen"
+    },
+    {
+      "titolo_evento_it": "Ritorno di Hong Kong alla Cina",
+      "title_event_en": "Hong Kong's Return to China",
+      "era": "AD",
+      "from": 1997,
+      "to": 1997,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Hong Kong"
+    },
+    {
+      "titolo_evento_it": "Adesione della Cina all'Organizzazione Mondiale del Commercio",
+      "title_event_en": "China's Accession to the World Trade Organization",
+      "era": "AD",
+      "from": 2001,
+      "to": 2001,
+      "continent": "Asia",
+      "country": "Qatar",
+      "location": "Doha"
+    },
+    {
+      "titolo_evento_it": "Olimpiadi di Pechino e vetrina globale",
+      "title_event_en": "Beijing Olympics and Global Showcase",
+      "era": "AD",
+      "from": 2008,
+      "to": 2008,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Annuncio della Belt and Road Initiative ad Astana",
+      "title_event_en": "Announcement of the Belt and Road Initiative in Astana",
+      "era": "AD",
+      "from": 2013,
+      "to": 2013,
+      "continent": "Asia",
+      "country": "Kazakhstan",
+      "location": "Astana"
+    },
+    {
+      "titolo_evento_it": "Lancio del piano 'Made in China 2025'",
+      "title_event_en": "Launch of the 'Made in China 2025' Plan",
+      "era": "AD",
+      "from": 2015,
+      "to": 2015,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Fondazione e avvio della Asian Infrastructure Investment Bank",
+      "title_event_en": "Founding and Launch of the Asian Infrastructure Investment Bank",
+      "era": "AD",
+      "from": 2015,
+      "to": 2016,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
+    },
+    {
+      "titolo_evento_it": "Completamento della stazione spaziale Tiangong",
+      "title_event_en": "Completion of the Tiangong Space Station",
+      "era": "AD",
+      "from": 2022,
+      "to": 2022,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Wenchang"
+    },
+    {
+      "titolo_evento_it": "XX Congresso del PCC e consolidamento della leadership di Xi",
+      "title_event_en": "20th CCP Congress and Consolidation of Xi's Leadership",
+      "era": "AD",
+      "from": 2022,
+      "to": 2022,
+      "continent": "Asia",
+      "country": "People's Republic of China",
+      "location": "Beijing"
     }
   ]
 }

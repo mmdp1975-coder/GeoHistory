@@ -436,12 +436,24 @@ export default function TimelinePage() {
                 "Geo filter inactive: missing RPC journeys_near_point. Showing unfiltered results."
               );
             } else if (Array.isArray(ids) && ids.length > 0) {
-              // normalizza a stringhe
+              // normalizza a stringhe (PostgREST può restituire scalari o oggetti)
               const raw = ids as unknown[];
-              const onlyStrings = raw.filter(
-                (x): x is string => typeof x === "string"
-              );
-              idsFilter = onlyStrings as UUID[];
+              const normalized = raw
+                .map((x) => {
+                  if (typeof x === "string") return x;
+                  if (x && typeof x === "object") {
+                    const o = x as Record<string, unknown>;
+                    const v =
+                      o.journeys_near_point ??
+                      o.group_event_id ??
+                      o.id ??
+                      null;
+                    return typeof v === "string" ? v : null;
+                  }
+                  return null;
+                })
+                .filter((v): v is string => typeof v === "string");
+              idsFilter = normalized as UUID[];
             } else {
               idsFilter = [];
             }
