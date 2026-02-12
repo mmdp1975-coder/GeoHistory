@@ -100,19 +100,11 @@ export default function RegisterPage() {
     let alive = true;
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from("personas")
-          .select("id, code, name_it, name_en")
-          .order("code", { ascending: true });
-
+        const res = await fetch("/api/public/personas", { method: "GET" });
+        const json = await res.json().catch(() => ({}));
         if (!alive) return;
-        if (error) throw error;
-
-        const filteredPersonas = ((data || []) as Persona[]).filter((persona) => {
-          const code = (persona.code || "").trim().toUpperCase();
-          return code !== "ADMIN" && code !== "MOD" && code !== "MODERATOR";
-        });
-        setPersonas(filteredPersonas);
+        if (!res.ok) throw new Error(json?.error || "Unable to load personas");
+        setPersonas(((json?.personas || []) as Persona[]));
         setPersonasLoadFailed(false);
       } catch (err) {
         console.warn("[register] personas load failed", err);
