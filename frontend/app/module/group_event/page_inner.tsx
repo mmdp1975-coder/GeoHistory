@@ -7,6 +7,7 @@ import maplibregl, { Map as MapLibreMap, Marker as MapLibreMarker } from "maplib
 import "maplibre-gl/dist/maplibre-gl.css";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import RatingStars from "../../components/RatingStars";
+import { Scorecard } from "@/app/components/Scorecard";
 import { tUI } from "@/lib/i18n/uiLabels";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 
@@ -50,9 +51,10 @@ type EventVM = EventCore & {
 };
 
 type CorrelatedJourney = {
- id: string;
- slug: string | null;
- title: string | null;
+  id: string;
+  slug: string | null;
+  title: string | null;
+  coverUrl: string | null;
 };
 
 
@@ -2600,7 +2602,7 @@ setJourneyMediaFirst(jmFirst);
   rowsCorr = anyLang ?? [];
   }
 
- const items: CorrelatedJourney[] = rowsCorr
+ let items: CorrelatedJourney[] = rowsCorr
   // tieni solo righe con journey valido (evita null)
   .filter((r: any) => !!(r.group_events?.id || r.group_event_id))
   .map((r: any) => {
@@ -2627,12 +2629,33 @@ setJourneyMediaFirst(jmFirst);
        const first = translations.find((t: any) => t?.title);
        title = first?.title ?? null;
      }
-     return {
-       id: r.group_events?.id ?? r.group_event_id,
-     slug: r.group_events?.slug ?? null,
-     title,
-    };
-  });
+      return {
+        id: r.group_events?.id ?? r.group_event_id,
+      slug: r.group_events?.slug ?? null,
+      title,
+      coverUrl: null,
+     };
+   });
+  if (items.length) {
+    const corrIds = items.map((it) => it.id).filter(Boolean);
+    const { data: coverRows } = await supabase
+      .from("v_journey")
+      .select("group_event_id, journey_media_first")
+      .in("group_event_id", corrIds);
+    if (Array.isArray(coverRows) && coverRows.length) {
+      const coverByJourney = new Map<string, string>();
+      for (const row of coverRows as any[]) {
+        const jid = String(row?.group_event_id || "");
+        if (!jid || coverByJourney.has(jid)) continue;
+        const cover =
+          normalizeMediaUrl(row?.journey_media_first ?? null) ||
+          row?.journey_media_first ||
+          null;
+        if (cover) coverByJourney.set(jid, cover);
+      }
+      items = items.map((it) => ({ ...it, coverUrl: coverByJourney.get(it.id) ?? null }));
+    }
+  }
   console.debug("[GE] correlated journeys resolved", { evId: ev.id, count: items.length, items });
  setCorrByEvent((prev) => ({ ...prev, [ev.id]: items }));
   } catch (e) {
@@ -3018,7 +3041,7 @@ useEffect(() => {
  .neq("group_event_id", gid);
  const era = ev.era ? normEra(ev.era) : null;
  if (era) query = query.or(`era.eq.${era},era.is.null`);
- const { data, error } = await query.limit(400);
+  const { data, error } = await query;
 if (error) { setConcurrentOther([]); return; }
 
  const pickTitle = (translations: any[], lang: string) => {
@@ -3370,18 +3393,19 @@ const mapTextureStyle: CSSProperties = {
  <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
  {tUI(uiLang, "journey.related.title")}
  </div>
- <div className="flex flex-wrap gap-1.5 h-[150px] overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: 'thin' }}>
- {related.map((r) => (
- <button
- key={r.id}
- onClick={() => router.push(geUrl(r.id))}
- className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
- title={r.title ?? r.slug ?? "Open journey"}
- >
- {r.title ?? r.slug ?? "Journey"}
- </button>
- ))}
- </div>
+  <ul className="grid h-[220px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3" style={{ scrollbarWidth: "thin" }}>
+  {related.map((r) => (
+  <Scorecard
+  key={r.id}
+  href={geUrl(r.id)}
+  title={r.title ?? r.slug ?? "Journey"}
+  coverUrl={r.coverUrl}
+  ctaLabel=""
+  compact
+  className="shadow-none"
+  />
+  ))}
+  </ul>
  </div>
  ) : (
  <div className={`${BOX_3D} p-3`}>
@@ -3565,21 +3589,19 @@ const mapTextureStyle: CSSProperties = {
      )}
    >
      {related?.length ? (
-       <div className="space-y-1.5 max-h-[32svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
-         {related.map((r) => (
-           <button
-             key={r.id}
-             onClick={() => router.push(geUrl(r.id))}
-             className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
-             title={r.title ?? r.slug ?? "Open journey"}
-           >
-             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" className="mr-2">
-               <path d="M4 12h5l2-3 2 6 2-3h5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-             </svg>
-             {r.title ?? r.slug ?? "Journey"}
-           </button>
-         ))}
-       </div>
+        <ul className="grid max-h-[32svh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3" style={{ scrollbarWidth: "thin" }}>
+          {related.map((r) => (
+            <Scorecard
+              key={r.id}
+              href={geUrl(r.id)}
+              title={r.title ?? r.slug ?? "Journey"}
+              coverUrl={r.coverUrl}
+              ctaLabel=""
+              compact
+              className="shadow-none"
+            />
+          ))}
+        </ul>
      ) : (
        <div className="text-[12.5px] text-gray-600">
          {tUI(uiLang, "journey.related.none")}
@@ -3813,18 +3835,19 @@ const mapTextureStyle: CSSProperties = {
         {tUI(uiLang, "journey.related.title")}
       </div>
         {related?.length ? (
-          <div className="mt-2 flex-1 overflow-y-auto pr-1 space-y-1.5" style={{ scrollbarWidth: "thin" }}>
+          <ul className="mt-2 grid flex-1 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3" style={{ scrollbarWidth: "thin" }}>
             {related.map((r) => (
-              <button
+              <Scorecard
                 key={r.id}
-                onClick={() => router.push(geUrl(r.id))}
-                className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-indigo-200 bg-indigo-50/80 px-3 py-2 text-[12.5px] text-indigo-900 hover:bg-indigo-50 shadow-sm"
-                title={r.title ?? r.slug ?? "Open journey"}
-              >
-                {r.title ?? r.slug ?? "Journey"}
-              </button>
+                href={geUrl(r.id)}
+                title={r.title ?? r.slug ?? "Journey"}
+                coverUrl={r.coverUrl}
+                ctaLabel=""
+                compact
+                className="shadow-none"
+              />
             ))}
-          </div>
+          </ul>
         ) : (
           <p className="mt-2 text-sm text-slate-500">
             {tUI(uiLang, "journey.related.none")}

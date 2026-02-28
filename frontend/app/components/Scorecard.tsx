@@ -35,6 +35,7 @@ type ScorecardProps = {
   favouriteToggleClassName?: string;
   onCardClick?: () => void;
   usePlainImg?: boolean;
+  compact?: boolean;
 };
 
 function formatDateShort(iso?: string | null, langCode: string = "en") {
@@ -105,6 +106,7 @@ export function Scorecard({
   favouriteToggleClassName,
   onCardClick,
   usePlainImg = false,
+  compact = false,
 }: ScorecardProps) {
   const supabase = createClientComponentClient();
   const [langCode, setLangCode] = useState<string>("en");
@@ -191,7 +193,8 @@ export function Scorecard({
 
   const { className: liExtraClassName, ...restLiProps } = liProps ?? {};
   const cardClassName = mergeClassNames(
-    "group relative overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-neutral-200 hover:shadow-md transition cursor-pointer",
+    "group relative overflow-hidden bg-white shadow-sm ring-1 ring-neutral-200 hover:shadow-md transition cursor-pointer",
+    compact ? "rounded-xl" : "rounded-2xl",
     className,
     liExtraClassName
   );
@@ -212,6 +215,8 @@ export function Scorecard({
     "inline-flex items-center justify-center rounded-full bg-white/90 shadow px-2 py-1 text-xs font-medium",
     favouriteToggleClassName
   );
+  const showFavouriteBadge = !!onToggleFavourite || isFavourite !== null && isFavourite !== undefined;
+  const showRatingBadge = !compact || hasRating;
 
   const CardWrapper = ({ children }: { children: ReactNode }) => {
     if (href) {
@@ -244,7 +249,7 @@ export function Scorecard({
     <li className={cardClassName} {...restLiProps}>
       <CardWrapper>
         {/* COVER */}
-        <div className="relative w-full aspect-[5/3] bg-neutral-100">
+        <div className={mergeClassNames("relative w-full bg-neutral-100", compact ? "aspect-square" : "aspect-[5/3]")}>
           {coverUrl ? (
             (() => {
               const browserCoverUrl = normalizeCoverUrl(coverUrl);
@@ -276,9 +281,9 @@ export function Scorecard({
 
           {/* AUDIO indicator (alto a sinistra) */}
           {audioAvailable ? (
-            <div className="absolute left-3 top-3">
+            <div className={compact ? "absolute left-2 top-2" : "absolute left-3 top-3"}>
               <span
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow"
+                className={compact ? "inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow" : "inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-neutral-700 shadow"}
                 title={
                   langCode.toLowerCase().startsWith("it")
                     ? "Audio disponibile"
@@ -292,7 +297,7 @@ export function Scorecard({
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-4 w-4"
+                  className={compact ? "h-3 w-3" : "h-4 w-4"}
                   fill="currentColor"
                   aria-hidden
                 >
@@ -303,7 +308,8 @@ export function Scorecard({
           ) : null}
 
           {/* PREFERITI – pillola in alto a destra */}
-          <div className="absolute inset-x-3 top-3 flex justify-end">
+          {showFavouriteBadge ? (
+          <div className={compact ? "absolute inset-x-2 top-2 flex justify-end" : "absolute inset-x-3 top-3 flex justify-end"}>
             {onToggleFavourite ? (
               <button
                 type="button"
@@ -373,9 +379,11 @@ export function Scorecard({
               </span>
             )}
           </div>
+          ) : null}
 
           {/* Rating in basso a destra */}
-          <div className="absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 shadow text-[11px] text-neutral-700">
+          {showRatingBadge ? (
+          <div className={compact ? "absolute bottom-1.5 right-1.5 rounded-full bg-white/90 px-1.5 py-0.5 shadow text-[10px] text-neutral-700" : "absolute bottom-2 right-2 rounded-full bg-white/90 px-2 py-1 shadow text-[11px] text-neutral-700"}>
             <span className="inline-flex items-center gap-1 font-semibold">
               {hasRating ? (
                 <svg
@@ -399,20 +407,30 @@ export function Scorecard({
                 </svg>
               )}
               {safeAverage.toFixed(1)}
-              <span className="text-[10px] text-neutral-500">({safeCount})</span>
+              <span className={compact ? "text-[9px] text-neutral-500" : "text-[10px] text-neutral-500"}>({safeCount})</span>
             </span>
           </div>
+          ) : null}
+
+          {compact ? (
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent">
+              <div className="px-1.5 py-1 text-[10px] font-semibold leading-tight text-white line-clamp-2">
+                {title}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* CONTENUTO */}
-        <div className="flex flex-col gap-2 p-2.5">
+        {!compact ? (
+        <div className={compact ? "flex flex-col gap-1 p-1.5" : "flex flex-col gap-2 p-2.5"}>
           {/* Titolo + data */}
           <div className="flex items-start justify-between gap-2">
-            <h3 className="text-[13px] font-semibold text-neutral-900 line-clamp-2">
+            <h3 className={compact ? "text-[11px] font-semibold text-neutral-900 line-clamp-1" : "text-[13px] font-semibold text-neutral-900 line-clamp-2"}>
               {title}
             </h3>
 
-            {publishedLabel && (
+            {!compact && publishedLabel && (
               <span
                 className="mt-[2px] inline-flex items-center rounded bg-neutral-100 px-2 py-[2px] text-[10px] font-medium text-neutral-600 whitespace-nowrap"
                 title={tUI(
@@ -426,12 +444,15 @@ export function Scorecard({
           </div>
 
           {/* Riga date/meta + CTA */}
-          <div className="grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-[11px] text-neutral-600">
+          <div className={compact ? "mt-0 flex items-center justify-end text-[10px] text-neutral-600" : "grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-[11px] text-neutral-600"}>
+            {!compact ? (
             <div className="col-[2] row-[2] mt-[1px] flex justify-end">
               {/* lo spazio per eventuali future badge a destra, lasciato come in origine */}
             </div>
+            ) : null}
 
-            <div className="col-span-2 mt-1.5 flex items-center justify-between gap-2 text-[11px] text-neutral-600">
+            <div className={compact ? "flex items-center justify-end" : "col-span-2 mt-1.5 flex items-center justify-between gap-2 text-[11px] text-neutral-600"}>
+              {!compact ? (
               <div className="flex flex-wrap items-center gap-3">
                 {/* Numero eventi */}
                 <span
@@ -472,9 +493,10 @@ export function Scorecard({
                   {formatYear(yearFrom)} - {formatYear(yearTo)}
                 </span>
               </div>
+              ) : null}
 
               {finalCtaLabel ? (
-                <span className="rounded-md bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white">
+                <span className={compact ? "rounded bg-neutral-900/90 px-2 py-0.5 text-[10px] font-semibold text-white" : "rounded-md bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white"}>
                   {finalCtaLabel}
                 </span>
               ) : null}
@@ -482,6 +504,7 @@ export function Scorecard({
 
           </div>
         </div>
+        ) : null}
       </CardWrapper>
     </li>
   );
