@@ -753,62 +753,6 @@ function MediaBox({
   );
 }
 
-/* ===================== Collapsible (mobile) ===================== */
-function Collapsible({
-  title,
-  children,
-  defaultOpen = false,
-  badge,
-  icon,
-  actions,
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  badge?: React.ReactNode;
-  icon?: React.ReactNode;
-  actions?: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div className={BOX_3D}>
-      <div className="flex items-center gap-2 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          className="flex flex-1 items-center justify-between rounded-xl px-2 py-1 text-left transition hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/70"
-        >
-          <span className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-black/80 text-white">
-              {icon ?? (
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                  <path d="M12 5a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z" stroke="currentColor" strokeWidth="1.5" fill="none" />
-                  <path d="M12 8v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" />
-                </svg>
-              )}
-            </span>
-            <span className="text-[13px] font-semibold text-gray-900">{title}</span>
-            {badge ? (
-              <span className="ml-1 inline-flex items-center rounded-full bg-black/80 px-2 py-[2px] text-[11px] font-medium text-white">
-                {badge}
-              </span>
-            ) : null}
-          </span>
-          <span className={`ml-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/85 text-white transition-transform ${open ? "rotate-180" : ""}`}>
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </span>
-        </button>
-        {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
-      </div>
-      {open ? <div className="border-t border-black/5 px-3 pb-3 pt-2">{children}</div> : null}
-    </div>
-  );
-}
-
 /* ===================== Pagina ===================== */
 export default function GroupEventModulePage() {
  const router = useRouter();
@@ -900,11 +844,17 @@ const [loading, setLoading] = useState(true);
 const [isPlaying, setIsPlaying] = useState(false);
 const [isBuffering, setIsBuffering] = useState(false);
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
+const [mobileSheetSnap, setMobileSheetSnap] = useState<"peek" | "half" | "full">("half");
+const [mobileTab, setMobileTab] = useState<"event" | "related" | "concurrent" | "media">("event");
 const BRAND_BLUE = "#0f3c8c";
 
 const toggleMapModeView = useCallback(() => {
   setMapMode((m) => (m === "normal" ? "fullscreen" : "normal"));
 }, []);
+
+useEffect(() => {
+  setMapMode(isLg ? "normal" : "fullscreen");
+}, [isLg]);
 
 const [gid, setGid] = useState<string | null>(null);
 const [eidParam, setEidParam] = useState<string | null>(null);
@@ -2037,24 +1987,26 @@ const handleSelectEvent = useCallback(
 
 const renderMapPlayerBox = useCallback(
   (opts?: { compact?: boolean }) => (
-    <div className={`absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-white/40 bg-white/85 px-2 py-2 shadow ${mapMode === "fullscreen" ? "backdrop-blur" : ""}`}>
-      <button
-        onClick={toggleMapModeView}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-        title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
-        aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-          {mapMode === "fullscreen" ? (
-            <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          ) : (
-            <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          )}
-        </svg>
-      </button>
+    <div className={`absolute left-3 top-[calc(env(safe-area-inset-top)+10px)] z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-white/40 bg-white/88 px-2 py-2 shadow ${mapMode === "fullscreen" ? "backdrop-blur" : ""}`}>
+      {!opts?.compact ? (
+        <button
+          onClick={toggleMapModeView}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+          title={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+          aria-label={mapMode === "normal" ? "Schermo intero" : "Riduci mappa"}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+            {mapMode === "fullscreen" ? (
+              <path d="M15 9h4V5m-4 10h4v4M5 15v4h4M5 5h4V1" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            ) : (
+              <path d="M9 5H5v4m10-4h4v4m0 6v4h-4M5 15v4h4" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            )}
+          </svg>
+        </button>
+      ) : null}
       <button
         onClick={handlePrevEvent}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
         style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
         aria-label="Evento precedente"
       >
@@ -2064,7 +2016,7 @@ const renderMapPlayerBox = useCallback(
       </button>
       <button
         onClick={togglePlay}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
         style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
         aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
       >
@@ -2081,7 +2033,7 @@ const renderMapPlayerBox = useCallback(
       </button>
       <button
         onClick={handleNextEvent}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
         style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
         aria-label="Evento successivo"
       >
@@ -2093,7 +2045,7 @@ const renderMapPlayerBox = useCallback(
         <select
           value={audioSource}
           onChange={(e) => setAudioSource(e.target.value)}
-          className="h-8 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/40"
+          className="h-9 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/40"
           title="Audio"
         >
           {audioSourceOptions.map((opt) => (
@@ -2103,7 +2055,7 @@ const renderMapPlayerBox = useCallback(
           ))}
         </select>
       ) : null}
-      {rows[selectedIndex]?.wiki_url ? (
+      {!opts?.compact && rows[selectedIndex]?.wiki_url ? (
         <a
           href={rows[selectedIndex]?.wiki_url as string}
           target="_blank"
@@ -2116,7 +2068,7 @@ const renderMapPlayerBox = useCallback(
           Wiki
         </a>
       ) : null}
-      {renderAudioMeta()}
+      {!opts?.compact ? renderAudioMeta() : null}
     </div>
   ),
   [mapMode, rows, selectedIndex, isPlaying, renderAudioMeta, togglePlay, toggleMapModeView, audioSourceOptions, audioSource, handlePrevEvent, handleNextEvent],
@@ -2999,28 +2951,6 @@ useEffect(() => {
  );
  }
 
- // Eventi contemporanei (overlap temporale con l'evento attivo)
- const concurrent = useMemo(() => {
- const a = rows[selectedIndex];
- if (!a) return [] as { idx: number; ev: EventVM }[];
- const sa = buildTimelineSpan(a);
- if (!sa) return [] as { idx: number; ev: EventVM }[];
- const centerA = (sa.min + sa.max) / 2;
- const tol = 0; // tolleranza anni
- const list = rows
- .map((ev, i) => ({ ev, i, s: buildTimelineSpan(ev) }))
- .filter((x) => x.i !== selectedIndex && !!x.s && spansOverlap(sa, x.s as any, tol));
- list.sort((x, y) => {
- const cx = ((x.s!.min + x.s!.max) / 2) - centerA;
- const cy = ((y.s!.min + y.s!.max) / 2) - centerA;
- const dx = Math.abs(cx);
- const dy = Math.abs(cy);
- if (dx !== dy) return dx - dy;
- return x.ev.order_key - y.ev.order_key;
- });
- return list.map((x) => ({ idx: x.i, ev: x.ev }));
- }, [rows, selectedIndex]);
-
  // Eventi contemporanei di altri journey (fetch + filtro DB, era-normalized)
  useEffect(() => {
  (async () => {
@@ -3030,10 +2960,6 @@ useEffect(() => {
  const s = buildTimelineSpan(ev);
  if (!s) return "";
  // Normalizza: DB ha anni positivi + campo era (BC/AD)
- const minSigned = Math.floor(s.min);
- const maxSigned = Math.ceil(s.max);
- const minAbs = Math.min(Math.abs(minSigned), Math.abs(maxSigned));
- const maxAbs = Math.max(Math.abs(minSigned), Math.abs(maxSigned));
 
  let query = supabase
  .from("v_concurrent_events")
@@ -3220,451 +3146,262 @@ const mapTextureStyle: CSSProperties = {
       font-weight: 700;
     }
   `}</style>
- {/* ===== HEADER (container allargato) ===== */}
- <section className="border-b border-slate-200 bg-white/95 shadow-sm lg:hidden" style={mapTextureStyle}>
- <div className="mx-auto w-full max-w-[120rem] px-3 py-3 lg:px-8 lg:py-4">
-      <div className="grid grid-cols-1 lg:grid-cols-1 gap-3 items-stretch">
- {/* [1] Titolo + Favourite */}
- <div className="h-auto lg:h-32 rounded-xl border border-slate-200 bg-white p-3 shadow-[inset_0_2px_6px_rgba(0,0,0,0.05)] flex flex-col justify-between">
- <h1 className="text-base lg:text-xl font-semibold text-slate-900 leading-snug break-words whitespace-pre-line line-clamp-2">
- {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
- </h1>
- <div className="mt-2 flex items-center gap-2">
-          <button
-            onClick={toggleFavourite}
-            disabled={!group_event_id || savingFav}
-            aria-pressed={isFav}
-            className={`inline-flex items-center justify-center rounded-full p-1.5 text-2xl transition focus:outline-none focus:ring-2 focus:ring-rose-300/60 ${
-              isFav ? "text-rose-600 hover:text-rose-700" : "text-slate-400 hover:text-slate-600"
-            }`}
-            aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
-          >
-            <span className="sr-only">{isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}</span>
-            <span aria-hidden className="inline-flex h-7 w-7 items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                aria-hidden="true"
-                className="transition-colors"
-              >
-                <path
-                  d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z"
-                  fill={isFav ? "currentColor" : "none"}
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-              </svg>
-            </span>
-          </button>
- {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
-          <button
-            onClick={openQuiz}
-            className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(15,60,140,0.35)] ring-1 ring-white/15 transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_rgba(15,60,140,0.42)] focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            title="Apri il quiz"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className="drop-shadow-sm">
-              <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
-              <path d="M12 16.5v.2" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" />
-              <path d="M9.75 9.4c0-1.3 1.1-2.35 2.45-2.35 1.2 0 2.3.85 2.3 2.05 0 1.6-1.85 1.95-2.3 3.1-.14.36-.2.78-.2 1.2" stroke="currentColor" strokeWidth="1.9" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span>Quiz</span>
-          </button>
- {/* Link "Apri pagina" rimosso */}
-
- </div>
- <div
-   className="mt-2 max-h-[22svh] overflow-y-auto pr-1 text-[12.5px] leading-5 text-gray-700 whitespace-pre-wrap text-justify"
-   style={{ scrollbarWidth: "thin" }}
- >
-   {journeyDescription || "Nessuna descrizione disponibile."}
- </div>
- {/* Nuovo layout: Nav + Griglia 2 colonne (descrizione / media+sezioni) */}
-  <div className="mb-3" />
-
-
- <div className="hidden grid grid-cols-2 gap-3 items-start">
- {/* Colonna sinistra: Location + Descrizione + Link */}
- <div className={`${BOX_3D} p-3`}>
- {/* location removed above description as requested */}
- <div className="max-h-[40svh] overflow-y-auto pr-2 whitespace-pre-wrap text-[13.5px] leading-6 text-gray-800 text-justify" style={{ scrollbarWidth: 'thin' }}>
- {selectedEvent?.description || "No description available."}
- </div>
- {/* Eventi contemporanei (MOBILE) - altri journey */}
- <div className="mb-2">
- <div className="text-[12px] font-semibold text-gray-800 mb-1">
- {tUI(uiLang, "journey.concurrent.title")}
- </div>
- {concurrentOther && concurrentOther.length ? (
- <div className="h-[150px] overflow-y-auto pr-1 space-y-1.5">
- {concurrentOther.map((c) => {
- const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
- return (
- <button
- key={`${c.geId}:${c.evId}`}
- onClick={() => router.push(geUrl(c.geId, c.evId))}
- className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
- title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
- >
- {label ? `${label} - ` : ""}{c.evTitle}
- </button>
- );
- })}
- </div>
- ) : (
- <div className="text-[12px] text-gray-500">
- {tUI(uiLang, "journey.concurrent.none")}
- </div>
- )}
- </div>
- <div className="pt-2 flex items-center justify-between gap-3">
- <div className="flex flex-wrap items-center gap-3">
- {selectedEvent?.wiki_url ? (
- <a
- href={selectedEvent.wiki_url}
- target="_blank"
- rel="noreferrer"
- className="inline-flex items-center gap-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
- >
- Wikipedia
- </a>
- ) : null}
- {selectedEvent?.video_url ? (
- <a
- href={selectedEvent.video_url}
- target="_blank"
- rel="noreferrer"
- className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-3 py-1.5 text-sm text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
- title="Guarda il video dell'evento"
- >
- Guarda il video
- </a>
- ) : null}
- </div>
- <div className="shrink-0 inline-flex items-center gap-2">
- <span className="text-[11px] font-semibold text-slate-700">
- {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
- </span>
- <div
- className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
- title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
- >
- {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
- </div>
- </div>
- </div>
- </div>
-
- {/* Colonna destra: Media evento + Eventi contemporanei + Related */}
- <div className="space-y-3">
- {/* Rimosso elenco contemporanei dello stesso journey */}
-
-          {/* Eventi contemporanei (altri journey) */}
-          <div className={`hidden ${BOX_3D} p-3 h-[220px]`}>
-            <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
-              {tUI(uiLang, "journey.concurrent.title")}
-            </div>
-            {concurrentOther && concurrentOther.length ? (
-              <div className="h-[176px] overflow-y-auto pr-1 space-y-1.5">
-                {concurrentOther.map((c) => {
- const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
- return (
- <button
- key={`${c.geId}:${c.evId}`}
- onClick={() => router.push(geUrl(c.geId, c.evId))}
- className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12.5px] text-slate-900 hover:bg-white shadow-sm"
- title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
- >
- {label ? `${label} - ` : ""}{c.evTitle}
- </button>
- );
- })}
- </div>
- ) : (
- <div className="text-[12.5px] text-gray-500">
- {tUI(uiLang, "journey.concurrent.none")}
- </div>
- )}
- </div>
-
- {related?.length ? (
- <div className={`${BOX_3D} p-3`}>
- <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
- {tUI(uiLang, "journey.related.title")}
- </div>
-  <ul className="grid h-[220px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3" style={{ scrollbarWidth: "thin" }}>
-  {related.map((r) => (
-  <Scorecard
-  key={r.id}
-  href={geUrl(r.id)}
-  title={r.title ?? r.slug ?? "Journey"}
-  coverUrl={r.coverUrl}
-  ctaLabel=""
-  compact
-  className="shadow-none"
-  />
-  ))}
-  </ul>
- </div>
- ) : (
- <div className={`${BOX_3D} p-3`}>
- <div className="text-[12.5px] font-semibold text-gray-800 mb-1">
- {tUI(uiLang, "journey.related.title")}
- </div>
- <div className="text-[12.5px] text-gray-500">
- {tUI(uiLang, "journey.related.none")}
- </div>
- </div>
- )}
- </div>
- </div>
- </div>
- </div>
- </div>
- </section>
-
- {/* ===== BANDA EVENTI (container allargato) ===== */}
- <section className="border-b border-black/10 bg-white lg:hidden">
- <div className="mx-auto w-full max-w-[120rem] px-4 py-2" ref={bandRef}>
- <div className="flex items-center justify-between mb-1.5">
- <div className="text-[13px] font-medium text-gray-900">Eventi</div>
- {rows.length ? (
- <div className="text-[11.5px] text-gray-600">
- Evento <span className="font-medium">{selectedIndex + 1}</span> / <span className="font-medium">{rows.length}</span>
- </div>
- ) : null}
- </div>
-
- <div className="overflow-x-auto overflow-y-hidden" style={{ scrollbarWidth: "thin" }}>
- <div className="flex items-stretch gap-2 min-w-max">
- {rows.map((ev, idx) => {
- const active = idx === selectedIndex;
- const fromY = signedYear(ev.year_from, ev.era);
- const toY = signedYear(ev.year_to, ev.era);
- const fromLabel = fromY != null ? formatTimelineYearLabel(fromY) : "";
- const toLabel = toY != null ? formatTimelineYearLabel(toY) : "";
- const info = [fromLabel, toLabel, ev.location || ""].filter(Boolean).join(" - ");
-  return (
-  <button
-  key={ev.id}
-  ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
-  onClick={() => handleSelectEvent(idx)}
-  className={`shrink-0 w-[52vw] md:w-[220px] max-w-[260px] rounded-xl border px-2 py-1.5 text-left transition h-[64px] ${
-  active ? "text-white shadow-sm" : "border-black/10 bg-white/80 text-gray-800 hover:bg-white"
-  }`}
-  style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
-  title={ev.title}
-  >
-  <div className="flex items-start gap-2">
-  <div
-    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
-    style={
-      active
-        ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
-        : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
-    }
-  >
-  {idx + 1}
-  </div>
-  <div className="min-w-0 leading-tight">
-  <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
-  {ev.title}
- </div>
- <div className={`truncate text-[11.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
- {info}
- </div>
- </div>
- </div>
- </button>
- );
- })}
- </div>
- </div>
- </div>
- </section>
-
- {/* ===== MOBILE: Descrizione + Media evento + Mappa ===== */}
- <div className="mx-auto w-full max-w-[120rem] lg:hidden overflow-hidden">
- <section className="bg-white/70 backdrop-blur" style={mapTextureStyle}>
- <div className="px-4 py-2">
- <div className="mx-auto w-full max-w-[820px]">
-<div className={`${BOX_3D} flex flex-col gap-2`}>
-  <Collapsible
-    title="Descrizione"
-    defaultOpen={false}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M6 5.5h12M6 10h8M6 14.5h5M6 19h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    )}
-  >
+ {/* ===== MOBILE MAP-FIRST ===== */}
+ <section className="fixed inset-0 z-[1200] lg:hidden">
+  <div className="absolute inset-0">
     <div
-      className="max-h-[36svh] overflow-y-auto pr-2 text-[13px] leading-6 text-gray-800 whitespace-pre-wrap text-justify"
-      style={{ scrollbarWidth: "thin" }}
-    >
-      {selectedEvent?.description || "No description available."}
-    </div>
-    <div className="pt-2 flex items-center justify-between gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        {selectedEvent?.wiki_url ? (
-          <a
-            href={selectedEvent.wiki_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-          >
-            Wikipedia
-          </a>
-        ) : null}
-        {selectedEvent?.video_url ? (
-          <a
-            href={selectedEvent.video_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-black/10 bg-white/80 px-2.5 py-1 text-[12.5px] text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-            title="Guarda il video dell'evento"
-          >
-            Guarda il video
-          </a>
-        ) : null}
+      data-map="gehj"
+      key={`map-mobile-${gid ?? "unknown"}`}
+      className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+      aria-label="Map canvas"
+    />
+    {!mapLoaded && (
+      <div className="absolute left-3 top-[calc(env(safe-area-inset-top)+66px)] z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
+        Inizializzazione mappa.
       </div>
-      <div className="shrink-0 inline-flex items-center gap-2">
-        <span className="text-[11px] font-semibold text-slate-700">
-          {(uiLang || "it").toString().toLowerCase().startsWith("it") ? "Data" : "Date"}
-        </span>
-        <div
-          className="inline-flex h-[26px] w-[104px] items-center justify-center rounded-full border border-emerald-100 bg-emerald-50/80 px-2 text-[11.5px] font-semibold text-emerald-900 shadow-sm"
-          title={selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
-        >
-          {selectedEvent?.exact_date ? formatExactDateForSpeech(selectedEvent.exact_date, uiLang) : ""}
+    )}
+    {renderMapPlayerBox({ compact: true })}
+    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+180px)] z-20">
+      <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
+        <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
+          {rows.map((ev, idx) => {
+            const active = idx === selectedIndex;
+            const fromY = signedYear(ev.year_from, ev.era);
+            const toY = signedYear(ev.year_to, ev.era);
+            const fromLabel = fromY != null ? formatTimelineYearLabel(fromY) : "";
+            const toLabel = toY != null ? formatTimelineYearLabel(toY) : "";
+            const info = [fromLabel, toLabel, ev.location || ""].filter(Boolean).join(" - ");
+            return (
+              <button
+                key={ev.id}
+                ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
+                onClick={() => handleSelectEvent(idx)}
+                className={`snap-center h-[70px] w-[74vw] max-w-[320px] shrink-0 rounded-2xl border px-3 py-2 text-left transition ${
+                  active ? "text-white shadow-lg" : "border-black/20 bg-white/88 text-gray-800 backdrop-blur"
+                }`}
+                style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
+                title={ev.title}
+              >
+                <div className="flex items-start gap-2">
+                  <div
+                    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
+                    style={
+                      active
+                        ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
+                        : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
+                    }
+                  >
+                    {idx + 1}
+                  </div>
+                  <div className="min-w-0 leading-tight">
+                    <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+                      {ev.title}
+                    </div>
+                    <div className={`truncate text-[11px] ${active ? "text-white/85" : "text-gray-600"}`}>
+                      {info}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
-  </Collapsible>
- </div>
- </div>
- </div>
- </section>
+  </div>
 
-
- <section
- className={
- mapMode === "fullscreen"
- ? "fixed inset-0 z-[5000] bg-white"
- : "relative h-[40svh] min-h-[300px] border-t border-black/10"
- }
- >
- <div
- data-map="gehj"
- key={`map-mobile-${gid ?? "unknown"}`}
- className={
- mapMode === "fullscreen"
- ? "absolute inset-0 rounded-none overflow-hidden"
- : "h-full w-full rounded-2xl overflow-hidden bg-[linear-gradient(180deg,#eef2ff,transparent)]"
- }
- aria-label="Map canvas"
- />
-{!mapLoaded && (
-<div className="absolute left-3 top-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
- Inizializzazione mappa.
- </div>
-)}
- {renderMapPlayerBox()}
-</section>
- </div>
-
- <section className="bg-white/70 backdrop-blur lg:hidden" style={mapTextureStyle}>
- <div className="px-4 py-2">
- <div className="mx-auto w-full max-w-[820px]">
- <div className={`${BOX_3D} flex flex-col gap-2`}>
-  <Collapsible
-    title={tUI(uiLang, "journey.related.title")}
-    badge={related?.length ? related.length : undefined}
-    icon={(
-       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-         <path d="M10 13a4 4 0 0 0 6 0l2-2a4 4 0 0 0-6-6l-1.5 1.5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-         <path d="M14 11a4 4 0 0 0-6 0l-2 2a4 4 0 0 0 6 6L13.5 17" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-       </svg>
-     )}
-   >
-     {related?.length ? (
-        <ul className="grid max-h-[32svh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3" style={{ scrollbarWidth: "thin" }}>
-          {related.map((r) => (
-            <Scorecard
-              key={r.id}
-              href={geUrl(r.id)}
-              title={r.title ?? r.slug ?? "Journey"}
-              coverUrl={r.coverUrl}
-              ctaLabel=""
-              compact
-              className="shadow-none"
-            />
+  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+    <div
+      className={`${BOX_3D} pointer-events-auto mx-auto flex w-full max-w-[860px] flex-col overflow-hidden bg-white/95 backdrop-blur-xl transition-[height] duration-300`}
+      style={{ height: mobileSheetSnap === "peek" ? "18svh" : mobileSheetSnap === "half" ? "48svh" : "82svh" }}
+    >
+      <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2">
+        <button
+          onClick={() => setMobileSheetSnap((s) => (s === "peek" ? "half" : s === "half" ? "full" : "peek"))}
+          className="inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-700"
+          title="Espandi/comprimi pannello"
+        >
+          <span className="inline-flex h-1.5 w-6 rounded-full bg-slate-400" />
+          Pannello
+        </button>
+        <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-slate-100 p-1">
+          {(["peek", "half", "full"] as const).map((snap) => (
+            <button
+              key={snap}
+              onClick={() => setMobileSheetSnap(snap)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${mobileSheetSnap === snap ? "bg-white text-slate-900 shadow" : "text-slate-600"}`}
+            >
+              {snap === "peek" ? "Min" : snap === "half" ? "Med" : "Max"}
+            </button>
           ))}
-        </ul>
-     ) : (
-       <div className="text-[12.5px] text-gray-600">
-         {tUI(uiLang, "journey.related.none")}
+        </div>
       </div>
-    )}
-  </Collapsible>
 
-  <Collapsible
-    title={tUI(uiLang, "journey.concurrent.title")}
-     badge={concurrentOther?.length ? concurrentOther.length : undefined}
-     icon={(
-       <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-         <path d="M5 12h4l2-3 2 6 2-3h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-         <circle cx="12" cy="6" r="1.8" fill="currentColor" />
-       </svg>
-     )}
-   >
-     {concurrentOther && concurrentOther.length ? (
-       <div className="space-y-1.5 max-h-[28svh] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
-         {concurrentOther.map((c) => {
-           const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
-           return (
-             <button
-               key={`${c.geId}:${c.evId}`}
-               onClick={() => router.push(geUrl(c.geId, c.evId))}
-               className="w-full truncate text-left inline-flex items-center justify-start rounded-xl border border-slate-300 bg-white/90 px-3 py-2 text-[12px] text-slate-900 hover:bg-white shadow-sm"
-               title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
-             >
-               {label ? `${label} - ` : ""}{c.evTitle}
-             </button>
-           );
-         })}
-       </div>
-     ) : (
-      <div className="text-[12.5px] text-gray-600">
-        {tUI(uiLang, "journey.concurrent.none")}
+      <div className="border-b border-black/10 px-3 py-2">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold text-slate-900">
+              {selectedEvent?.title || (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey")}
+            </div>
+            <div className="text-[11.5px] text-slate-600">
+              Evento {rows.length ? selectedIndex + 1 : 0} / {rows.length}
+              {selectedEvent?.exact_date ? ` - ${formatExactDateForSpeech(selectedEvent.exact_date, uiLang)}` : ""}
+            </div>
+          </div>
+          <button
+            onClick={openQuiz}
+            className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] font-semibold text-white shadow"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            title="Apri il quiz"
+          >
+            Quiz
+          </button>
+        </div>
+        <div className="mt-2 flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          <button
+            onClick={() => setMobileTab("event")}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "event" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+          >
+            Evento
+          </button>
+          <button
+            onClick={() => setMobileTab("related")}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "related" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+          >
+            Correlati
+          </button>
+          <button
+            onClick={() => setMobileTab("concurrent")}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "concurrent" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+          >
+            Contemporanei
+          </button>
+          <button
+            onClick={() => setMobileTab("media")}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "media" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
+          >
+            Media Journey
+          </button>
+        </div>
       </div>
-    )}
-  </Collapsible>
 
-  <Collapsible
-    title="Media journey"
-    defaultOpen={false}
-    icon={(
-      <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-        <path d="M4 7a2 2 0 0 1 2-2h3l2-2h2l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z" stroke="currentColor" strokeWidth="1.4" fill="none" />
-        <path d="m10 14 2-2 2 2 3-3" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )}
-  >
-    <MediaBox
-      items={journeyMedia ?? []}
-      firstPreview={journeyMediaFirst || undefined}
-      onOpenOverlay={openOverlay}
-      compact
-      height="sm"
-      hoverPreviewList
-      hoverPreviewDirection="horizontal"
-    />
-  </Collapsible>
- </div>
- </div>
- </div>
+      <div className="flex-1 overflow-y-auto px-3 py-3" style={{ scrollbarWidth: "thin" }}>
+        {mobileTab === "event" ? (
+          <div className="space-y-3">
+            <div className="whitespace-pre-wrap text-[13px] leading-6 text-gray-800 text-justify">
+              {selectedEvent?.description || "No description available."}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={toggleFavourite}
+                disabled={!group_event_id || savingFav}
+                aria-pressed={isFav}
+                className={`inline-flex items-center justify-center rounded-full p-1.5 transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
+                aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+              >
+                <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </span>
+              </button>
+              {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+              {selectedEvent?.wiki_url ? (
+                <a
+                  href={selectedEvent.wiki_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-800"
+                >
+                  Wikipedia
+                </a>
+              ) : null}
+              {selectedEvent?.video_url ? (
+                <a
+                  href={selectedEvent.video_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
+                  title="Guarda il video dell'evento"
+                >
+                  Video
+                </a>
+              ) : null}
+            </div>
+            {selectedEvent?.event_media?.length ? (
+              <MediaBox
+                items={selectedEvent.event_media}
+                firstPreview={selectedEvent.event_media_first || undefined}
+                onOpenOverlay={openOverlay}
+                compact
+                height="sm"
+                hoverPreviewList
+                hoverPreviewDirection="horizontal"
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        {mobileTab === "related" ? (
+          related?.length ? (
+            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {related.map((r) => (
+                <Scorecard
+                  key={r.id}
+                  href={geUrl(r.id)}
+                  title={r.title ?? r.slug ?? "Journey"}
+                  coverUrl={r.coverUrl}
+                  ctaLabel=""
+                  compact
+                  className="shadow-none"
+                />
+              ))}
+            </ul>
+          ) : (
+            <div className="text-[12.5px] text-gray-600">
+              {tUI(uiLang, "journey.related.none")}
+            </div>
+          )
+        ) : null}
+
+        {mobileTab === "concurrent" ? (
+          concurrentOther && concurrentOther.length ? (
+            <div className="space-y-1.5">
+              {concurrentOther.map((c) => {
+                const label = Number.isFinite(c.startYear as any) ? formatTimelineYearLabel(c.startYear as any) : "";
+                return (
+                  <button
+                    key={`${c.geId}:${c.evId}`}
+                    onClick={() => router.push(geUrl(c.geId, c.evId))}
+                    className="w-full truncate rounded-xl border border-slate-300 bg-white px-3 py-2 text-left text-[12px] text-slate-900 shadow-sm"
+                    title={(label ? `${label} - ${c.evTitle}` : c.evTitle)}
+                  >
+                    {label ? `${label} - ` : ""}{c.evTitle}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-[12.5px] text-gray-600">
+              {tUI(uiLang, "journey.concurrent.none")}
+            </div>
+          )
+        ) : null}
+
+        {mobileTab === "media" ? (
+          <MediaBox
+            items={journeyMedia ?? []}
+            firstPreview={journeyMediaFirst || undefined}
+            onOpenOverlay={openOverlay}
+            compact
+            height="sm"
+            hoverPreviewList
+            hoverPreviewDirection="horizontal"
+          />
+        ) : null}
+      </div>
+    </div>
+  </div>
  </section>
 
    {/* ===== DESKTOP (container allargato) ===== */}
