@@ -3053,6 +3053,9 @@ if (error) { setConcurrentOther([]); return; }
 }, [rows, selectedIndex, gid, supabase, resolvedLang, desiredLang]);
 
 const selectedEvent = rows[selectedIndex];
+const selectedTimelineItem = timelineData?.items?.find((it) => it.index === selectedIndex) ?? null;
+const selectedTimelineLeftPct = selectedTimelineItem ? Math.max(6, Math.min(94, selectedTimelineItem.progress * 100)) : null;
+const selectedTimelineRangeLabel = selectedEvent ? formatEventRange(selectedEvent) : null;
 const concurrentDisplay = useMemo(() => {
  return concurrentOther || [];
 }, [concurrentOther]);
@@ -3312,6 +3315,50 @@ const mapTextureStyle: CSSProperties = {
             : "calc(env(safe-area-inset-bottom) + 42svh + 8px)",
       }}
     >
+      {mobileSheetSnap === "peek" && timelineData?.items?.length ? (
+        <div className="pointer-events-auto px-3 pb-1">
+          <div className="rounded-2xl border border-white/45 bg-white/88 px-2 py-2 shadow backdrop-blur">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/85">
+              <span>{formatTimelineYearLabel(timelineData.min)}</span>
+              <span>{formatTimelineYearLabel(timelineData.max)}</span>
+            </div>
+            <div className="relative h-6 overflow-visible">
+              <div className="absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[#1a64d6]/35" />
+              {selectedTimelineItem && selectedTimelineLeftPct != null ? (
+                <div
+                  className="pointer-events-none absolute top-[calc(50%+8px)] -translate-x-1/2 rounded-full border border-[#0f3c8c]/25 bg-white/95 px-2 py-[1px] text-[10px] font-semibold whitespace-nowrap text-[#0f3c8c] shadow-sm"
+                  style={{ left: `${selectedTimelineLeftPct}%` }}
+                >
+                  {selectedTimelineRangeLabel ?? formatTimelineYearLabel(selectedTimelineItem.start)}
+                </div>
+              ) : null}
+              {selectedTimelineItem ? (
+                <div
+                  className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#0f3c8c] shadow-[0_0_0_3px_rgba(15,60,140,0.22)]"
+                  style={{ left: `${Math.max(0, Math.min(100, selectedTimelineItem.progress * 100))}%` }}
+                  aria-hidden
+                />
+              ) : null}
+              {timelineData.items.map((it) => {
+                const active = it.index === selectedIndex;
+                const left = `${Math.max(0, Math.min(100, it.progress * 100))}%`;
+                return (
+                  <button
+                    key={`mtl-${it.ev.id}-${it.index}`}
+                    onClick={() => handleSelectEvent(it.index)}
+                    className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${
+                      active ? "border-white bg-[#0f3c8c] shadow-[0_0_0_2px_rgba(15,60,140,0.28)]" : "border-[#0f3c8c] bg-white/95"
+                    }`}
+                    style={{ left }}
+                    aria-label={`Evento ${it.index + 1}`}
+                    title={it.ev.title}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
         <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
           {rows.map((ev, idx) => {
