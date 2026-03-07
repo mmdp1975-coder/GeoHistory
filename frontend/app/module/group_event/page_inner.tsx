@@ -766,14 +766,6 @@ const queryLang = sp.get("lang");
 const [desiredLang, setDesiredLang] = useState<string>(() => {
   const qp = queryLang;
   if (qp && qp.trim()) return qp.trim().slice(0, 2).toLowerCase();
-  if (typeof navigator !== "undefined") {
-    const cand = (navigator.languages && navigator.languages.find((l) => !!l)) || navigator.language;
-    if (cand) return cand.slice(0, 2).toLowerCase();
-  }
-  try {
-    const intl = Intl.DateTimeFormat().resolvedOptions().locale;
-    if (intl) return intl.slice(0, 2).toLowerCase();
-  } catch {}
   return "it";
 });
 
@@ -844,8 +836,12 @@ const [loading, setLoading] = useState(true);
 const [isPlaying, setIsPlaying] = useState(false);
 const [isBuffering, setIsBuffering] = useState(false);
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
-const [mobileSheetSnap, setMobileSheetSnap] = useState<"peek" | "half" | "full">("half");
-const [mobileTab, setMobileTab] = useState<"event" | "related" | "concurrent" | "media">("event");
+const [mobileSheetSnap, setMobileSheetSnap] = useState<"peek" | "half">("peek");
+const [mobileTab, setMobileTab] = useState<"event" | "related" | "concurrent">("event");
+const [mobileJourneyDescOpen, setMobileJourneyDescOpen] = useState(false);
+const [mobileTopMediaOpen, setMobileTopMediaOpen] = useState(false);
+const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
+const mobileMediaRef = useRef<HTMLDivElement | null>(null);
 const BRAND_BLUE = "#0f3c8c";
 
 const toggleMapModeView = useCallback(() => {
@@ -958,6 +954,7 @@ const manualSeekUntilRef = useRef(0);
 const introSkippedRef = useRef(false);
 const manualSeekTargetRef = useRef<number | null>(null);
 const manualSeekIndexRef = useRef<number | null>(null);
+const MP3_SEEK_LEAD_SEC = 0.6;
 const [audioSource, setAudioSource] = useState<string>("");
 const [audioCurrentTime, setAudioCurrentTime] = useState(0);
 const [audioDuration, setAudioDuration] = useState(0);
@@ -1383,14 +1380,14 @@ useEffect(() => {
   if (!audio) return;
   let target = 0;
   if (segmentsMeta && segmentsMeta.length) {
-    const match = segmentsMeta.find((s) => s?.kind === "event" && Number(s?.index) === selectedIndex);
+    const match = segmentsMeta.find((s) => s?.kind === "event_header" && Number(s?.index) === selectedIndex);
     if (match && Number.isFinite(match.start)) {
-      target = Math.max(0, Number(match.start));
+      target = Math.max(0, Number(match.start) - MP3_SEEK_LEAD_SEC);
     }
   } else {
     const segIndex = selectedIndex + (audioTimeline?.hasIntro ? 1 : 0);
     const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
-    target = Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+    target = Number.isFinite(prevTime) ? Math.max(0, prevTime - MP3_SEEK_LEAD_SEC) : 0;
   }
   if (Number.isFinite(target) && Math.abs((audio.currentTime || 0) - target) > 0.25) {
     const wasPlaying = isPlayingRef.current;
@@ -1883,7 +1880,7 @@ const getEventStartTime = useCallback(
   (index: number) => {
     const targetId = rows[index]?.id;
     if (targetId && audioEventStarts.has(String(targetId))) {
-      return audioEventStarts.get(String(targetId)) ?? 0;
+      return Math.max(0, (audioEventStarts.get(String(targetId)) ?? 0) - MP3_SEEK_LEAD_SEC);
     }
     const segments = (audioTimeline as any)?.segments as any[] | undefined;
     if (Array.isArray(segments) && segments.length) {
@@ -1894,16 +1891,16 @@ const getEventStartTime = useCallback(
           Number(seg?.index) === index,
       );
       if (byIndex && Number.isFinite(byIndex.start)) {
-        return Math.max(0, Number(byIndex.start));
+        return Math.max(0, Number(byIndex.start) - MP3_SEEK_LEAD_SEC);
       }
     }
     if (!audioTimeline?.cumulative?.length) return 0;
     const offset = audioTimeline.hasIntro ? 1 : 0;
     const segIndex = Math.max(0, Math.min(index + offset, audioTimeline.cumulative.length - 1));
     const prevTime = segIndex > 0 ? audioTimeline.cumulative[segIndex - 1] : 0;
-    return Number.isFinite(prevTime) ? Math.max(0, prevTime) : 0;
+    return Number.isFinite(prevTime) ? Math.max(0, prevTime - MP3_SEEK_LEAD_SEC) : 0;
   },
-  [audioTimeline, rows, audioEventStarts],
+  [audioTimeline, rows, audioEventStarts, MP3_SEEK_LEAD_SEC],
 );
 
 const seekToEventIndex = useCallback(
@@ -1914,6 +1911,8 @@ const seekToEventIndex = useCallback(
       );
     }
     manualSeekUntilRef.current = Date.now() + 1500;
+    // Evita un secondo seek immediato nel listener su selectedIndex.
+    ignoreNextSeekRef.current = true;
     selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
     if (!isMp3Mode) return;
@@ -2065,13 +2064,13 @@ const renderMapPlayerBox = useCallback(
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
             <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Wiki
+          {tUI(uiLang, "journey.tab.wiki")}
         </a>
       ) : null}
       {!opts?.compact ? renderAudioMeta() : null}
     </div>
   ),
-  [mapMode, rows, selectedIndex, isPlaying, renderAudioMeta, togglePlay, toggleMapModeView, audioSourceOptions, audioSource, handlePrevEvent, handleNextEvent],
+  [mapMode, rows, selectedIndex, isPlaying, renderAudioMeta, togglePlay, toggleMapModeView, audioSourceOptions, audioSource, handlePrevEvent, handleNextEvent, uiLang],
 );
 
 
@@ -2140,23 +2139,10 @@ const fitMapToRows = useCallback(() => {
 }, [rows, mapReady]);
 
 const showPopup = useCallback((ev?: EventVM | null) => {
-  const map = mapRef.current as any;
   if (popupRef.current) {
     try { popupRef.current.remove(); } catch {}
     popupRef.current = null;
   }
-  if (!map || !mapReady || mapMode !== "fullscreen") return;
-  if (!ev || ev.latitude == null || ev.longitude == null) return;
-  const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 14 });
-  const rangeLabel = formatEventRange(ev);
-  popup
-    .setLngLat([ev.longitude, ev.latitude])
-    .setHTML(
-      `<div style="font-size:12px;font-weight:700;color:#0f172a;">${ev.title || "Evento"}</div>` +
-      `<div style="font-size:11px;color:#475569;margin-top:2px;">${rangeLabel}</div>`
-    )
-    .addTo(map);
-  popupRef.current = popup;
 }, [mapMode, mapReady]);
 
 // Lock scroll quando la mappa è full-screen
@@ -3086,7 +3072,7 @@ const journeyAndEventMedia = useMemo(() => {
  if (loading) {
  return (
  <div className="flex min-h-screen items-center justify-center bg-white">
- <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow">Loading Journey…</div>
+ <div className="rounded-2xl border bg-white/70 px-5 py-3 text-sm text-gray-700 shadow">{tUI(uiLang, "journey.loading")}</div>
  </div>
  );
  }
@@ -3095,11 +3081,11 @@ const journeyAndEventMedia = useMemo(() => {
  return (
  <div className="min-h-screen bg-rose-50 p-6">
  <div className="mx-auto max-w-2xl rounded-2xl border border-red-200 bg-white/70 p-5 text-red-800 shadow">
- <div className="mb-1 text-base font-semibold">Error</div>
+ <div className="mb-1 text-base font-semibold">{tUI(uiLang, "journey.error")}</div>
  <div className="text-sm">{err}</div>
  <div className="mt-4">
  <button onClick={onBack} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 transition">
- <span aria-hidden>?</span> Back
+ <span aria-hidden>?</span> {tUI(uiLang, "journey.back")}
  </button>
  </div>
  </div>
@@ -3147,7 +3133,7 @@ const mapTextureStyle: CSSProperties = {
     }
   `}</style>
  {/* ===== MOBILE MAP-FIRST ===== */}
- <section className="fixed inset-0 z-[1200] lg:hidden">
+ <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "56px" }}>
   <div className="absolute inset-0">
     <div
       data-map="gehj"
@@ -3160,8 +3146,172 @@ const mapTextureStyle: CSSProperties = {
         Inizializzazione mappa.
       </div>
     )}
-    {renderMapPlayerBox({ compact: true })}
-    <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+180px)] z-20">
+    <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+8px)] z-20 px-3">
+      <div className="pointer-events-auto mr-[44px] w-[calc(100%_-_44px)] max-w-none rounded-2xl border border-white/45 bg-white/90 p-2 shadow backdrop-blur">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[14px] font-semibold text-slate-900">
+              {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
+            </h1>
+            {mobileJourneyDescOpen ? (
+              <div className="mt-1 max-h-[18svh] overflow-y-auto pr-1 whitespace-pre-wrap text-[12px] leading-5 text-slate-700" style={{ scrollbarWidth: "thin" }}>
+                {journeyDescription || tUI(uiLang, "journey.description.none")}
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          <button
+            onClick={() => setMobileJourneyDescOpen((v) => !v)}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobileJourneyDescOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
+            style={{ backgroundColor: "#0f3c8c" }}
+            title={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
+            aria-label={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            onClick={toggleFavourite}
+            disabled={!group_event_id || savingFav}
+            aria-pressed={isFav}
+            className={`inline-flex items-center justify-center rounded-full p-1.5 transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
+            aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+          >
+            <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            </span>
+          </button>
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+          <button
+            onClick={openQuiz}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[16px] font-semibold text-white shadow"
+            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            title={tUI(uiLang, "journey.quiz.open")}
+            aria-label={tUI(uiLang, "journey.quiz.open")}
+          >
+            ?
+          </button>
+          <button
+            onClick={() => {
+              const next = !mobileTopMediaOpen;
+              setMobileTopMediaOpen(next);
+              if (next) {
+                setMobilePlayerOpen(false);
+                window.setTimeout(() => {
+                  mobileMediaRef.current?.scrollIntoView({ block: "nearest" });
+                }, 0);
+              }
+            }}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobileTopMediaOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
+            style={{ backgroundColor: "#0f3c8c" }}
+            title={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
+            aria-label={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <rect x="3" y="5" width="18" height="14" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="1.9" />
+              <path d="M10 9l6 3-6 3V9z" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setMobilePlayerOpen((v) => !v)}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobilePlayerOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
+            style={{ backgroundColor: "#0f3c8c" }}
+            title={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+            aria-label={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              {mobilePlayerOpen ? (
+                <path d="M6 5h3v14H6zm9 0h3v14h-3z" fill="currentColor" />
+              ) : (
+                <path d="M8 6l10 6-10 6V6z" fill="currentColor" />
+              )}
+            </svg>
+          </button>
+        </div>
+        {mobilePlayerOpen ? (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-black/10 bg-white/85 px-2 py-1.5">
+            <button
+              onClick={handlePrevEvent}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label="Evento precedente"
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button
+              onClick={togglePlay}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+            >
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={handleNextEvent}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
+              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+              aria-label="Evento successivo"
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {audioSourceOptions.length ? (
+              <select
+                value={audioSource}
+                onChange={(e) => setAudioSource(e.target.value)}
+                className="h-8 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/40"
+                title="Audio"
+              >
+                {audioSourceOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+        ) : null}
+        {mobileTopMediaOpen ? (
+          <div ref={mobileMediaRef} className="mt-2 rounded-xl border border-black/10 bg-white/85 p-2">
+            <MediaBox
+              items={journeyMedia ?? []}
+              firstPreview={journeyMediaFirst || undefined}
+              onOpenOverlay={openOverlay}
+              compact
+              height="sm"
+              hoverPreviewList
+              hoverPreviewDirection="horizontal"
+              alwaysShowList
+            />
+          </div>
+        ) : null}
+      </div>
+    </div>
+    <div
+      className="pointer-events-none absolute inset-x-0 z-20"
+      style={{
+        bottom:
+          mobileSheetSnap === "peek"
+            ? "calc(env(safe-area-inset-bottom) + 84px)"
+            : "calc(env(safe-area-inset-bottom) + 42svh + 8px)",
+      }}
+    >
       <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
         <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
           {rows.map((ev, idx) => {
@@ -3176,7 +3326,7 @@ const mapTextureStyle: CSSProperties = {
                 key={ev.id}
                 ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
                 onClick={() => handleSelectEvent(idx)}
-                className={`snap-center h-[70px] w-[74vw] max-w-[320px] shrink-0 rounded-2xl border px-3 py-2 text-left transition ${
+                className={`snap-center h-[56px] w-[74vw] max-w-[320px] shrink-0 rounded-2xl border px-2.5 py-1.5 text-left transition ${
                   active ? "text-white shadow-lg" : "border-black/20 bg-white/88 text-gray-800 backdrop-blur"
                 }`}
                 style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
@@ -3184,20 +3334,21 @@ const mapTextureStyle: CSSProperties = {
               >
                 <div className="flex items-start gap-2">
                   <div
-                    className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px]"
+                    className="mt-0.5 inline-flex h-9 w-7 shrink-0 flex-col items-center justify-center rounded-md text-[10px] leading-tight"
                     style={
                       active
                         ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
                         : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
                     }
                   >
-                    {idx + 1}
+                    <span>{idx + 1}</span>
+                    <span className="text-[9px]">/{rows.length}</span>
                   </div>
                   <div className="min-w-0 leading-tight">
-                    <div className={`truncate text-[13px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+                    <div className={`truncate text-[12px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
                       {ev.title}
                     </div>
-                    <div className={`truncate text-[11px] ${active ? "text-white/85" : "text-gray-600"}`}>
+                    <div className={`truncate text-[10.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
                       {info}
                     </div>
                   </div>
@@ -3213,109 +3364,74 @@ const mapTextureStyle: CSSProperties = {
   <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
     <div
       className={`${BOX_3D} pointer-events-auto mx-auto flex w-full max-w-[860px] flex-col overflow-hidden bg-white/95 backdrop-blur-xl transition-[height] duration-300`}
-      style={{ height: mobileSheetSnap === "peek" ? "18svh" : mobileSheetSnap === "half" ? "48svh" : "82svh" }}
+      style={{ height: mobileSheetSnap === "peek" ? "9svh" : "42svh" }}
     >
-      <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2">
-        <button
-          onClick={() => setMobileSheetSnap((s) => (s === "peek" ? "half" : s === "half" ? "full" : "peek"))}
-          className="inline-flex h-8 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-[12px] font-semibold text-slate-700"
-          title="Espandi/comprimi pannello"
-        >
-          <span className="inline-flex h-1.5 w-6 rounded-full bg-slate-400" />
-          Pannello
-        </button>
-        <div className="ml-auto inline-flex items-center gap-1 rounded-full bg-slate-100 p-1">
-          {(["peek", "half", "full"] as const).map((snap) => (
-            <button
-              key={snap}
-              onClick={() => setMobileSheetSnap(snap)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${mobileSheetSnap === snap ? "bg-white text-slate-900 shadow" : "text-slate-600"}`}
+      <div className="border-b border-black/10 px-2 py-1.5">
+        <div className="flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          <button
+            onClick={() => {
+              if (mobileSheetSnap !== "peek" && mobileTab === "event") {
+                setMobileSheetSnap("peek");
+              } else {
+                setMobileTab("event");
+                setMobileSheetSnap("half");
+              }
+            }}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+          >
+            {tUI(uiLang, "journey.tab.description")}
+          </button>
+          <button
+            onClick={() => {
+              if (mobileSheetSnap !== "peek" && mobileTab === "related") {
+                setMobileSheetSnap("peek");
+              } else {
+                setMobileTab("related");
+                setMobileSheetSnap("half");
+              }
+            }}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+          >
+            {tUI(uiLang, "journey.related.title")}
+          </button>
+          <button
+            onClick={() => {
+              if (mobileSheetSnap !== "peek" && mobileTab === "concurrent") {
+                setMobileSheetSnap("peek");
+              } else {
+                setMobileTab("concurrent");
+                setMobileSheetSnap("half");
+              }
+            }}
+            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "concurrent" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+          >
+            {tUI(uiLang, "journey.concurrent.title")}
+          </button>
+          {selectedEvent?.wiki_url ? (
+            <a
+              href={selectedEvent.wiki_url}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-auto shrink-0 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-800"
             >
-              {snap === "peek" ? "Min" : snap === "half" ? "Med" : "Max"}
-            </button>
-          ))}
+              {tUI(uiLang, "journey.tab.wiki")}
+            </a>
+          ) : (
+            <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500">
+              {tUI(uiLang, "journey.tab.wiki")}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="border-b border-black/10 px-3 py-2">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-slate-900">
-              {selectedEvent?.title || (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey")}
-            </div>
-            <div className="text-[11.5px] text-slate-600">
-              Evento {rows.length ? selectedIndex + 1 : 0} / {rows.length}
-              {selectedEvent?.exact_date ? ` - ${formatExactDateForSpeech(selectedEvent.exact_date, uiLang)}` : ""}
-            </div>
-          </div>
-          <button
-            onClick={openQuiz}
-            className="inline-flex h-8 items-center gap-1 rounded-full px-3 text-[11px] font-semibold text-white shadow"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            title="Apri il quiz"
-          >
-            Quiz
-          </button>
-        </div>
-        <div className="mt-2 flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
-          <button
-            onClick={() => setMobileTab("event")}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "event" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-          >
-            Evento
-          </button>
-          <button
-            onClick={() => setMobileTab("related")}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "related" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-          >
-            Correlati
-          </button>
-          <button
-            onClick={() => setMobileTab("concurrent")}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "concurrent" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-          >
-            Contemporanei
-          </button>
-          <button
-            onClick={() => setMobileTab("media")}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold ${mobileTab === "media" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}
-          >
-            Media Journey
-          </button>
-        </div>
-      </div>
-
+      {mobileSheetSnap !== "peek" ? (
       <div className="flex-1 overflow-y-auto px-3 py-3" style={{ scrollbarWidth: "thin" }}>
         {mobileTab === "event" ? (
           <div className="space-y-3">
             <div className="whitespace-pre-wrap text-[13px] leading-6 text-gray-800 text-justify">
-              {selectedEvent?.description || "No description available."}
+              {selectedEvent?.description || tUI(uiLang, "journey.description.none")}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={toggleFavourite}
-                disabled={!group_event_id || savingFav}
-                aria-pressed={isFav}
-                className={`inline-flex items-center justify-center rounded-full p-1.5 transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
-                aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
-              >
-                <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" />
-                  </svg>
-                </span>
-              </button>
-              {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
-              {selectedEvent?.wiki_url ? (
-                <a
-                  href={selectedEvent.wiki_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-800"
-                >
-                  Wikipedia
-                </a>
-              ) : null}
               {selectedEvent?.video_url ? (
                 <a
                   href={selectedEvent.video_url}
@@ -3324,7 +3440,7 @@ const mapTextureStyle: CSSProperties = {
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
                   title="Guarda il video dell'evento"
                 >
-                  Video
+                  {tUI(uiLang, "journey.video.open")}
                 </a>
               ) : null}
             </div>
@@ -3387,19 +3503,8 @@ const mapTextureStyle: CSSProperties = {
             </div>
           )
         ) : null}
-
-        {mobileTab === "media" ? (
-          <MediaBox
-            items={journeyMedia ?? []}
-            firstPreview={journeyMediaFirst || undefined}
-            onOpenOverlay={openOverlay}
-            compact
-            height="sm"
-            hoverPreviewList
-            hoverPreviewDirection="horizontal"
-          />
-        ) : null}
       </div>
+      ) : null}
     </div>
   </div>
  </section>
@@ -3446,7 +3551,7 @@ const mapTextureStyle: CSSProperties = {
             onClick={openQuiz}
             className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(15,60,140,0.35)] ring-1 ring-white/15 transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_rgba(15,60,140,0.42)] focus:outline-none focus:ring-2 focus:ring-indigo-300"
             style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-            title="Apri il quiz"
+            title={tUI(uiLang, "journey.quiz.open")}
           >
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" className="drop-shadow-sm">
               <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="1.8" fill="none" />
@@ -3457,7 +3562,7 @@ const mapTextureStyle: CSSProperties = {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto text-[12.5px] leading-5 text-gray-700 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
-          {journeyDescription || "Nessuna descrizione disponibile."}
+          {journeyDescription || tUI(uiLang, "journey.description.none")}
         </div>
       </div>
 
@@ -3603,7 +3708,7 @@ const mapTextureStyle: CSSProperties = {
 
       <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
                 <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
-          {selectedEvent?.description || "No description available."}
+          {selectedEvent?.description || tUI(uiLang, "journey.description.none")}
         </div>
       </div>
 
