@@ -128,45 +128,90 @@ def run_prompt_1(title: str, event_guideline: str | None):
 
 def build_style_rules(audience: str, styles: str, detail_level: str) -> str:
     audience_rules = {
-        "Ragazzi 10-15": "TARGET: Lessico semplice, frasi brevi, spiegazioni concrete.",
-        "Studenti 16-20": "TARGET: Lessico scolastico, frasi medie, 1 concetto chiave esplicitato.",
-        "Studenti universitari": "TARGET: Lessico disciplinare, frasi articolate, 1 concetto analitico.",
-        "Professori": "TARGET: Registro alto e denso, nessuna semplificazione.",
-        "Appassionati di storia": "TARGET: Tono coinvolgente ma accurato, dettagli concreti.",
-        "Storici / ricercatori": "TARGET: Registro tecnico e preciso, evita generalizzazioni.",
+        "Giovani": (
+            "TARGET: Lessico semplice ma non infantile, ritmo vivo, frasi chiare ma non spezzate. "
+            "Spiega i nessi in modo concreto e visivo, evitando astrazioni dense e tono scolastico."
+        ),
+        "Studenti": (
+            "TARGET: Registro chiaro e maturo. Inserisci contesto, causa ed effetto con linguaggio ordinato ma scorrevole, "
+            "senza semplificare troppo e senza tecnicismi gratuiti."
+        ),
+        "Esperti": (
+            "TARGET: Registro preciso e maturo. Più densità storica, nessi causali e lessico disciplinare controllato, "
+            "senza teatralità e senza formule divulgative banali."
+        ),
     }
     detail_rules = {
         "breve": (
-            "DETTAGLIO EVENTI: ESATTAMENTE 3-4 frasi. Includi 1 fatto chiave + 1 conseguenza + 1 dettaglio concreto."
-            " DETTAGLIO JOURNEY: 6-8 frasi con periodo, area, attori e conseguenze."
+            "DETTAGLIO EVENTI: Testo compatto ma non secco. Concentrati su nucleo dell'evento, passaggio storico decisivo "
+            "e una conseguenza immediata, privilegiando fluidità e chiarezza. DETTAGLIO JOURNEY: Sintesi compatta ma narrativa."
         ),
         "medio": (
-            "DETTAGLIO EVENTI: ESATTAMENTE 6-7 frasi. Includi 2-3 fatti + 1 conseguenza + 1 dettaglio concreto."
-            " DETTAGLIO JOURNEY: 9-12 frasi con periodo, area, attori e conseguenze."
+            "DETTAGLIO EVENTI: Sviluppo pieno e sostanzioso. Inserisci contesto storico, snodo principale, attori coinvolti, "
+            "conseguenze immediate e continuità con il processo storico, con periodi variati e non meccanici. "
+            "La descrizione deve risultare chiaramente sviluppata, non sintetica. "
+            "DETTAGLIO JOURNEY: Sviluppo pieno con contesto, svolta, progressione e chiusura."
         ),
-        "alto": (
-            "DETTAGLIO EVENTI: ESATTAMENTE 8-10 frasi. Includi 3-5 fatti + 1 implicazione di lungo periodo + 1 dettaglio concreto."
-            " DETTAGLIO JOURNEY: 12-15 frasi con periodo, area, attori e conseguenze."
+        "approfondito": (
+            "DETTAGLIO EVENTI: Sviluppo molto ricco e disteso. Inserisci contesto storico ampio, dinamica interna dell'evento, "
+            "attori e interessi in gioco, posta in gioco, conseguenze immediate, ricadute più larghe e una sfumatura interpretativa. "
+            "Quando pertinenti, inserisci anche un aneddoto breve, una situazione concreta, un dettaglio umano o un episodio significativo "
+            "storicamente plausibile e coerente con l'evento, senza inventare fatti. La descrizione deve essere ampia, coinvolgente e ben "
+            "articolata. Deve essere visibilmente più estesa del livello medio, senza diventare prolisso o accademico. "
+            "DETTAGLIO JOURNEY: Visione d'insieme ampia con passaggi, implicazioni e coerenza narrativa forte."
         ),
     }
     style_signals = {
-        "Documentaristico coinvolgente": "STILE DOMINANTE: Documentaristico coinvolgente. Tono neutro-autorevole, marcatori temporali espliciti.",
-        "Cronaca storica": "STILE DOMINANTE: Cronaca storica. Ordine cronologico chiaro, frasi asciutte.",
-        "Narrativo immersivo": "STILE DOMINANTE: Narrativo immersivo. Apertura con contesto/scena, lessico concreto.",
-        "Analitico-interpretativo": "STILE DOMINANTE: Analitico-interpretativo. 1 frase su cause e 1 su conseguenze.",
-        "Story-driven (light)": "STILE DOMINANTE: Story-driven (light). Ritmo scorrevole, 1 dettaglio umano.",
+        "Documentaristico": (
+            "STILE DOMINANTE: Documentaristico. Tono autorevole e chiaro, ordine temporale leggibile, "
+            "transizioni naturali e lessico concreto."
+        ),
+        "Narrativo": (
+            "STILE DOMINANTE: Narrativo. Apertura contestuale, ritmo fluido, immagini storiche concrete e passaggi morbidi "
+            "tra un evento e l'altro senza romanzare."
+        ),
+        "Analitico": (
+            "STILE DOMINANTE: Analitico. Metti in evidenza cause, snodi, conseguenze e trasformazioni, "
+            "con scrittura compatta e non accademicamente pesante."
+        ),
     }
     styles_list = [s.strip() for s in styles.split(",") if s.strip()]
     lines: list[str] = []
     if audience in audience_rules:
         lines.append(audience_rules[audience])
-    lines.append(detail_rules.get(detail_level, "DETTAGLIO: 6-7 frasi per descrizione."))
+    lines.append(detail_rules.get(detail_level, detail_rules["medio"]))
     dominant = styles_list[0] if styles_list else ""
     if dominant and dominant in style_signals:
         lines.append(style_signals[dominant])
-    extra = styles_list[1:]
-    if extra:
-        lines.append(f"ACCENTI: {', '.join(extra)} (leggeri).")
+    lines.append(
+        "FLUIDITÀ: Scrivi testi continui, leggibili ad alta voce e con ritmo narrativo. Alterna frasi medie e più ampie; "
+        "evita frasi spezzate, formule scolastiche ripetute, elenchi mascherati e chiusure meccaniche."
+    )
+    lines.append(
+        "COINVOLGIMENTO: Apri spesso con un contesto o una tensione storica concreta, non con formule piatte. "
+        "Fai percepire ambiente, posta in gioco, attori e conseguenze senza trasformare il testo in romanzo."
+    )
+    lines.append(
+        "DIVIETI: Non usare metatesto come 'questo evento si collega al precedente', 'nel prossimo evento', "
+        "'collegamento con l'evento successivo', 'in conclusione di questo paragrafo'."
+    )
+    lines.append(
+        "COLLEGAMENTI: Il nesso tra eventi deve emergere dal contenuto storico, per esempio attraverso continuità politica, "
+        "reazioni, conseguenze, crisi o riforme; non dichiararlo come etichetta."
+    )
+    lines.append(
+        "STILE FRASE: Evita sequenze rigide del tipo causa -> azione -> conseguenza scritte come tre frasi scolastiche. "
+        "Integra questi elementi in una narrazione naturale."
+    )
+    lines.append(
+        "DESCRIZIONE JOURNEY: Deve introdurre il filo storico comune, spiegare perché questi eventi stanno insieme "
+        "e invitare alla lettura con tono scorrevole."
+    )
+    lines.append(
+        "CHECK FINALE: Dopo aver scritto tutte le descrizioni, rileggi l'intero journey come sequenza unica e verifica "
+        "progressione narrativa, varietà tra gli eventi, coerenza del filo conduttore, assenza di formule meccaniche "
+        "e adeguatezza al livello di dettaglio scelto. Se necessario, riscrivi prima di restituire il JSON."
+    )
     return "\n".join(lines)
 
 

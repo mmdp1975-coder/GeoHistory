@@ -1,0 +1,4 @@
+file 'C:/GeoHistory/frontend/output/Karl_Marx/_work/Karl_Marx_clip_01.mp4'
+file 'C:/GeoHistory/frontend/output/Karl_Marx/_work/Karl_Marx_clip_02.mp4'
+file 'C:/GeoHistory/frontend/output/Karl_Marx/_work/Karl_Marx_clip_03.mp4'
+file 'C:/GeoHistory/frontend/output/Karl_Marx/_work/Karl_Marx_clip_04.mp4'

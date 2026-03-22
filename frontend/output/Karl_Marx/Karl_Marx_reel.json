@@ -1,0 +1,41 @@
+{
+  "event_1": "Publication of The Communist Manifesto by Karl Marx and Friedrich Engels",
+  "event_1_year": "1848",
+  "event_1_location": "London, United Kingdom",
+  "event_2": "February Revolution in Paris that topples King Louis-Philippe and proclaims the French Second Republic",
+  "event_2_year": "1848",
+  "event_2_location": "Paris, France",
+  "hook_question_en": "What if the world’s most explosive pamphlet dropped the day before Paris ignited?",
+  "overlap_period": "February 21–24, 1848 (Manifesto published Feb 21; Paris uprising Feb 22–24)",
+  "music_mood_en": "Tense, urgent 19th‑century‑inspired orchestral with snare rolls, low strings, and rising brass; crowd energy swells into a resolute cadence.",
+  "reel_blocks": [
+    {
+      "block": 1,
+      "title": "Hook",
+      "text_en": "London, Feb 21, 1848 — A pamphlet is born.",
+      "voiceover_en": "London. February 1848. In a cramped print shop, Karl Marx’s words hit fresh paper: The Communist Manifesto.",
+      "visual_prompt_en": "Interior, 1848 Victorian London print shop at night. Candlelit, fogged window panes, hand‑cranked press thundering. Close‑ups of metal type, ink‑slick rollers, and sheets reading 'Manifest der Kommunistischen Partei' sliding out. Ink‑smudged hands collate pages. Cinematic, shallow depth of field, anamorphic lens flare, 24fps, light film grain."
+    },
+    {
+      "block": 2,
+      "title": "Connection",
+      "text_en": "From London to Paris — overnight.",
+      "voiceover_en": "Now fly across the Channel. Ideas don’t need passports.",
+      "visual_prompt_en": "Google Earth Studio–style move: start on a parchment map overlay of 1848 London, pull up to a modern satellite view, trace a glowing path over the English Channel, then dive into 1848 Paris map overlay. Smooth tilt and orbit toward Île de la Cité and the Hôtel de Ville, ending above narrow streets poised for unrest."
+    },
+    {
+      "block": 3,
+      "title": "Contemporary Event",
+      "text_en": "Paris, Feb 22–24, 1848 — Barricades rise. The monarchy falls.",
+      "voiceover_en": "Crowds flood the streets demanding reform. Cobblestones become barricades. Shots crack. By February 24, Louis‑Philippe abdicates and the Second Republic is proclaimed. As the Manifesto circulates, Europe catches fire.",
+      "visual_prompt_en": "1848 Paris street scenes at dusk: artisans and students heaving cobblestones into barricades, tricolor flags whipping in winter wind, posters reading 'Réforme' and 'République' pasted to walls. National Guard wavering, smoke drifting, church bells tolling. Cut to the Hôtel de Ville with a surging crowd as proclamations are read."
+    },
+    {
+      "block": 4,
+      "title": "CTA",
+      "text_en": "History happens at the same time. Follow for more time‑jumps.",
+      "voiceover_en": "History collides in the same week—and sometimes the same day. Follow for more time‑jumps.",
+      "visual_prompt_en": "Montage beat: the last page of the Manifesto snapped shut; quick cross‑fade to Paris barricade smoke clearing; pull up to a stylized split‑screen map of Europe with 1848 hotspots glowing. End on a clean title card inviting follows."
+    }
+  ]
+}

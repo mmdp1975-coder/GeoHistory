@@ -44,7 +44,9 @@ export async function POST(req: Request) {
   }
 
   const model = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
-  const instructions = tone ? `Tone: ${tone}` : undefined;
+  const baseInstructions =
+    "Speak only the supplied text exactly as written. Do not add filler words, connective phrases, paraphrases, stage directions, labels, pauses, sound effects, breaths, or commentary. Do not insert any extra words between the location/date sentence and the following event description.";
+  const instructions = tone ? `${baseInstructions} Tone: ${tone}` : baseInstructions;
 
   const baseBody: Record<string, any> = {
     model,

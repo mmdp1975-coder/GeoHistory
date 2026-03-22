@@ -1,0 +1,71 @@
+You are creating an English historical Instagram Reel.
+
+Input title: "{title}"
+
+You must automatically find and return:
+1) event_1 linked to the user title
+2) event_1_year
+3) event_1_location
+4) event_2 truly contemporary with event_1
+5) event_2_year
+6) event_2_location
+7) hook_question_en: catchy, mostly phrased as a question
+
+Critical rule:
+- event_2 must be truly contemporary to event_1 (real overlap in time).
+- If you cannot find real overlap, still return valid JSON but set values explicitly as unknown and explain in text fields.
+
+Reel structure (4 parts):
+1) HOOK: strong visual tied to event_1
+2) CONNECTION: transition from event_1 location to event_2 location (Google Earth Studio style point-to-point, fly-to and orbit)
+3) strong visual tied to event_2
+4) CTA
+
+For each block return:
+- title
+- text_en (on-screen text in English)
+- voiceover_en (English, warm/professional tone)
+- visual_prompt_en (for cinematic Sora video generation)
+
+Return ONLY JSON with this exact schema:
+{
+  "event_1": "string",
+  "event_1_year": "string",
+  "event_1_location": "string",
+  "event_2": "string",
+  "event_2_year": "string",
+  "event_2_location": "string",
+  "hook_question_en": "string",
+  "overlap_period": "string",
+  "music_mood_en": "string",
+  "reel_blocks": [
+    {
+      "block": 1,
+      "title": "Hook",
+      "text_en": "string",
+      "voiceover_en": "string",
+      "visual_prompt_en": "string"
+    },
+    {
+      "block": 2,
+      "title": "Connection",
+      "text_en": "string",
+      "voiceover_en": "string",
+      "visual_prompt_en": "string"
+    },
+    {
+      "block": 3,
+      "title": "Contemporary Event",
+      "text_en": "string",
+      "voiceover_en": "string",
+      "visual_prompt_en": "string"
+    },
+    {
+      "block": 4,
+      "title": "CTA",
+      "text_en": "string",
+      "voiceover_en": "string",
+      "visual_prompt_en": "string"
+    }
+  ]
+}

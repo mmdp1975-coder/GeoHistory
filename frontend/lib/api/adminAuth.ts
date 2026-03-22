@@ -9,11 +9,19 @@ function errorResponse(status: number, message: string) {
 }
 
 async function ensureProfileAdmin(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("is_admin")
-    .eq("id", userId)
-    .single();
+  let data: { is_admin?: boolean | null } | null = null;
+  let error: { code?: string; message: string } | null = null;
+  try {
+    const response = await supabaseAdmin
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", userId)
+      .single();
+    data = response.data;
+    error = response.error;
+  } catch (err: any) {
+    return { ok: false as const, response: errorResponse(503, err?.message || "Admin check failed") };
+  }
 
   if (error && error.code !== "PGRST116") {
     return { ok: false as const, response: errorResponse(500, error.message) };
@@ -40,18 +48,30 @@ export async function requireAdmin(req: Request): Promise<AdminGuardResult> {
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   if (token) {
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (data?.user && !error) {
-      const adminCheck = await ensureProfileAdmin(data.user.id);
-      if (adminCheck.ok) {
-        return { ok: true, userId: data.user.id };
+    try {
+      const { data, error } = await supabaseAdmin.auth.getUser(token);
+      if (data?.user && !error) {
+        const adminCheck = await ensureProfileAdmin(data.user.id);
+        if (adminCheck.ok) {
+          return { ok: true, userId: data.user.id };
+        }
+        return adminCheck;
       }
-      return adminCheck;
+    } catch (err: any) {
+      return { ok: false, response: errorResponse(503, err?.message || "Auth verification failed") };
     }
   }
 
   const supabase = getServerSupabase();
-  const { data, error } = await supabase.auth.getUser();
+  let data;
+  let error;
+  try {
+    const response = await supabase.auth.getUser();
+    data = response.data;
+    error = response.error;
+  } catch (err: any) {
+    return { ok: false, response: errorResponse(503, err?.message || "Auth verification failed") };
+  }
   if (error) {
     return { ok: false, response: errorResponse(401, error.message) };
   }

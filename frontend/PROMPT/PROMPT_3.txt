@@ -51,7 +51,7 @@ Journey approfondimento 2
 Journey approfondimento 3
 8.REGOLE DI COMPILAZIONE EVENTS
 8.1 I campi Journey IT Journey EN Era From To Continent Country Location Titolo evento IT Title event EN Descrizione evento IT Description event EN devono essere copiati dal JSON di input senza modificarne il contenuto semantico.
-8.2 Event date NON è obbligatoria e deve essere compilata SOLO se una data precisa è esplicitamente indicata nel titolo dell’evento con formato DD/MM/YYYY come testo semplice.
+8.2 Event date NON è obbligatoria e deve essere compilata SOLO se nel JSON di input dell'evento è presente una data precisa, rilevante e affidabile in formato DD/MM/YYYY, derivata dal contenuto storico sviluppato dell’evento.
 8.3 Lat e Lon DEVONO essere numeri decimali con PUNTO come UNICO separatore decimale.
 8.4 È VIETATO usare la virgola come separatore decimale in Lat e Lon.
 8.5 Lat e Lon DEVONO avere da 3 a 6 cifre decimali ed essere coerenti con la Location.

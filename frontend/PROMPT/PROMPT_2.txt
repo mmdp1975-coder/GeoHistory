@@ -1,49 +1,84 @@
-# PROMPT 2 ? EVENTI COMPLETI CON NARRAZIONE (OUTPUT JSON)
-# INPUT COMPILATO
+PROMPT 2 - EVENTI COMPLETI CON NARRAZIONE FLUIDA (OUTPUT JSON)
 
 TARGET_AUDIENCE = <INSERISCI TARGET DALLA UI>
-STILI_NARRATIVI = <INSERISCI STILI DALLA UI>
+STILE_NARRATIVO = <INSERISCI STILI DALLA UI>
 LIVELLO_DETTAGLIO = <INSERISCI LIVELLO DETTAGLIO DALLA UI>
 
 REGOLA_STILISTICA_ATTIVA =
 <REGOLE_STILISTICHE_DA_UI>
 
-1) INPUT
+1. INPUT
 - Ricevi SOLO il JSON di PROMPT 1.
-- Titoli, anni e luoghi sono intoccabili.
+- Titoli, anni, continenti, paesi e luoghi sono intoccabili.
 
-2) OBIETTIVO
-- Per ogni evento dell?input, scrivi descrizione IT e EN.
-- Mantieni titoli, anni, luoghi esattamente uguali.
-- Le descrizioni del Journey (IT/EN) sono OBBLIGATORIE e non possono essere vuote.
+2. OBIETTIVO
+- Per ogni evento dell'input, scrivi descrizione IT e EN.
+- Scrivi anche le descrizioni del Journey in IT e EN.
+- Le descrizioni devono essere fluide, leggibili, coerenti tra loro e prive di metatesto.
 
-3) REGOLE MINIME
-3.1 Ogni descrizione evento deve includere:
-- causa immediata
-- azione/decisione principale
-- conseguenza immediata
-- collegamento a un evento prima o dopo
-- 1 dettaglio concreto (luogo, decisione, misura, attore specifico)
-3.2 Ogni evento deve includere anche:
+3. LOGICA NARRATIVA OBBLIGATORIA
+3.1 Ogni descrizione evento deve far percepire:
+- contesto immediato
+- azione, svolta o decisione principale
+- conseguenza immediata o trasformazione prodotta
+- nesso con il processo storico generale del journey
+- almeno 1 dettaglio concreto (attore, luogo, misura, scelta politica, fatto materiale)
+3.2 Il collegamento tra eventi deve essere implicito e naturale.
+3.3 È vietato scrivere formule come:
+- "questo evento si collega al precedente"
+- "collegamento all'evento successivo"
+- "nel prossimo evento"
+- "come visto prima"
+- "in conclusione"
+3.4 Le descrizioni non devono sembrare un elenco di frasi scollegate o una scheda tecnica.
+3.5 Il Journey deve avere una descrizione introduttiva unitaria: deve spiegare il filo conduttore storico e perché gli eventi stanno insieme.
+3.6 Ogni descrizione evento deve sembrare un brano narrativo storico, non una nota didascalica.
+3.7 Alterna periodi medi e più ampi quando utile; evita una catena di frasi tutte uguali e troppo corte.
+3.8 Integra contesto, svolta e conseguenza in modo naturale: non scriverli come tre blocchi scolastici separati.
+3.9 Se LIVELLO_DETTAGLIO = medio, ogni evento deve risultare già pienamente sviluppato, non sintetico.
+3.10 Se LIVELLO_DETTAGLIO = approfondito, ogni evento deve risultare ampio, ricco e chiaramente più esteso del livello medio.
+3.11 Nel livello approfondito devi includere, quando pertinenti: contesto storico, attori in gioco, dinamica interna, posta in gioco, conseguenze immediate e ricadute più larghe.
+3.12 Nel livello approfondito, quando pertinenti, inserisci anche aneddoti brevi, situazioni concrete, dettagli umani o episodi significativi, purché storicamente plausibili e coerenti con l'evento.
+
+4. USO DEGLI INPUT DEL MODAL
+4.1 TARGET_AUDIENCE cambia il registro linguistico.
+4.2 STILE_NARRATIVO cambia ritmo, struttura e tono del testo.
+4.3 LIVELLO_DETTAGLIO cambia la profondità, non solo la lunghezza.
+4.4 REGOLA_STILISTICA_ATTIVA è vincolante e va applicata in tutte le descrizioni.
+
+5. QUALITÀ DEL TESTO
+- Italiano ed inglese devono essere naturali, non traduzioni letterali goffe.
+- Niente ripetizioni meccaniche di struttura o apertura frase.
+- Niente frasi artificiali come "questo mostra che", salvo quando davvero necessario.
+- Preferisci frasi continue e scorrevoli.
+- Il testo deve poter essere letto ad alta voce senza inciampi.
+- Evita tono didascalico, riassunti da manuale e sequenze di frasi troppo corte.
+- Dai al testo energia narrativa attraverso contesto, tensione storica, conseguenze e dettagli concreti.
+- Se il livello è `medio` o `approfondito`, non comprimere la descrizione in poche righe.
+- Nel livello `approfondito`, usa i dettagli narrativi per rendere il testo più vivo, ma non inventare scene o aneddoti non supportati dal contesto storico.
+
+6. DATI TECNICI OBBLIGATORI
+6.1 Ogni evento deve includere anche:
 - lat e lon (numeri decimali con punto, 3-6 cifre decimali)
 - wikipedia_url_it e wikipedia_url_en (link pertinenti)
 - type_event (uno tra: colonialism, culture_society, demographics, diplomacy, economy, environment,
   exploration_expansion, health, humanrights, independence_reform, law_justice, other, politics, revolts,
   science_technology, treaties_agreements, war_conflict)
-- event_date SOLO se nel titolo è presente una data precisa in formato DD/MM/YYYY
+- event_date SOLO se dal contenuto storico sviluppato dell'evento emerge una data precisa, rilevante e affidabile, in formato DD/MM/YYYY
 
-4) OUTPUT
-- Restituisci SOLO JSON valido. Niente testo extra.
+7. OUTPUT
+- Restituisci SOLO JSON valido.
+- Niente testo extra.
 - Nessun campo extra oltre lo schema.
 
-5) SCHEMA JSON
+8. SCHEMA JSON
 {
   "journey_title_it": "<copiato da PROMPT 1>",
   "journey_title_en": "<copiato da PROMPT 1>",
   "journey_description_it": "",
   "journey_description_en": "",
   "target_audience": "<TARGET_AUDIENCE>",
-  "stili_narrativi": "<STILI_NARRATIVI>",
+  "stili_narrativi": "<STILE_NARRATIVO>",
   "livello_dettaglio": "<LIVELLO_DETTAGLIO>",
   "events": [
     {
@@ -67,10 +102,14 @@ REGOLA_STILISTICA_ATTIVA =
   ]
 }
 
-6) ITERAZIONE
+9. VINCOLI FINALI
 - 1 evento in input = 1 evento in output.
 - Numero eventi identico.
 - Titoli evento copiati identici.
-
-7) NOTE FINALI
-- Se qualche regola ? difficile, mantieni comunque JSON valido e completo.
+- Prima di restituire il JSON, rileggi l'intero journey come sequenza narrativa e verifica:
+- progressione tra gli eventi
+- assenza di ripetizioni meccaniche
+- differenza percepibile tra gli eventi
+- coerenza con il livello di dettaglio scelto
+- Se il controllo fallisce, riscrivi le descrizioni prima di chiudere l'output.
+- Se una regola è difficile da rispettare, mantieni comunque JSON valido e completo.

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api/adminAuth";
 import { supabaseAdmin } from "@/lib/supabaseServerClient";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { spawn } from "node:child_process";
 
 export const runtime = "nodejs";
 
 const TTS_MAX_CHARS = 3500;
-const PAUSE_INPUT = " ";
-const PAUSE_INSTRUCTIONS = "Silence only. No speech. Short pause.";
-
 const splitTextForTts = (text: string, maxChars: number) => {
   const chunks: string[] = [];
   const parts = text.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
@@ -38,6 +39,120 @@ const concatArrayBuffers = (buffers: ArrayBuffer[]) => {
     offset += buf.byteLength;
   });
   return merged.buffer;
+};
+
+const runProcess = async (command: string, args: string[], cwd?: string) => {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${command} exited with code ${code}: ${stderr}`));
+    });
+  });
+};
+
+const runProcessCapture = async (command: string, args: string[], cwd?: string) => {
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      reject(new Error(`${command} exited with code ${code}: ${stderr}`));
+    });
+  });
+};
+
+const probeAudioDurationSeconds = async (filePath: string) => {
+  try {
+    const stdout = await runProcessCapture("ffprobe", [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration",
+      "-of",
+      "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ]);
+    const parsed = Number.parseFloat((stdout || "").trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const mergeMp3Files = async (inputPaths: string[], tmpDir?: string): Promise<{ buffer: ArrayBuffer; duration: number }> => {
+  if (!inputPaths.length) {
+    return { buffer: new ArrayBuffer(0), duration: 0 };
+  }
+  const ownedTmpDir = !tmpDir;
+  const workDir = tmpDir ?? await mkdtemp(path.join(os.tmpdir(), "journey-audio-"));
+  try {
+    const listPath = path.join(workDir, "inputs.txt");
+    await writeFile(
+      listPath,
+      inputPaths.map((filePath) => `file '${filePath.replace(/'/g, "'\\''")}'`).join("\n"),
+      "utf8",
+    );
+    const outputPath = path.join(workDir, "merged.mp3");
+    await runProcess("ffmpeg", [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      listPath,
+      "-vn",
+      "-ar",
+      "44100",
+      "-ac",
+      "1",
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      "128k",
+      outputPath,
+    ]);
+    const duration = await probeAudioDurationSeconds(outputPath);
+    const merged = await readFile(outputPath);
+    return {
+      buffer: merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength),
+      duration,
+    };
+  } catch {
+    return { buffer: new ArrayBuffer(0), duration: 0 };
+  } finally {
+    if (ownedTmpDir) {
+      await rm(workDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 };
 
 const findId3Offset = (data: Uint8Array) => {
@@ -240,6 +355,7 @@ export async function POST(req: Request) {
   const tone = typeof payload?.tone === "string" ? payload.tone.trim() : "";
   const journeyId = typeof payload?.journeyId === "string" ? payload.journeyId.trim() : "";
   const title = typeof payload?.title === "string" ? payload.title.trim() : "";
+  const cacheBuster = Date.now();
 
   if (!journeyId) {
     return NextResponse.json({ error: "Missing journeyId" }, { status: 400 });
@@ -255,12 +371,14 @@ export async function POST(req: Request) {
   }
 
   const model = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts";
-  const instructions = tone ? `Tone: ${tone}` : undefined;
+  const baseInstructions =
+    "Speak only the supplied text exactly as written. Do not add filler words, connective phrases, paraphrases, stage directions, labels, pauses, sound effects, breaths, or commentary. Do not insert any extra words between the location/date sentence and the following event description.";
+  const instructions = tone ? `${baseInstructions} Tone: ${tone}` : baseInstructions;
   const baseBody: Record<string, any> = {
     model,
     voice,
     input: "",
-    response_format: "mp3",
+    response_format: "wav",
   };
 
   const callOpenAI = async (input: string, overrideInstructions?: string) => {
@@ -303,59 +421,172 @@ export async function POST(req: Request) {
 
   try {
     const buffers: ArrayBuffer[] = [];
-    const timelineSegments: Array<{ kind: string; index?: number; eventId?: string | null; start: number; end: number }> = [];
+    const timelineSegments: Array<{
+      kind: string;
+      index?: number;
+      eventId?: string | null;
+      start: number;
+      end: number;
+      duration?: number;
+      url?: string;
+      storagePath?: string;
+      text?: string;
+    }> = [];
+    const renderedSegments: Array<{
+      order: number;
+      kind: string;
+      index?: number;
+      eventId?: string | null;
+      start: number;
+      end: number;
+      duration: number;
+      filePath: string;
+    }> = [];
     let cursor = 0;
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), "journey-audio-segments-"));
+    const inputPaths: string[] = [];
 
-    if (segments && segments.length) {
-      for (const seg of segments) {
-        const isPause = String(seg?.kind || "") === "pause";
-        const input = isPause ? PAUSE_INPUT : typeof seg?.text === "string" ? seg.text.trim() : "";
-        if (!input) continue;
-        if (process.env.NODE_ENV === "development") {
-          console.log("[journey-audio] segment", {
-            kind: seg?.kind,
-            index: seg?.index,
-            len: input.length,
+    try {
+      if (segments && segments.length) {
+        for (const seg of segments) {
+          const isPause = String(seg?.kind || "") === "pause";
+          if (isPause) continue;
+          const input = typeof seg?.text === "string" ? seg.text.trim() : "";
+          if (!input) continue;
+          if (process.env.NODE_ENV === "development") {
+            console.log("[journey-audio] segment", {
+              kind: seg?.kind,
+              index: seg?.index,
+              len: input.length,
+            });
+          }
+          const result = await callOpenAI(input);
+          if (!result.ok) {
+            return NextResponse.json(
+              { error: "OpenAI TTS error", status: result.status },
+              { status: 500 },
+            );
+          }
+          const segmentPath = path.join(tmpDir, `segment-${String(inputPaths.length).padStart(3, "0")}.wav`);
+          await writeFile(segmentPath, Buffer.from(result.arrayBuffer));
+          inputPaths.push(segmentPath);
+          const duration = await probeAudioDurationSeconds(segmentPath);
+          const start = cursor;
+          const end = Math.max(start, start + (Number.isFinite(duration) ? duration : 0));
+          cursor = end;
+          const timelineSegment = {
+            kind: seg.kind || "event",
+            index: Number.isFinite(seg.index) ? Number(seg.index) : undefined,
+            eventId: seg.eventId ?? null,
+            start,
+            end,
+            duration: Math.max(0, end - start),
+            text: input,
+          };
+          timelineSegments.push(timelineSegment);
+          renderedSegments.push({
+            order: renderedSegments.length,
+            kind: timelineSegment.kind,
+            index: timelineSegment.index,
+            eventId: timelineSegment.eventId,
+            start,
+            end,
+            duration: Math.max(0, end - start),
+            filePath: segmentPath,
           });
+          buffers.push(result.arrayBuffer);
         }
-        const result = await callOpenAI(input, isPause ? PAUSE_INSTRUCTIONS : undefined);
-        if (!result.ok) {
-          return NextResponse.json(
-            { error: "OpenAI TTS error", status: result.status },
-            { status: 500 },
-          );
+      } else {
+        const chunks = splitTextForTts(text, TTS_MAX_CHARS);
+        for (const chunk of chunks) {
+          const result = await callOpenAI(chunk);
+          if (!result.ok) {
+            return NextResponse.json(
+              { error: "OpenAI TTS error", status: result.status },
+              { status: 500 },
+            );
+          }
+          const segmentPath = path.join(tmpDir, `segment-${String(inputPaths.length).padStart(3, "0")}.wav`);
+          await writeFile(segmentPath, Buffer.from(result.arrayBuffer));
+          inputPaths.push(segmentPath);
+          buffers.push(result.arrayBuffer);
         }
-        const duration = estimateMp3DurationSeconds(result.arrayBuffer);
-        const start = cursor;
-        const end = Math.max(start, start + (Number.isFinite(duration) ? duration : 0));
-        cursor = end;
-        timelineSegments.push({
-          kind: seg.kind || "event",
-          index: Number.isFinite(seg.index) ? Number(seg.index) : undefined,
-          eventId: seg.eventId ?? null,
-          start,
-          end,
-        });
-        buffers.push(result.arrayBuffer);
       }
-    } else {
-      const chunks = splitTextForTts(text, TTS_MAX_CHARS);
-      for (const chunk of chunks) {
-        const result = await callOpenAI(chunk);
-        if (!result.ok) {
-          return NextResponse.json(
-            { error: "OpenAI TTS error", status: result.status },
-            { status: 500 },
-          );
-        }
-        buffers.push(result.arrayBuffer);
-      }
+    } finally {
+      // temp cleanup happens after merge/upload to allow ffmpeg/ffprobe to use the files.
     }
 
-    const merged = concatArrayBuffers(buffers);
+    const mergedResult = await mergeMp3Files(inputPaths, tmpDir);
+    let merged = mergedResult.buffer;
+    if (!merged.byteLength) {
+      merged = concatArrayBuffers(buffers);
+    }
+    if (timelineSegments.length && cursor > 0 && mergedResult.duration > 0) {
+      const ratio = mergedResult.duration / cursor;
+      timelineSegments.forEach((seg) => {
+        seg.start = Number((seg.start * ratio).toFixed(3));
+        seg.end = Number((seg.end * ratio).toFixed(3));
+        seg.duration = Number(Math.max(0, seg.end - seg.start).toFixed(3));
+      });
+      cursor = Number((cursor * ratio).toFixed(3));
+    }
     await ensureAudioBucket();
     if (process.env.NODE_ENV === "development") {
       console.log("[journey-audio] bucket ok", { bucket: AUDIO_BUCKET });
+    }
+
+    if (renderedSegments.length) {
+      const segmentsPrefix = `${journeyId}/segments/${lang}`;
+      try {
+        const { data: listed, error: listErr } = await supabaseAdmin.storage
+          .from(AUDIO_BUCKET)
+          .list(segmentsPrefix, { limit: 200 });
+        if (listErr) {
+          console.warn("[journey-audio] segment storage list error:", listErr.message);
+        } else if (listed?.length) {
+          const oldPaths = listed
+            .map((item) => item?.name)
+            .filter((name): name is string => !!name)
+            .map((name) => `${segmentsPrefix}/${name}`);
+          if (oldPaths.length) {
+            const { error: delErr } = await supabaseAdmin.storage.from(AUDIO_BUCKET).remove(oldPaths);
+            if (delErr) {
+              console.warn("[journey-audio] segment storage remove error:", delErr.message);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn("[journey-audio] segment storage cleanup error:", err?.message || err);
+      }
+
+      for (const rendered of renderedSegments) {
+        const segmentLabel = `${String(rendered.order).padStart(3, "0")}_${sanitizeFilePart(
+          `${rendered.kind}_${rendered.index ?? "intro"}`
+        )}.wav`;
+        const segmentStoragePath = `${segmentsPrefix}/${segmentLabel}`;
+        const segmentBuffer = await readFile(rendered.filePath);
+        const { error: segUploadError } = await supabaseAdmin.storage
+          .from(AUDIO_BUCKET)
+          .upload(segmentStoragePath, segmentBuffer, {
+            upsert: true,
+            contentType: "audio/wav",
+          });
+        if (segUploadError) {
+          console.warn("[journey-audio] segment upload error:", segUploadError.message);
+          continue;
+        }
+        const { data: segPub } = supabaseAdmin.storage.from(AUDIO_BUCKET).getPublicUrl(segmentStoragePath);
+        const matching = timelineSegments.find(
+          (segment) =>
+            segment.kind === rendered.kind &&
+            (segment.index ?? null) === (rendered.index ?? null) &&
+            (segment.eventId ?? null) === (rendered.eventId ?? null)
+        );
+        if (matching) {
+          matching.url = segPub?.publicUrl || "";
+          matching.storagePath = segmentStoragePath;
+        }
+      }
     }
 
     const safeTitle = sanitizeFilePart(title);
@@ -475,6 +706,7 @@ export async function POST(req: Request) {
             audio_timeline: {
               version: 1,
               hasIntro,
+              cacheBuster,
               segments: timelineSegments,
               total: cursor,
             },
@@ -486,6 +718,7 @@ export async function POST(req: Request) {
       }
     }
 
+    await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     return NextResponse.json({ ok: true, fileName, publicUrl, assetId, attachmentId });
   } catch (err: any) {
     return NextResponse.json(

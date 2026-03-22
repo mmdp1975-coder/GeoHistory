@@ -1,506 +1,386 @@
 {
-  "journey_title_it": "Iran: dalla Rivoluzione Costituzionale al conflitto presente",
-  "journey_title_en": "Iran: From the Constitutional Revolution to the Present Conflict",
+  "journey_title_it": "Ernesto 'Che' Guevara: vita e rivoluzione (1928–1967)",
+  "journey_title_en": "Ernesto 'Che' Guevara: Life and Revolution (1928–1967)",
   "events": [
     {
-      "titolo_evento_it": "Sciopero del bazar di Teheran e avvio della Rivoluzione Costituzionale",
-      "title_event_en": "Tehran Bazaar Strike and the Start of the Constitutional Revolution",
+      "titolo_evento_it": "Nascita a Rosario",
+      "title_event_en": "Birth in Rosario",
       "era": "AD",
-      "from": 1905,
-      "to": 1906,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1928,
+      "to": 1928,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Rosario"
     },
     {
-      "titolo_evento_it": "Costituzione del 1906 e apertura del Majles",
-      "title_event_en": "1906 Constitution and Opening of the Majles",
+      "titolo_evento_it": "Trasferimento ad Alta Gracia per curare l'asma",
+      "title_event_en": "Move to Alta Gracia to treat asthma",
       "era": "AD",
-      "from": 1906,
-      "to": 1906,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1932,
+      "to": 1932,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Alta Gracia"
     },
     {
-      "titolo_evento_it": "Convenzione Anglo-Russa del 1907 sulle sfere in Persia",
-      "title_event_en": "1907 Anglo-Russian Convention on Spheres in Persia",
-      "era": "AD",
-      "from": 1907,
-      "to": 1907,
-      "continent": "Europe",
-      "country": "Russia",
-      "location": "Saint Petersburg"
-    },
-    {
-      "titolo_evento_it": "Bombardamento del Majles e colpo di Stato di Mohammad Ali Shah",
-      "title_event_en": "Shelling of the Majles and Coup by Mohammad Ali Shah",
-      "era": "AD",
-      "from": 1908,
-      "to": 1908,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Restaurazione costituzionale e deposizione di Mohammad Ali Shah",
-      "title_event_en": "Constitutionalist March on Tehran and Shah’s Deposition",
-      "era": "AD",
-      "from": 1909,
-      "to": 1909,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Ultimatum russo e chiusura del secondo Majles",
-      "title_event_en": "Russian Ultimatum and Closure of the Second Majles",
-      "era": "AD",
-      "from": 1911,
-      "to": 1911,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Colpo di Stato di Reza Khan e governo Seyyed Zia",
-      "title_event_en": "Reza Khan’s Coup and Seyyed Zia’s Government",
-      "era": "AD",
-      "from": 1921,
-      "to": 1921,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Incoronazione di Reza Shah e fine della dinastia Qajar",
-      "title_event_en": "Coronation of Reza Shah and the End of the Qajar Dynasty",
-      "era": "AD",
-      "from": 1925,
-      "to": 1925,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Centralizzazione e riforme di Reza Shah",
-      "title_event_en": "Reza Shah’s Centralization and State Reforms",
-      "era": "AD",
-      "from": 1925,
-      "to": 1941,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Invasione anglo-sovietica dell'Iran e abdicazione di Reza Shah",
-      "title_event_en": "Anglo-Soviet Invasion and Reza Shah’s Abdication",
+      "titolo_evento_it": "Liceo al Colegio Nacional Deán Funes di Córdoba",
+      "title_event_en": "High school at Colegio Nacional Deán Funes, Córdoba",
       "era": "AD",
       "from": 1941,
-      "to": 1941,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Ascesa al trono di Mohammad Reza Shah Pahlavi",
-      "title_event_en": "Accession of Mohammad Reza Shah Pahlavi",
-      "era": "AD",
-      "from": 1941,
-      "to": 1941,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Crisi dell'Azerbaigian iraniano e ritiro sovietico",
-      "title_event_en": "Iranian Azerbaijan Crisis and Soviet Withdrawal",
-      "era": "AD",
-      "from": 1945,
       "to": 1946,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tabriz"
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Córdoba"
     },
     {
-      "titolo_evento_it": "Nazionalizzazione del petrolio e governo Mossadegh",
-      "title_event_en": "Oil Nationalization and the Mossadegh Government",
+      "titolo_evento_it": "Iscrizione a Medicina all'Università di Buenos Aires",
+      "title_event_en": "Enrollment in Medicine at the University of Buenos Aires",
       "era": "AD",
-      "from": 1951,
-      "to": 1953,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1948,
+      "to": 1948,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Buenos Aires"
     },
     {
-      "titolo_evento_it": "Colpo di Stato del 1953 e restaurazione del potere monarchico",
-      "title_event_en": "1953 Coup and Restoration of Monarchical Power",
+      "titolo_evento_it": "Primo viaggio in Argentina in motocicletta ausiliata",
+      "title_event_en": "First long trip across Argentina on a motorized bicycle",
+      "era": "AD",
+      "from": 1950,
+      "to": 1950,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Buenos Aires"
+    },
+    {
+      "titolo_evento_it": "Partenza del viaggio latinoamericano con Alberto Granado",
+      "title_event_en": "Departure of the Latin American journey with Alberto Granado",
+      "era": "AD",
+      "from": 1952,
+      "to": 1952,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Córdoba"
+    },
+    {
+      "titolo_evento_it": "Esperienza al lebbrosario di San Pablo sul Rio delle Amazzoni",
+      "title_event_en": "Experience at the San Pablo leprosy clinic on the Amazon",
+      "era": "AD",
+      "from": 1952,
+      "to": 1952,
+      "continent": "South America",
+      "country": "Peru",
+      "location": "San Pablo (Loreto)"
+    },
+    {
+      "titolo_evento_it": "Rientro a Buenos Aires e ripresa degli studi medici",
+      "title_event_en": "Return to Buenos Aires and resumption of medical studies",
+      "era": "AD",
+      "from": 1952,
+      "to": 1953,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Buenos Aires"
+    },
+    {
+      "titolo_evento_it": "Laurea in Medicina all'Università di Buenos Aires",
+      "title_event_en": "Medical degree from the University of Buenos Aires",
       "era": "AD",
       "from": 1953,
       "to": 1953,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Buenos Aires"
     },
     {
-      "titolo_evento_it": "Creazione del SAVAK e repressione dell'opposizione",
-      "title_event_en": "Creation of SAVAK and Systematic Repression",
+      "titolo_evento_it": "Secondo viaggio latinoamericano post-laurea verso il Centro America",
+      "title_event_en": "Post-graduation Latin American journey toward Central America",
+      "era": "AD",
+      "from": 1953,
+      "to": 1954,
+      "continent": "South America",
+      "country": "Argentina",
+      "location": "Buenos Aires"
+    },
+    {
+      "titolo_evento_it": "Testimone del colpo di stato in Guatemala e radicalizzazione",
+      "title_event_en": "Witness to the Guatemalan coup and radicalization",
+      "era": "AD",
+      "from": 1954,
+      "to": 1954,
+      "continent": "North America",
+      "country": "Guatemala",
+      "location": "Guatemala City"
+    },
+    {
+      "titolo_evento_it": "Esilio a Città del Messico e lavoro come medico",
+      "title_event_en": "Exile to Mexico City and work as a physician",
+      "era": "AD",
+      "from": 1954,
+      "to": 1955,
+      "continent": "North America",
+      "country": "Mexico",
+      "location": "Mexico City"
+    },
+    {
+      "titolo_evento_it": "Incontro con Fidel Castro e adesione al Movimento 26 Luglio",
+      "title_event_en": "Meeting Fidel Castro and joining the 26th of July Movement",
+      "era": "AD",
+      "from": 1955,
+      "to": 1955,
+      "continent": "North America",
+      "country": "Mexico",
+      "location": "Mexico City"
+    },
+    {
+      "titolo_evento_it": "Matrimonio con Hilda Gadea a Città del Messico",
+      "title_event_en": "Marriage to Hilda Gadea in Mexico City",
+      "era": "AD",
+      "from": 1955,
+      "to": 1955,
+      "continent": "North America",
+      "country": "Mexico",
+      "location": "Mexico City"
+    },
+    {
+      "titolo_evento_it": "Arresto e rilascio durante l'addestramento clandestino in Messico",
+      "title_event_en": "Arrest and release during clandestine training in Mexico",
+      "era": "AD",
+      "from": 1956,
+      "to": 1956,
+      "continent": "North America",
+      "country": "Mexico",
+      "location": "Mexico City"
+    },
+    {
+      "titolo_evento_it": "Partenza del Granma da Tuxpan verso Cuba",
+      "title_event_en": "Granma sets sail from Tuxpan for Cuba",
+      "era": "AD",
+      "from": 1956,
+      "to": 1956,
+      "continent": "North America",
+      "country": "Mexico",
+      "location": "Tuxpan"
+    },
+    {
+      "titolo_evento_it": "Sbarco a Niquero e ripiegamento sulla Sierra Maestra",
+      "title_event_en": "Landing at Niquero and retreat to the Sierra Maestra",
+      "era": "AD",
+      "from": 1956,
+      "to": 1956,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Niquero"
+    },
+    {
+      "titolo_evento_it": "Ascesa a comandante nella guerriglia della Sierra Maestra",
+      "title_event_en": "Rise to comandante in the Sierra Maestra guerrilla",
       "era": "AD",
       "from": 1957,
-      "to": 1978,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "to": 1958,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Sierra Maestra"
     },
     {
-      "titolo_evento_it": "Rivoluzione Bianca: riforme socioeconomiche dello Shah",
-      "title_event_en": "White Revolution: Socioeconomic Reforms of the Shah",
+      "titolo_evento_it": "Battaglia di Santa Clara e caduta del regime di Batista",
+      "title_event_en": "Battle of Santa Clara and the fall of Batista’s regime",
+      "era": "AD",
+      "from": 1958,
+      "to": 1958,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Santa Clara"
+    },
+    {
+      "titolo_evento_it": "Entrata a L'Avana e avvio del nuovo governo rivoluzionario",
+      "title_event_en": "Entry into Havana and launch of the revolutionary government",
+      "era": "AD",
+      "from": 1959,
+      "to": 1959,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Direzione dei tribunali rivoluzionari a La Cabaña",
+      "title_event_en": "Direction of revolutionary tribunals at La Cabaña",
+      "era": "AD",
+      "from": 1959,
+      "to": 1959,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Concessione della cittadinanza cubana",
+      "title_event_en": "Cuban citizenship conferred",
+      "era": "AD",
+      "from": 1959,
+      "to": 1959,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Prima missione economico-diplomatica in Africa e Asia",
+      "title_event_en": "First economic-diplomatic mission to Africa and Asia",
+      "era": "AD",
+      "from": 1959,
+      "to": 1959,
+      "continent": "Africa",
+      "country": "Egypt",
+      "location": "Cairo"
+    },
+    {
+      "titolo_evento_it": "Nomina a Presidente della Banca Nazionale di Cuba",
+      "title_event_en": "Appointed President of the National Bank of Cuba",
+      "era": "AD",
+      "from": 1959,
+      "to": 1959,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Scatto di Korda: il 'Guerrillero Heroico' all'Avana",
+      "title_event_en": "Korda’s photograph 'Guerrillero Heroico' in Havana",
+      "era": "AD",
+      "from": 1960,
+      "to": 1960,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Nomina a Ministro dell'Industria a Cuba",
+      "title_event_en": "Appointed Minister of Industries in Cuba",
+      "era": "AD",
+      "from": 1961,
+      "to": 1961,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Crisi di Playa Girón e consolidamento della rivoluzione",
+      "title_event_en": "Bay of Pigs crisis and consolidation of the revolution",
+      "era": "AD",
+      "from": 1961,
+      "to": 1961,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Playa Girón"
+    },
+    {
+      "titolo_evento_it": "Crisi dei missili a Cuba e posizione intransigente",
+      "title_event_en": "Cuban Missile Crisis and uncompromising stance",
+      "era": "AD",
+      "from": 1962,
+      "to": 1962,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
+    },
+    {
+      "titolo_evento_it": "Il 'Grande dibattito' sull'economia socialista a Cuba",
+      "title_event_en": "The 'Great Debate' on socialist economics in Cuba",
       "era": "AD",
       "from": 1963,
-      "to": 1963,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "to": 1964,
+      "continent": "North America",
+      "country": "Cuba",
+      "location": "Havana"
     },
     {
-      "titolo_evento_it": "Proteste di giugno 1963 e ascesa di Ruhollah Khomeini",
-      "title_event_en": "June 1963 Protests and the Rise of Ruhollah Khomeini",
-      "era": "AD",
-      "from": 1963,
-      "to": 1963,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Qom"
-    },
-    {
-      "titolo_evento_it": "Arresto ed esilio di Khomeini",
-      "title_event_en": "Arrest and Exile of Khomeini",
+      "titolo_evento_it": "Intervento all'Assemblea Generale delle Nazioni Unite",
+      "title_event_en": "Address to the United Nations General Assembly",
       "era": "AD",
       "from": 1964,
       "to": 1964,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Partito unico Rastakhiz e rafforzamento autoritario",
-      "title_event_en": "Single-Party Rastakhiz and Authoritarian Tightening",
-      "era": "AD",
-      "from": 1975,
-      "to": 1978,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Venerdì Nero in Piazza Jaleh a Teheran",
-      "title_event_en": "Black Friday at Jaleh Square in Tehran",
-      "era": "AD",
-      "from": 1978,
-      "to": 1978,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Partenza dello Shah dall'Iran",
-      "title_event_en": "The Shah Leaves Iran",
-      "era": "AD",
-      "from": 1979,
-      "to": 1979,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Ritorno di Khomeini e crollo della monarchia",
-      "title_event_en": "Khomeini’s Return and the Fall of the Monarchy",
-      "era": "AD",
-      "from": 1979,
-      "to": 1979,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Referendum e proclamazione della Repubblica Islamica",
-      "title_event_en": "Referendum and Proclamation of the Islamic Republic",
-      "era": "AD",
-      "from": 1979,
-      "to": 1979,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Crisi degli ostaggi all'Ambasciata USA a Teheran",
-      "title_event_en": "U.S. Embassy Hostage Crisis in Tehran",
-      "era": "AD",
-      "from": 1979,
-      "to": 1981,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Inizio della guerra Iran-Iraq con l'attacco a Khuzestan",
-      "title_event_en": "Start of the Iran–Iraq War with the Attack on Khuzestan",
-      "era": "AD",
-      "from": 1980,
-      "to": 1980,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Khorramshahr"
-    },
-    {
-      "titolo_evento_it": "Impeachment di Abolhassan Bani Sadr e consolidamento dei rivoluzionari",
-      "title_event_en": "Impeachment of Bani Sadr and Revolutionary Consolidation",
-      "era": "AD",
-      "from": 1981,
-      "to": 1981,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Prosecuzione della guerra e militarizzazione dello Stato",
-      "title_event_en": "Continuation of the War and State Militarization",
-      "era": "AD",
-      "from": 1982,
-      "to": 1988,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Cessate il fuoco con l'Iraq e accettazione della Risoluzione 598",
-      "title_event_en": "Ceasefire with Iraq and Acceptance of U.N. Resolution 598",
-      "era": "AD",
-      "from": 1988,
-      "to": 1988,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Morte di Khomeini e nomina di Ali Khamenei a Guida Suprema",
-      "title_event_en": "Death of Khomeini and Appointment of Ali Khamenei as Supreme Leader",
-      "era": "AD",
-      "from": 1989,
-      "to": 1989,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Presidenza di Akbar Hashemi Rafsanjani e ricostruzione",
-      "title_event_en": "Presidency of Akbar Hashemi Rafsanjani and Reconstruction",
-      "era": "AD",
-      "from": 1989,
-      "to": 1997,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Elezione di Mohammad Khatami e stagione riformista",
-      "title_event_en": "Election of Mohammad Khatami and the Reformist Opening",
-      "era": "AD",
-      "from": 1997,
-      "to": 2005,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Proteste studentesche del luglio 1999 a Teheran",
-      "title_event_en": "July 1999 Student Protests in Tehran",
-      "era": "AD",
-      "from": 1999,
-      "to": 1999,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Rivelazione dei siti nucleari di Natanz e Arak",
-      "title_event_en": "Revelation of Natanz and Arak Nuclear Sites",
-      "era": "AD",
-      "from": 2002,
-      "to": 2002,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Natanz"
-    },
-    {
-      "titolo_evento_it": "Accordo di Teheran con l'UE-3 e sospensione temporanea dell'arricchimento",
-      "title_event_en": "Tehran Agreement with the EU-3 and Temporary Suspension",
-      "era": "AD",
-      "from": 2003,
-      "to": 2005,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Elezione di Mahmoud Ahmadinejad e svolta confrontazionale",
-      "title_event_en": "Election of Mahmoud Ahmadinejad and Confrontational Turn",
-      "era": "AD",
-      "from": 2005,
-      "to": 2013,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Sanzioni del Consiglio di Sicurezza ONU sul nucleare iraniano",
-      "title_event_en": "U.N. Security Council Sanctions on Iran’s Nuclear Program",
-      "era": "AD",
-      "from": 2006,
-      "to": 2010,
       "continent": "North America",
       "country": "United States",
-      "location": "New York"
+      "location": "New York City"
     },
     {
-      "titolo_evento_it": "Elezioni contestate del 2009 e nascita del Movimento Verde",
-      "title_event_en": "Disputed 2009 Election and the Green Movement",
+      "titolo_evento_it": "Discorso di Algeri contro lo 'scambio ineguale'",
+      "title_event_en": "Algiers speech against 'unequal exchange'",
       "era": "AD",
-      "from": 2009,
-      "to": 2009,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1965,
+      "to": 1965,
+      "continent": "Africa",
+      "country": "Algeria",
+      "location": "Algiers"
     },
     {
-      "titolo_evento_it": "Attacchi informatici e sabotaggi a Natanz (Stuxnet)",
-      "title_event_en": "Cyberattacks and Sabotage at Natanz (Stuxnet)",
+      "titolo_evento_it": "Missione guerrigliera nel Congo",
+      "title_event_en": "Guerrilla mission in the Congo",
       "era": "AD",
-      "from": 2010,
-      "to": 2012,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Natanz"
+      "from": 1965,
+      "to": 1965,
+      "continent": "Africa",
+      "country": "Democratic Republic of the Congo",
+      "location": "Kivu"
     },
     {
-      "titolo_evento_it": "Elezione di Hassan Rouhani e ripresa dei negoziati nucleari",
-      "title_event_en": "Election of Hassan Rouhani and Resumption of Nuclear Talks",
+      "titolo_evento_it": "Ritiro dal Congo e transito clandestino via Dar es Salaam",
+      "title_event_en": "Withdrawal from the Congo and clandestine transit via Dar es Salaam",
       "era": "AD",
-      "from": 2013,
-      "to": 2013,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1965,
+      "to": 1966,
+      "continent": "Africa",
+      "country": "Tanzania",
+      "location": "Dar es Salaam"
     },
     {
-      "titolo_evento_it": "Accordo sul nucleare JCPOA firmato a Vienna",
-      "title_event_en": "JCPOA Nuclear Deal Signed in Vienna",
+      "titolo_evento_it": "Rientro segreto a Cuba e preparazione della campagna in Bolivia",
+      "title_event_en": "Secret return to Cuba and preparation for the Bolivian campaign",
       "era": "AD",
-      "from": 2015,
-      "to": 2015,
-      "continent": "Europe",
-      "country": "Austria",
-      "location": "Vienna"
-    },
-    {
-      "titolo_evento_it": "Ritiro degli Stati Uniti dal JCPOA e ripristino delle sanzioni",
-      "title_event_en": "U.S. Withdrawal from the JCPOA and Reimposition of Sanctions",
-      "era": "AD",
-      "from": 2018,
-      "to": 2018,
+      "from": 1966,
+      "to": 1966,
       "continent": "North America",
-      "country": "United States",
-      "location": "Washington"
+      "country": "Cuba",
+      "location": "Havana"
     },
     {
-      "titolo_evento_it": "Proteste per il caro carburante e repressione del novembre 2019",
-      "title_event_en": "Fuel Price Protests and Harsh Crackdown",
+      "titolo_evento_it": "Ingresso clandestino in Bolivia e base di Ñancahuazú",
+      "title_event_en": "Clandestine entry into Bolivia and the Ñancahuazú base",
       "era": "AD",
-      "from": 2019,
-      "to": 2019,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1966,
+      "to": 1966,
+      "continent": "South America",
+      "country": "Bolivia",
+      "location": "Ñancahuazú"
     },
     {
-      "titolo_evento_it": "Uccisione di Qassem Soleimani a Baghdad",
-      "title_event_en": "Killing of Qassem Soleimani in Baghdad",
+      "titolo_evento_it": "Campagna guerrigliera in Bolivia e logoramento del gruppo",
+      "title_event_en": "Guerrilla campaign in Bolivia and erosion of the group",
       "era": "AD",
-      "from": 2020,
-      "to": 2020,
-      "continent": "Asia",
-      "country": "Iraq",
-      "location": "Baghdad"
+      "from": 1967,
+      "to": 1967,
+      "continent": "South America",
+      "country": "Bolivia",
+      "location": "Ñancahuazú"
     },
     {
-      "titolo_evento_it": "Elezione di Ebrahim Raisi e consolidamento conservatore",
-      "title_event_en": "Election of Ebrahim Raisi and Conservative Consolidation",
+      "titolo_evento_it": "Cattura alla Quebrada del Yuro",
+      "title_event_en": "Capture at Quebrada del Yuro",
       "era": "AD",
-      "from": 2021,
-      "to": 2021,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1967,
+      "to": 1967,
+      "continent": "South America",
+      "country": "Bolivia",
+      "location": "Quebrada del Yuro"
     },
     {
-      "titolo_evento_it": "Ripresa dell'arricchimento al 60% e stallo dei colloqui",
-      "title_event_en": "60% Enrichment Resumed and Talks at an Impasse",
+      "titolo_evento_it": "Esecuzione a La Higuera",
+      "title_event_en": "Execution at La Higuera",
       "era": "AD",
-      "from": 2021,
-      "to": 2022,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Fordow"
-    },
-    {
-      "titolo_evento_it": "Morte di Mahsa Amini e proteste 'Donna, Vita, Libertà'",
-      "title_event_en": "Death of Mahsa Amini and ‘Woman, Life, Freedom’ Protests",
-      "era": "AD",
-      "from": 2022,
-      "to": 2023,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
-    },
-    {
-      "titolo_evento_it": "Riapertura dei rapporti Iran–Arabia Saudita mediata dalla Cina",
-      "title_event_en": "Iran–Saudi Rapprochement Brokered in Beijing",
-      "era": "AD",
-      "from": 2023,
-      "to": 2023,
-      "continent": "Asia",
-      "country": "China",
-      "location": "Beijing"
-    },
-    {
-      "titolo_evento_it": "Guerra Israele–Hamas e attivazione dell'Asse della Resistenza filo-iraniano",
-      "title_event_en": "Israel–Hamas War and Activation of Iran’s ‘Axis of Resistance’",
-      "era": "AD",
-      "from": 2023,
-      "to": 2024,
-      "continent": "Asia",
-      "country": "Lebanon",
-      "location": "Beirut"
-    },
-    {
-      "titolo_evento_it": "Attacco al consolato iraniano a Damasco attribuito a Israele",
-      "title_event_en": "Strike on the Iranian Consulate in Damascus Attributed to Israel",
-      "era": "AD",
-      "from": 2024,
-      "to": 2024,
-      "continent": "Asia",
-      "country": "Syria",
-      "location": "Damascus"
-    },
-    {
-      "titolo_evento_it": "Primo attacco diretto iraniano con droni e missili contro Israele",
-      "title_event_en": "Iran’s First Direct Drone and Missile Attack on Israel",
-      "era": "AD",
-      "from": 2024,
-      "to": 2024,
-      "continent": "Asia",
-      "country": "Iran",
-      "location": "Tehran"
+      "from": 1967,
+      "to": 1967,
+      "continent": "South America",
+      "country": "Bolivia",
+      "location": "La Higuera"
     }
   ]
 }

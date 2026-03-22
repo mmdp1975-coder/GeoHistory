@@ -108,30 +108,14 @@ const MEDIA_KIND_OPTIONS: { value: MediaKind; label: string }[] = [
   { value: "other", label: "Altro" },
 ];
 
-const NEW_JOURNEY_TARGET_OPTIONS = [
-  "Ragazzi 10-15",
-  "Studenti 16-20",
-  "Studenti universitari",
-  "Professori",
-  "Appassionati di storia",
-  "Storici / ricercatori",
-];
+const NEW_JOURNEY_TARGET_OPTIONS = ["Giovani", "Studenti", "Esperti"];
 
-const NEW_JOURNEY_STYLE_OPTIONS = [
-  "Documentaristico coinvolgente",
-  "Cronaca storica",
-  "Narrativo immersivo",
-  "Analitico-interpretativo",
-  "Story-driven (light)",
-];
+const NEW_JOURNEY_STYLE_OPTIONS = ["Documentaristico", "Narrativo", "Analitico"];
 
-const NEW_JOURNEY_STYLE_BY_AUDIENCE: Record<string, string[]> = {
-  "Ragazzi 10-15": ["Narrativo immersivo", "Story-driven (light)"],
-  "Studenti 16-20": ["Documentaristico coinvolgente", "Cronaca storica"],
-  "Studenti universitari": ["Analitico-interpretativo", "Documentaristico coinvolgente"],
-  "Professori": ["Analitico-interpretativo", "Cronaca storica"],
-  "Appassionati di storia": ["Documentaristico coinvolgente", "Story-driven (light)"],
-  "Storici / ricercatori": ["Analitico-interpretativo", "Cronaca storica"],
+const DEFAULT_STYLE_BY_AUDIENCE: Record<string, string> = {
+  Giovani: "Narrativo",
+  Studenti: "Documentaristico",
+  Esperti: "Analitico",
 };
 
 const DEFAULT_MEDIA_ROLES = ["gallery", "cover", "poster", "context"];
@@ -288,6 +272,15 @@ const normalizeMediaKind = (value?: string | null): MediaKind => {
     return "image";
   }
   const normalized = value.toLowerCase();
+  if (normalized === "audio" || normalized.startsWith("audio/")) {
+    return "audio";
+  }
+  if (normalized === "video" || normalized.startsWith("video/")) {
+    return "video";
+  }
+  if (normalized === "image" || normalized.startsWith("image/")) {
+    return "image";
+  }
   return MEDIA_KIND_OPTIONS.some((option) => option.value === normalized)
     ? (normalized as MediaKind)
     : "image";
@@ -619,10 +612,13 @@ const buildEventSpeechParts = (ev: JourneyEventEditor, lang: string) => {
   const tr = getEventTranslationForLang(ev, lang);
   const title = tr.title || (isIt ? "Evento" : "Event");
   const description = (tr.description || tr.description_short || "").trim();
-
-  const timeChunk = formatFromToChunk(ev, lang);
-  const placeChunk = place ? `, ${place}` : "";
-  const header = `${title}. ${timeChunk}${placeChunk}.`;
+  const placeChunk = place ? (isIt ? `, a ${place}` : `, in ${place}`) : "";
+  const timeChunk = ev.event.exact_date
+    ? formatExactDateForSpeech(ev.event.exact_date, lang)
+    : formatFromToChunk(ev, lang);
+  const header = ev.event.exact_date
+    ? (isIt ? `${title}. Il ${timeChunk}${placeChunk}.` : `${title}. On ${timeChunk}${placeChunk}.`)
+    : (isIt ? `${title}. ${timeChunk}${placeChunk}.` : `${title}. ${timeChunk}${placeChunk}.`);
   return { header, description };
 };
 
@@ -700,9 +696,9 @@ export default function BuildJourneyPage() {
   const [importActiveLang, setImportActiveLang] = useState<string>(DEFAULT_LANGUAGE);
   const [newJourneyOpen, setNewJourneyOpen] = useState(false);
   const [newJourneyTitle, setNewJourneyTitle] = useState("");
-  const [newJourneyAudience, setNewJourneyAudience] = useState("Appassionati di storia");
-  const [newJourneyStyles, setNewJourneyStyles] = useState<string[]>([]);
-  const [newJourneyDetailLevel, setNewJourneyDetailLevel] = useState<"breve" | "medio" | "alto">("medio");
+  const [newJourneyAudience, setNewJourneyAudience] = useState("Studenti");
+  const [newJourneyStyle, setNewJourneyStyle] = useState<string>(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
+  const [newJourneyDetailLevel, setNewJourneyDetailLevel] = useState<"breve" | "medio" | "approfondito">("medio");
   const [newJourneyEventGuideline, setNewJourneyEventGuideline] = useState("");
   const [newJourneyRunning, setNewJourneyRunning] = useState(false);
   const [newJourneyJobId, setNewJourneyJobId] = useState<string | null>(null);
@@ -721,6 +717,21 @@ export default function BuildJourneyPage() {
   const [newJourneyLog, setNewJourneyLog] = useState("");
   const [newJourneyPendingPayload, setNewJourneyPendingPayload] = useState<any | null>(null);
   const [newJourneyCopyMessage, setNewJourneyCopyMessage] = useState<string | null>(null);
+  const [reelOpen, setReelOpen] = useState(false);
+  const [reelTitle, setReelTitle] = useState("");
+  const [reelGenerating, setReelGenerating] = useState(false);
+  const [reelError, setReelError] = useState<string | null>(null);
+  const [reelOk, setReelOk] = useState<string | null>(null);
+  const [reelJobId, setReelJobId] = useState<string | null>(null);
+  const [reelStage, setReelStage] = useState<string>("idle");
+  const [reelElapsed, setReelElapsed] = useState(0);
+  const [reelTotalElapsed, setReelTotalElapsed] = useState(0);
+  const [reelStepDurations, setReelStepDurations] = useState<Record<string, number>>({});
+  const [reelLog, setReelLog] = useState("");
+  const [reelLogOpen, setReelLogOpen] = useState(false);
+  const [reelCopyMessage, setReelCopyMessage] = useState<string | null>(null);
+  const [reelFacts, setReelFacts] = useState<Record<string, any> | null>(null);
+  const [reelMaterials, setReelMaterials] = useState<Record<string, any> | null>(null);
   const [audioGenerating, setAudioGenerating] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioOk, setAudioOk] = useState<string | null>(null);
@@ -736,6 +747,7 @@ export default function BuildJourneyPage() {
   const audioStartRef = useRef<number | null>(null);
   const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
   const newJourneyPollRef = useRef<number | null>(null);
+  const newJourneyPollInFlightRef = useRef(false);
   const newJourneyTokenRef = useRef<string | null>(null);
   const newJourneyRefreshRef = useRef<number | null>(null);
   const newJourneyStepRef = useRef<"1" | "2" | "3" | null>(null);
@@ -744,10 +756,20 @@ export default function BuildJourneyPage() {
   const newJourneyTotalStartRef = useRef<number | null>(null);
   const newJourneyStepStartRef = useRef<number | null>(null);
   const newJourneyTotalAccumRef = useRef<number>(0);
+  const reelPollRef = useRef<number | null>(null);
+  const reelPollInFlightRef = useRef(false);
+  const reelTokenRef = useRef<string | null>(null);
+  const reelRefreshRef = useRef<number | null>(null);
+  const reelTimerRef = useRef<number | null>(null);
+  const reelTotalTimerRef = useRef<number | null>(null);
+  const reelTotalStartRef = useRef<number | null>(null);
+  const reelStageStartRef = useRef<number | null>(null);
+  const reelTotalAccumRef = useRef<number>(0);
+  const reelCurrentStageRef = useRef<string>("idle");
   const newJourneyCanRun =
     !!newJourneyTitle.trim() &&
     !!newJourneyAudience &&
-    newJourneyStyles.length > 0 &&
+    !!newJourneyStyle &&
     !!newJourneyEventGuideline.trim() &&
     !newJourneyRunning;
   const lastAutoSlugRef = useRef<string>("");
@@ -787,12 +809,9 @@ export default function BuildJourneyPage() {
 
   useEffect(() => {
     if (!newJourneyAudience) return;
-    const allowedStyles = NEW_JOURNEY_STYLE_BY_AUDIENCE[newJourneyAudience];
-    if (!allowedStyles || allowedStyles.length === 0) return;
-    setNewJourneyStyles((prev) => {
-      const filtered = prev.filter((style) => allowedStyles.includes(style));
-      if (filtered.length === 0) return [allowedStyles[0]];
-      return filtered;
+    setNewJourneyStyle((prev) => {
+      if (prev && NEW_JOURNEY_STYLE_OPTIONS.includes(prev)) return prev;
+      return DEFAULT_STYLE_BY_AUDIENCE[newJourneyAudience] || NEW_JOURNEY_STYLE_OPTIONS[0];
     });
   }, [newJourneyAudience]);
 
@@ -1043,7 +1062,7 @@ export default function BuildJourneyPage() {
       const title = tr.title?.trim() || bestTitleForAuto?.trim() || "Journey";
       const description = tr.description?.trim() || ge.description?.trim() || "";
       const segments: Array<{
-        kind: "intro" | "event_header" | "event_desc" | "pause";
+        kind: "intro" | "event_header";
         index?: number;
         eventId?: string | null;
         text: string;
@@ -1053,30 +1072,19 @@ export default function BuildJourneyPage() {
           kind: "intro",
           text: buildIntroText(lang, description, title),
         });
-        segments.push({ kind: "pause", text: "..." });
       }
       const ordered = sortedEvents.length ? sortedEvents : journeyEvents;
       ordered.forEach((ev, idx) => {
         const parts = buildEventSpeechParts(ev, lang);
         const eventId = ev.event_id ?? ev.tempId ?? null;
-        if (parts.header) {
+        const eventText = [parts.header, parts.description].filter(Boolean).join(" ").trim();
+        if (eventText) {
           segments.push({
             kind: "event_header",
             index: idx,
             eventId,
-            text: parts.header,
+            text: eventText,
           });
-        }
-        if (parts.description) {
-          segments.push({
-            kind: "event_desc",
-            index: idx,
-            eventId,
-            text: parts.description,
-          });
-        }
-        if (idx < ordered.length - 1) {
-          segments.push({ kind: "pause", text: "..." });
         }
       });
       return segments;
@@ -1103,8 +1111,16 @@ export default function BuildJourneyPage() {
     setAudioOk(null);
     setAudioProgress(null);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      try {
+        await supabase.auth.refreshSession();
+      } catch {
+        // Best-effort refresh; fallback to current session.
+      }
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token ?? null;
+      if (sessionError) {
+        throw new Error((sessionError.message || "Auth session missing!"));
+      }
       if (!accessToken) {
         throw new Error("Auth session missing!");
       }
@@ -1114,7 +1130,7 @@ export default function BuildJourneyPage() {
       const runOne = async (
         lang: "it" | "en",
         text: string,
-        segments: { kind: "intro" | "event_header" | "event_desc" | "pause"; index?: number; eventId?: string | null; text: string }[],
+        segments: { kind: "intro" | "event_header"; index?: number; eventId?: string | null; text: string }[],
       ) => {
         if (!text) return;
         const toneInstruction = toneEntry
@@ -3434,11 +3450,122 @@ export default function BuildJourneyPage() {
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const normalizeReelStage = (stage?: string | null) => {
+    if (!stage) return null;
+    const s = stage.toLowerCase();
+    if (s.includes("reel_structure")) return "reel_structure";
+    if (s.includes("save_json")) return "save_json";
+    if (s.includes("assets") || s.includes("sora") || s.includes("google_earth")) return "assets";
+    if (s.includes("voiceover")) return "voiceover";
+    if (s.includes("scene_clips")) return "scene_clips";
+    if (s.includes("concat")) return "concat";
+    if (s.includes("music")) return "music";
+    if (s.includes("assemble_video")) return "assemble_video";
+    if (s.includes("done")) return "done";
+    return s;
+  };
+
+  const buildReelLog = (payload?: { error?: string; stdout?: string; stderr?: string }) => {
+    const parts: string[] = [];
+    if (payload?.error) parts.push(`[ERROR]\n${payload.error}`);
+    if (payload?.stdout) parts.push(`[STDOUT]\n${payload.stdout}`);
+    if (payload?.stderr) parts.push(`[STDERR]\n${payload.stderr}`);
+    return parts.join("\n\n").trim();
+  };
+
+  const parseReelMarkerJson = (stdout: string | undefined, marker: string) => {
+    if (!stdout) return null;
+    const idx = stdout.lastIndexOf(marker);
+    if (idx === -1) return null;
+    const tail = stdout.slice(idx + marker.length);
+    const line = tail.split(/\r?\n/)[0]?.trim();
+    if (!line) return null;
+    try {
+      return JSON.parse(line);
+    } catch {
+      return null;
+    }
+  };
+
+  const humanizeMaterialType = (value?: string) => {
+    const key = (value || "").toLowerCase();
+    if (key === "sora_video") return "Sora cinematic shot";
+    if (key === "sora_fallback_placeholder") return "Cinematic fallback visual";
+    if (key === "google_earth_video") return "Google Earth Studio flight";
+    if (key === "google_earth_placeholder") return "Geo transition placeholder";
+    return value || "Unknown asset";
+  };
+
+  const humanizeVoiceoverType = (value?: string) => {
+    const key = (value || "").toLowerCase();
+    if (key === "openai_tts") return "AI warm/professional voice";
+    if (key === "silent_fallback") return "Silent fallback track";
+    return value || "Unknown voiceover";
+  };
+
+  const humanizeMusicType = (value?: string) => {
+    const key = (value || "").toLowerCase();
+    if (key === "generated_background") return "Cinematic background score";
+    return value || "Unknown music";
+  };
+
+  const clearReelPolling = () => {
+    if (reelPollRef.current) {
+      window.clearInterval(reelPollRef.current);
+      reelPollRef.current = null;
+    }
+    reelPollInFlightRef.current = false;
+  };
+
+  const clearReelRefresh = () => {
+    if (reelRefreshRef.current) {
+      window.clearInterval(reelRefreshRef.current);
+      reelRefreshRef.current = null;
+    }
+  };
+
+  const clearReelTimer = () => {
+    if (reelTimerRef.current) {
+      window.clearInterval(reelTimerRef.current);
+      reelTimerRef.current = null;
+    }
+  };
+
+  const clearReelTotalTimer = () => {
+    if (reelTotalTimerRef.current) {
+      window.clearInterval(reelTotalTimerRef.current);
+      reelTotalTimerRef.current = null;
+    }
+  };
+
+  const pauseReelTotalTimer = () => {
+    if (reelTotalStartRef.current) {
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - reelTotalStartRef.current) / 1000));
+      reelTotalAccumRef.current += elapsedSeconds;
+      reelTotalStartRef.current = null;
+      setReelTotalElapsed(reelTotalAccumRef.current);
+    }
+    clearReelTotalTimer();
+  };
+
+  const startReelTotalTimer = () => {
+    if (reelTotalStartRef.current) return;
+    reelTotalStartRef.current = Date.now();
+    clearReelTotalTimer();
+    reelTotalTimerRef.current = window.setInterval(() => {
+      const startedAt = reelTotalStartRef.current;
+      if (!startedAt) return;
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      setReelTotalElapsed(reelTotalAccumRef.current + elapsedSeconds);
+    }, 1000);
+  };
+
   const clearNewJourneyPolling = () => {
     if (newJourneyPollRef.current) {
       window.clearInterval(newJourneyPollRef.current);
       newJourneyPollRef.current = null;
     }
+    newJourneyPollInFlightRef.current = false;
   };
 
   const clearNewJourneyRefresh = () => {
@@ -3489,6 +3616,10 @@ export default function BuildJourneyPage() {
     clearNewJourneyRefresh();
     clearNewJourneyTimer();
     clearNewJourneyTotalTimer();
+    clearReelPolling();
+    clearReelRefresh();
+    clearReelTimer();
+    clearReelTotalTimer();
   }, []);
 
   const refreshNewJourneySession = async () => {
@@ -3519,7 +3650,27 @@ export default function BuildJourneyPage() {
     };
   }, [newJourneyRunning, newJourneyJobId]);
 
+  useEffect(() => {
+    if (!reelGenerating || !reelJobId) {
+      clearReelRefresh();
+      return;
+    }
+    refreshNewJourneySession().then((token) => {
+      if (token) reelTokenRef.current = token;
+    });
+    reelRefreshRef.current = window.setInterval(() => {
+      refreshNewJourneySession().then((token) => {
+        if (token) reelTokenRef.current = token;
+      });
+    }, 5 * 60 * 1000);
+    return () => {
+      clearReelRefresh();
+    };
+  }, [reelGenerating, reelJobId]);
+
   const pollNewJourneyStatus = async (jobId: string) => {
+    if (newJourneyPollInFlightRef.current) return;
+    newJourneyPollInFlightRef.current = true;
     try {
       let token = newJourneyTokenRef.current;
       if (!token) {
@@ -3642,6 +3793,8 @@ export default function BuildJourneyPage() {
       clearNewJourneyPolling();
       clearNewJourneyRefresh();
       clearNewJourneyTimer();
+    } finally {
+      newJourneyPollInFlightRef.current = false;
     }
   };
 
@@ -3650,7 +3803,7 @@ export default function BuildJourneyPage() {
     pollNewJourneyStatus(jobId);
     newJourneyPollRef.current = window.setInterval(() => {
       pollNewJourneyStatus(jobId);
-    }, 1500);
+    }, 2500);
   };
 
   const handleCopyNewJourneyLog = async () => {
@@ -3681,7 +3834,8 @@ export default function BuildJourneyPage() {
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
-    setNewJourneyStyles([]);
+    setNewJourneyAudience("Studenti");
+    setNewJourneyStyle(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
     setNewJourneyDetailLevel("medio");
     setNewJourneyEventGuideline("");
     newJourneyTokenRef.current = null;
@@ -3708,7 +3862,8 @@ export default function BuildJourneyPage() {
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
-    setNewJourneyStyles([]);
+    setNewJourneyAudience("Studenti");
+    setNewJourneyStyle(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
     setNewJourneyDetailLevel("medio");
     setNewJourneyEventGuideline("");
     newJourneyTokenRef.current = null;
@@ -3760,7 +3915,7 @@ export default function BuildJourneyPage() {
         body: JSON.stringify({
           title: newJourneyTitle.trim(),
           audience: newJourneyAudience,
-          styles: newJourneyStyles,
+          styles: [newJourneyStyle],
           detailLevel: newJourneyDetailLevel,
           eventGuideline: newJourneyEventGuideline.trim() || undefined,
           step,
@@ -3795,6 +3950,252 @@ export default function BuildJourneyPage() {
       setNewJourneyRunning(false);
       newJourneyStepStartRef.current = null;
       clearNewJourneyTimer();
+    }
+  };
+
+  const openReelModal = () => {
+    if (!isAdminProfile) return;
+    setReelOpen(true);
+    setReelError(null);
+    setReelOk(null);
+    setReelStage("idle");
+    setReelLog("");
+    setReelLogOpen(false);
+    setReelCopyMessage(null);
+    setReelFacts(null);
+    setReelMaterials(null);
+    setReelJobId(null);
+    setReelElapsed(0);
+    setReelTotalElapsed(0);
+    setReelStepDurations({});
+    reelTokenRef.current = null;
+    reelCurrentStageRef.current = "idle";
+    reelStageStartRef.current = null;
+    reelTotalStartRef.current = null;
+    reelTotalAccumRef.current = 0;
+    clearReelPolling();
+    clearReelRefresh();
+    clearReelTimer();
+    clearReelTotalTimer();
+    setReelTitle((prev) => prev || bestTitleForAuto || "");
+  };
+
+  const closeReelModal = () => {
+    if (reelGenerating) return;
+    setReelOpen(false);
+    setReelError(null);
+    setReelOk(null);
+    setReelStage("idle");
+    setReelLogOpen(false);
+    setReelCopyMessage(null);
+    setReelFacts(null);
+    setReelMaterials(null);
+    setReelJobId(null);
+    setReelElapsed(0);
+    setReelTotalElapsed(0);
+    setReelStepDurations({});
+    reelTokenRef.current = null;
+    reelCurrentStageRef.current = "idle";
+    reelStageStartRef.current = null;
+    reelTotalStartRef.current = null;
+    reelTotalAccumRef.current = 0;
+    clearReelPolling();
+    clearReelRefresh();
+    clearReelTimer();
+    clearReelTotalTimer();
+  };
+
+  const finalizeReelCurrentStage = () => {
+    const startedAt = reelStageStartRef.current;
+    const stage = reelCurrentStageRef.current;
+    if (!startedAt || !stage || stage === "idle") return;
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    setReelStepDurations((prev) => ({ ...prev, [stage]: elapsedSeconds }));
+  };
+
+  const transitionReelStage = (nextStage?: string | null) => {
+    const normalized = normalizeReelStage(nextStage);
+    if (!normalized) return;
+    const prev = reelCurrentStageRef.current;
+    if (normalized === prev) {
+      setReelStage(normalized);
+      return;
+    }
+    finalizeReelCurrentStage();
+    reelCurrentStageRef.current = normalized;
+    reelStageStartRef.current = Date.now();
+    setReelStage(normalized);
+    setReelElapsed(0);
+  };
+
+  const pollReelStatus = async (jobId: string) => {
+    if (reelPollInFlightRef.current) return;
+    reelPollInFlightRef.current = true;
+    try {
+      let token = reelTokenRef.current;
+      if (!token) {
+        token = await refreshNewJourneySession();
+        if (!token) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          token = sessionData?.session?.access_token ?? null;
+        }
+        reelTokenRef.current = token;
+      }
+      if (!token) {
+        throw new Error("Auth session missing!");
+      }
+      let response = await fetch(`/api/prompt/create-reel?jobId=${jobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.status === 401 || response.status === 403) {
+        const { data: refreshed } = await supabase.auth.getSession();
+        const freshToken = refreshed?.session?.access_token ?? null;
+        if (freshToken) {
+          reelTokenRef.current = freshToken;
+          response = await fetch(`/api/prompt/create-reel?jobId=${jobId}`, {
+            headers: { Authorization: `Bearer ${freshToken}` },
+          });
+        }
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || (isItalian ? "Errore durante il polling Reel." : "Reel polling error."));
+      }
+      transitionReelStage(data?.stage);
+      const logText = buildReelLog({
+        error: data?.error,
+        stdout: data?.stdout,
+        stderr: data?.stderr,
+      });
+      if (logText) setReelLog(logText);
+      const facts = parseReelMarkerJson(data?.stdout, "REEL_FACTS:");
+      if (facts) setReelFacts(facts);
+      const materials = parseReelMarkerJson(data?.stdout, "REEL_MATERIALS:");
+      if (materials) setReelMaterials(materials);
+
+      if (data?.status === "error") {
+        finalizeReelCurrentStage();
+        setReelError(data?.error || (isItalian ? "Errore durante la generazione Reel." : "Failed to generate reel."));
+        setReelGenerating(false);
+        setReelLogOpen(true);
+        clearReelPolling();
+        clearReelRefresh();
+        clearReelTimer();
+        pauseReelTotalTimer();
+        return;
+      }
+
+      if (data?.status === "done") {
+        transitionReelStage("done");
+        finalizeReelCurrentStage();
+        setReelGenerating(false);
+        clearReelPolling();
+        clearReelRefresh();
+        clearReelTimer();
+        pauseReelTotalTimer();
+        const outputPath = typeof data?.outputPath === "string" ? data.outputPath : "output/";
+        setReelOk(isItalian ? `Reel generato: ${outputPath}` : `Reel generated: ${outputPath}`);
+      }
+    } catch (err: any) {
+      finalizeReelCurrentStage();
+      setReelError(err?.message || (isItalian ? "Errore durante il polling Reel." : "Reel polling error."));
+      setReelGenerating(false);
+      setReelLogOpen(true);
+      clearReelPolling();
+      clearReelRefresh();
+      clearReelTimer();
+      pauseReelTotalTimer();
+    } finally {
+      reelPollInFlightRef.current = false;
+    }
+  };
+
+  const startReelPolling = (jobId: string) => {
+    clearReelPolling();
+    pollReelStatus(jobId);
+    reelPollRef.current = window.setInterval(() => {
+      pollReelStatus(jobId);
+    }, 2500);
+  };
+
+  const handleCopyReelLog = async () => {
+    if (!reelLog) return;
+    try {
+      await navigator.clipboard.writeText(reelLog);
+      setReelCopyMessage(isItalian ? "Copiato" : "Copied");
+    } catch {
+      setReelCopyMessage(isItalian ? "Copia non riuscita" : "Copy failed");
+    }
+    window.setTimeout(() => setReelCopyMessage(null), 2000);
+  };
+
+  const handleGenerateReel = async () => {
+    if (!isAdminProfile || reelGenerating) return;
+    const title = reelTitle.trim();
+    if (!title) {
+      setReelError(isItalian ? "Inserisci un titolo." : "Please enter a title.");
+      return;
+    }
+    setReelGenerating(true);
+    setReelError(null);
+    setReelOk(null);
+    setReelLog("");
+    setReelLogOpen(false);
+    setReelCopyMessage(null);
+    setReelStage("start");
+    setReelJobId(null);
+    setReelElapsed(0);
+    setReelTotalElapsed(0);
+    setReelStepDurations({});
+    reelCurrentStageRef.current = "start";
+    reelStageStartRef.current = Date.now();
+    reelTotalStartRef.current = null;
+    reelTotalAccumRef.current = 0;
+    startReelTotalTimer();
+    clearReelTimer();
+    reelTimerRef.current = window.setInterval(() => {
+      setReelElapsed((prev) => prev + 1);
+    }, 1000);
+    clearReelPolling();
+    clearReelRefresh();
+    try {
+      const refreshedToken = await refreshNewJourneySession();
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const accessToken = refreshedToken || sessionData?.session?.access_token || null;
+      if (sessionError || !accessToken) {
+        throw new Error("Auth session missing!");
+      }
+      const response = await fetch("/api/prompt/create-reel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const logText = buildReelLog({ error: data?.error, stdout: data?.stdout, stderr: data?.stderr });
+        if (logText) setReelLog(logText);
+        throw new Error(data?.error || (isItalian ? "Errore durante la generazione Reel." : "Failed to generate reel."));
+      }
+      if (!data?.jobId) {
+        throw new Error(isItalian ? "Job ID Reel mancante." : "Missing reel job ID.");
+      }
+      reelTokenRef.current = accessToken;
+      setReelJobId(data.jobId);
+      startReelPolling(data.jobId);
+    } catch (err: any) {
+      finalizeReelCurrentStage();
+      const logText = buildReelLog({ error: err?.message || "" });
+      if (logText) setReelLog(logText);
+      setReelError(err?.message || (isItalian ? "Errore durante la generazione Reel." : "Failed to generate reel."));
+      setReelLogOpen(true);
+      setReelGenerating(false);
+      clearReelPolling();
+      clearReelRefresh();
+      clearReelTimer();
+      pauseReelTotalTimer();
     }
   };
 
@@ -3961,11 +4362,11 @@ export default function BuildJourneyPage() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] leading-none text-neutral-500">
                 {tUI(langCode, "build.actions.create_journey_group")}
               </p>
-              <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+              <div className="flex w-full flex-wrap items-center gap-1 sm:flex-nowrap">
                 {isAdminProfile && (
                   <button
                     type="button"
-                    className={`h-8 w-full sm:w-[78px] rounded-full border px-2 text-[11px] font-semibold shadow-sm text-center flex items-center justify-center transition ${
+                    className={`h-8 w-full sm:w-[66px] rounded-full border px-2 text-[11px] font-semibold shadow-sm text-center flex items-center justify-center transition ${
                       canGenerateAudio
                         ? "border-cyan-200 bg-white text-cyan-700 hover:border-cyan-300 hover:bg-cyan-50"
                         : "border-neutral-200 bg-neutral-100 text-neutral-400 cursor-not-allowed"
@@ -3980,22 +4381,43 @@ export default function BuildJourneyPage() {
                 {isAdminProfile && (
                   <button
                     type="button"
-                    className="h-8 w-full sm:w-[78px] rounded-full border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
+                    className="h-8 w-full sm:w-[66px] rounded-full border border-emerald-200 bg-white px-2 text-[11px] font-semibold text-emerald-700 shadow-sm hover:border-emerald-300 hover:bg-emerald-50 text-center flex items-center justify-center"
                     onClick={openNewJourneyModal}
                   >
                     AI
                   </button>
                 )}
+                {isAdminProfile && (
+                  <button
+                    type="button"
+                    className="h-8 w-full sm:w-[50px] rounded-full border border-fuchsia-200 bg-white px-2 text-fuchsia-700 shadow-sm hover:border-fuchsia-300 hover:bg-fuchsia-50 flex items-center justify-center"
+                    aria-label="Instagram"
+                    title="Instagram"
+                    onClick={openReelModal}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <rect x="3.5" y="3.5" width="17" height="17" rx="5" stroke="currentColor" strokeWidth="1.8" />
+                      <circle cx="12" cy="12" r="4.1" stroke="currentColor" strokeWidth="1.8" />
+                      <circle cx="17.2" cy="6.8" r="1.1" fill="currentColor" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="h-8 w-full sm:w-[70px] rounded-full border border-sky-200 bg-white px-2 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
+                    className="h-8 w-full sm:w-[62px] rounded-full border border-sky-200 bg-white px-2 text-[11px] font-semibold text-sky-700 shadow-sm hover:border-sky-300 hover:bg-sky-50 text-center"
                   onClick={handleNewJourney}
                 >
                   {tUI(langCode, "build.actions.new")}
                 </button>
                 <button
                   type="button"
-                  className="h-8 w-full sm:w-[70px] rounded-full border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 shadow-sm hover:border-amber-300 hover:bg-amber-50 text-center"
+                    className="h-8 w-full sm:w-[62px] rounded-full border border-amber-200 bg-white px-2 text-[11px] font-semibold text-amber-700 shadow-sm hover:border-amber-300 hover:bg-amber-50 text-center"
                   onClick={() => {
                     resetImportState();
                     setImportModalOpen(true);
@@ -5147,8 +5569,7 @@ export default function BuildJourneyPage() {
       { value: "", label: "Seleziona un target" },
       ...NEW_JOURNEY_TARGET_OPTIONS.map((option) => ({ value: option, label: option })),
     ];
-    const allowedStyles = NEW_JOURNEY_STYLE_BY_AUDIENCE[newJourneyAudience] || NEW_JOURNEY_STYLE_OPTIONS;
-    const styleOptions = allowedStyles.map((option) => ({ value: option, label: option }));
+    const styleOptions = NEW_JOURNEY_STYLE_OPTIONS.map((option) => ({ value: option, label: option }));
 
     const steps = [
       { id: "prompt_1", label: "Prompt 1: input base" },
@@ -5201,7 +5622,7 @@ export default function BuildJourneyPage() {
             />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
               <Select
-                label="Target audience"
+                label="Audience"
                 value={newJourneyAudience}
                 onChange={setNewJourneyAudience}
                 options={audienceOptions}
@@ -5210,22 +5631,22 @@ export default function BuildJourneyPage() {
               <Select
                 label="Livello di dettaglio"
                 value={newJourneyDetailLevel}
-                onChange={(value) => setNewJourneyDetailLevel(value as "breve" | "medio" | "alto")}
+                onChange={(value) => setNewJourneyDetailLevel(value as "breve" | "medio" | "approfondito")}
                 options={[
                   { value: "breve", label: "Breve" },
                   { value: "medio", label: "Medio" },
-                  { value: "alto", label: "Alto" },
+                  { value: "approfondito", label: "Approfondito" },
                 ]}
                 className="sm:max-w-[200px] w-full"
               />
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-medium text-neutral-700">Stili narrativi (seleziona 1 o più)</p>
+              <p className="text-sm font-medium text-neutral-700">Stile narrativo</p>
               <div className="flex flex-wrap gap-2">
                 {styleOptions
                   .filter((opt) => opt.value)
                   .map((option) => {
-                    const isActive = newJourneyStyles.includes(option.value);
+                    const isActive = newJourneyStyle === option.value;
                     return (
                       <button
                         key={option.value}
@@ -5235,15 +5656,7 @@ export default function BuildJourneyPage() {
                             ? "border-sky-500 bg-sky-50 text-sky-700"
                             : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-800"
                         }`}
-                        onClick={() =>
-                          setNewJourneyStyles((prev) => {
-                            if (prev.includes(option.value)) {
-                              const next = prev.filter((style) => style !== option.value);
-                              return next.length ? next : prev;
-                            }
-                            return [...prev, option.value];
-                          })
-                        }
+                        onClick={() => setNewJourneyStyle(option.value)}
                         aria-pressed={isActive}
                       >
                         {option.label}
@@ -5383,6 +5796,229 @@ export default function BuildJourneyPage() {
                 {actionLabel}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReelModal = () => {
+    if (!reelOpen || !isAdminProfile) return null;
+    const reelSteps = [
+      { id: "reel_structure", label: "Reel structure" },
+      { id: "save_json", label: "Save JSON" },
+      { id: "assets", label: "Assets" },
+      { id: "voiceover", label: "Voiceover" },
+      { id: "scene_clips", label: "Scene clips" },
+      { id: "concat", label: "Concat scenes" },
+      { id: "music", label: "Music" },
+      { id: "assemble_video", label: "Assemble video" },
+    ];
+    const activeIndex = reelSteps.findIndex((step) => step.id === reelStage);
+    return (
+      <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/45 px-4 py-6">
+        <div className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="space-y-4 px-6 py-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Create Reel</p>
+              <h3 className="mt-1 text-lg font-semibold text-neutral-900">Instagram Reel Generator</h3>
+            </div>
+            <Input
+              label="Title"
+              value={reelTitle}
+              onChange={setReelTitle}
+              placeholder={isItalian ? "Inserisci il titolo del reel" : "Enter reel title"}
+            />
+            <div className="rounded-2xl border border-neutral-200 bg-white/70 p-4 text-xs text-neutral-600">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">Progress</p>
+                <p className="text-[11px] font-semibold text-neutral-500">Total elapsed: {formatElapsed(reelTotalElapsed)}</p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {reelSteps.map((step, index) => {
+                  const isComplete = reelStage === "done" || (activeIndex !== -1 && index < activeIndex);
+                  const isActive = reelGenerating && step.id === reelStage;
+                  const durationSeconds = reelStepDurations[step.id];
+                  const durationLabel =
+                    isActive && reelGenerating
+                      ? formatElapsed(reelElapsed)
+                      : durationSeconds != null
+                      ? formatElapsed(durationSeconds)
+                      : null;
+                  return (
+                    <div
+                      key={step.id}
+                      className={`flex items-center justify-between rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                        isComplete
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : isActive
+                          ? "border-sky-200 bg-sky-50 text-sky-700"
+                          : "border-neutral-200 bg-neutral-100 text-neutral-500"
+                      }`}
+                    >
+                      <span>
+                        {step.label}
+                        {durationLabel ? ` · ${durationLabel}` : ""}
+                      </span>
+                      {isComplete && <span>OK</span>}
+                      {isActive && !isComplete && <span>...</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {reelGenerating && (
+                  <span className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-[11px] font-semibold text-sky-700">
+                    Running
+                  </span>
+                )}
+                {!reelGenerating && reelStage === "done" && !reelError && (
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-700">
+                    Completed
+                  </span>
+                )}
+                {reelError && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-semibold text-red-700"
+                    onClick={() => setReelLogOpen(true)}
+                  >
+                    Open error log
+                  </button>
+                )}
+                <span className="text-[11px] text-neutral-500">Current stage: {reelStage || "idle"}</span>
+              </div>
+            </div>
+            {(reelFacts || reelMaterials) && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/80 p-3 text-xs text-neutral-700">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                    Prepared Events & Logic
+                  </p>
+                  {reelFacts ? (
+                    <div className="mt-2 space-y-1">
+                      <p><span className="font-semibold">Event 1:</span> {reelFacts.event_1 || "-"}</p>
+                      <p><span className="font-semibold">Year 1:</span> {reelFacts.event_1_year || "-"}</p>
+                      <p><span className="font-semibold">Location 1:</span> {reelFacts.event_1_location || "-"}</p>
+                      <p><span className="font-semibold">Event 2:</span> {reelFacts.event_2 || "-"}</p>
+                      <p><span className="font-semibold">Year 2:</span> {reelFacts.event_2_year || "-"}</p>
+                      <p><span className="font-semibold">Location 2:</span> {reelFacts.event_2_location || "-"}</p>
+                      <p><span className="font-semibold">Overlap:</span> {reelFacts.overlap_period || "-"}</p>
+                      <p><span className="font-semibold">Hook:</span> {reelFacts.hook_question_en || "-"}</p>
+                      {Array.isArray(reelFacts.reel_logic) && reelFacts.reel_logic.length > 0 && (
+                        <div className="pt-1">
+                          <p className="font-semibold">Reel logic:</p>
+                          <ul className="mt-1 list-disc pl-4">
+                            {reelFacts.reel_logic.map((item: string, idx: number) => (
+                              <li key={`${item}-${idx}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-neutral-500">Waiting for structure...</p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/80 p-3 text-xs text-neutral-700">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-500">
+                    Downloaded Materials
+                  </p>
+                  {reelMaterials ? (
+                    <div className="mt-2 space-y-1">
+                      {Array.isArray(reelMaterials.materials) && reelMaterials.materials.length > 0 ? (
+                        <ul className="space-y-1">
+                          {reelMaterials.materials.map((mat: any, idx: number) => (
+                            <li key={`${mat?.path || idx}`} className="rounded-lg border border-neutral-200 bg-white px-2 py-1">
+                              <p>
+                                <span className="font-semibold">Block {mat?.block ?? idx + 1}:</span> {mat?.title || "-"}
+                              </p>
+                              <p>
+                                <span className="font-semibold">Asset:</span> {humanizeMaterialType(mat?.material_type)}
+                              </p>
+                              <p className="truncate">
+                                <span className="font-semibold">File:</span> {mat?.path || "-"}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-neutral-500">No materials yet.</p>
+                      )}
+                      <p><span className="font-semibold">Voiceover:</span> {humanizeVoiceoverType(reelMaterials.voiceover_type)}</p>
+                      <p><span className="font-semibold">Music:</span> {humanizeMusicType(reelMaterials.music_type)}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-neutral-500">Waiting for asset details...</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {reelError && <p className="text-sm text-red-600">{reelError}</p>}
+            {reelOk && <p className="text-sm text-emerald-700">{reelOk}</p>}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-600 shadow-sm hover:border-neutral-300"
+                onClick={closeReelModal}
+                disabled={reelGenerating}
+              >
+                {tUI(langCode, "build.actions.close")}
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-4 py-2 text-sm font-semibold shadow-md transition ${
+                  reelGenerating || !reelTitle.trim()
+                    ? "bg-neutral-200 text-neutral-500"
+                    : "bg-gradient-to-r from-fuchsia-600 to-rose-500 text-white hover:shadow-lg"
+                }`}
+                onClick={handleGenerateReel}
+                disabled={reelGenerating || !reelTitle.trim()}
+              >
+                {reelGenerating ? tUI(langCode, "generic.loading") : "Generate Reel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReelLogDrawer = () => {
+    if (!reelLogOpen) return null;
+    const logText = reelLog || (isItalian ? "Nessun log disponibile." : "No log available.");
+    return (
+      <div className="fixed inset-0 z-[85] flex justify-end bg-black/30">
+        <div className="flex h-full w-full max-w-[620px] flex-col bg-white shadow-2xl">
+          <div className="flex items-start justify-between border-b border-neutral-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-neutral-900">{isItalian ? "Log Reel" : "Reel log"}</p>
+              <p className="text-xs text-neutral-500">{isItalian ? "Copia l'errore completo." : "Copy full error output."}</p>
+            </div>
+            <button
+              type="button"
+              className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-semibold text-neutral-700 shadow-sm hover:border-neutral-400"
+              onClick={() => setReelLogOpen(false)}
+            >
+              {tUI(langCode, "build.actions.close")}
+            </button>
+          </div>
+          <div className="flex-1 overflow-auto px-4 py-4">
+            <textarea
+              value={logText}
+              readOnly
+              className="h-full min-h-[240px] w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-700"
+            />
+          </div>
+          <div className="flex items-center justify-between border-t border-neutral-200 px-4 py-3">
+            <p className="text-xs text-neutral-500">{reelCopyMessage ?? ""}</p>
+            <button
+              type="button"
+              className="rounded-full bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-md hover:shadow-lg"
+              onClick={handleCopyReelLog}
+            >
+              {isItalian ? "Copia log" : "Copy log"}
+            </button>
           </div>
         </div>
       </div>
@@ -5563,6 +6199,8 @@ export default function BuildJourneyPage() {
   return (
     <div className="h-screen overflow-hidden bg-gradient-to-br from-amber-50 via-sky-50 to-neutral-50 text-neutral-900 lg:flex">
       {renderNewJourneyModal()}
+      {renderReelModal()}
+      {renderReelLogDrawer()}
       {renderNewJourneyLogDrawer()}
       {renderImportModal()}
       {renderAudioModal()}

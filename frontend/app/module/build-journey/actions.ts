@@ -638,6 +638,12 @@ async function findOrCreateMediaAsset({
     throw new Error(`media select: ${error.message}`);
   }
   if (data?.id) {
+    await updateRow(T.media, { id: data.id }, {
+      public_url: url,
+      source_url: sourceUrl ?? url,
+      media_type: toMediaAssetType(kind),
+      status: "ready",
+    });
     return { ...data, created: false };
   }
   const inserted = await insertRow(T.media, {
