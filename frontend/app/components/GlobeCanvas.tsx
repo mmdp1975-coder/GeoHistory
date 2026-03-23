@@ -52,6 +52,8 @@ type CitiesEntry = {
   scalerank?: number;
 };
 
+const MIN_EFFECTIVE_RADIUS_KM = 150;
+
 /* ---------- PIP helpers ---------- */
 
 function isPointInRing([x, y]: [number, number], ring: number[][]) {
@@ -124,12 +126,12 @@ function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
 
 /* ============================== Scene bits ============================== */
 
-function useEuropeStart(radius: number) {
+function useEuropeStart(radius: number, embedded: boolean) {
   const { camera } = useThree();
   React.useEffect(() => {
     const targetLat = 47;
     const targetLon = 10;
-    const camDist = radius * 1.7;
+    const camDist = radius * (embedded ? 2.25 : 1.7);
     const look = new THREE.Vector3(0, 0, 0);
     const pos = latLonToVector3(targetLat, targetLon, radius)
       .normalize()
@@ -138,7 +140,7 @@ function useEuropeStart(radius: number) {
     camera.position.copy(pos);
     camera.lookAt(look);
     camera.updateProjectionMatrix();
-  }, [camera, radius]);
+  }, [camera, embedded, radius]);
 }
 
 function CityDots({
@@ -339,8 +341,10 @@ function GlobeMesh({
 export default function GlobeCanvas({
   onPointSelect,
   initialRadiusKm,
+  clearSelectionSignal = 0,
   height,
   radius: globeRadius,
+  embedded = false,
 }: {
   onPointSelect?: (info: {
     lat: number;
@@ -351,8 +355,10 @@ export default function GlobeCanvas({
     radiusKm: number;
   }) => void;
   initialRadiusKm?: number;
+  clearSelectionSignal?: number;
   height?: number; // default 700
   radius?: number;
+  embedded?: boolean;
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
 
@@ -498,13 +504,39 @@ export default function GlobeCanvas({
     setNearestCity(name || "Unknown");
   }, []);
 
+  const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 1500);
+  const effectiveRadiusKm = Math.max(MIN_EFFECTIVE_RADIUS_KM, radiusKm);
+
+  React.useEffect(() => {
+    setPicked(null);
+    setContinent("");
+    setCountry("");
+    setNearestCity("");
+  }, [clearSelectionSignal]);
+
   const updateAttributesFor = React.useCallback(
     (lat: number, lon: number) => {
-      setPicked({ lat, lon: canonicalLon(lon) });
+      const normalizedLon = canonicalLon(lon);
+      setPicked({ lat, lon: normalizedLon });
+
+      let nextContinent = "Unknown";
+      let nextCountry = "Unknown";
+      let nextNearestCity = nearestCity || "Unknown";
 
       if (!dataReady) {
         setContinent("-");
         setCountry("-");
+        const cb = onPointSelectRef.current;
+        if (cb) {
+          cb({
+            lat,
+            lon: normalizedLon,
+            continent: "-",
+            country: "-",
+            city: nextNearestCity,
+            radiusKm: effectiveRadiusKm,
+          });
+        }
         return;
       }
 
@@ -522,7 +554,8 @@ export default function GlobeCanvas({
           break;
         }
       }
-      setContinent(contName || "Unknown");
+      nextContinent = contName || "Unknown";
+      setContinent(nextContinent);
 
       // country
       let countryName = "";
@@ -537,7 +570,8 @@ export default function GlobeCanvas({
           break;
         }
       }
-      setCountry(countryName || "Unknown");
+      nextCountry = countryName || "Unknown";
+      setCountry(nextCountry);
 
       // nearest city — usa tutte le città
       if (citiesData.length) {
@@ -564,13 +598,32 @@ export default function GlobeCanvas({
             bestIdx = i;
           }
         }
-        setNearestCity(bestIdx >= 0 ? citiesData[bestIdx].name : "Unknown");
+        nextNearestCity = bestIdx >= 0 ? citiesData[bestIdx].name : "Unknown";
+        setNearestCity(nextNearestCity);
+      }
+
+      const cb = onPointSelectRef.current;
+      if (cb) {
+        cb({
+          lat,
+          lon: normalizedLon,
+          continent: nextContinent,
+          country: nextCountry,
+          city: nextNearestCity,
+          radiusKm: effectiveRadiusKm,
+        });
       }
     },
-    [dataReady, continentsData, countriesData, citiesData]
+    [
+      dataReady,
+      continentsData,
+      countriesData,
+      citiesData,
+      nearestCity,
+      effectiveRadiusKm,
+    ]
   );
 
-  const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 250);
   const markerPosition = React.useMemo(() => {
     if (!picked) return null;
     return latLonToVector3(picked.lat, picked.lon, radius + 0.01);
@@ -587,14 +640,17 @@ export default function GlobeCanvas({
         continent,
         country,
         city: nearestCity,
-        radiusKm,
+        radiusKm: effectiveRadiusKm,
       });
     }
-  }, [picked, continent, country, nearestCity, radiusKm]);
+  }, [picked, continent, country, nearestCity, effectiveRadiusKm]);
 
   const renderCities = React.useMemo(() => thinCities(citiesData), [citiesData]);
 
-  const globeHeight = (typeof height === "number" ? height : 700) - 12;
+  const globeHeight =
+    typeof height === "number"
+      ? Math.max(320, height - (embedded ? 0 : 12))
+      : undefined;
 
   const cursorStyle = React.useMemo(() => {
     if (hoveringCity) return "pointer";
@@ -608,14 +664,21 @@ export default function GlobeCanvas({
   };
 
   return (
-    <div className="rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur">
+    <div
+      className={
+        embedded
+          ? "flex h-full min-h-0 flex-col overflow-hidden bg-transparent"
+          : "rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur"
+      }
+    >
       <div
         style={{
           width: "100%",
-          height: globeHeight,
+          height: globeHeight ?? "100%",
           cursor: cursorStyle,
           position: "relative",
           overflow: "hidden",
+          flex: embedded ? "1 1 auto" : undefined,
         }}
       >
         <Canvas
@@ -641,6 +704,7 @@ export default function GlobeCanvas({
 
           <Scene
             radius={radius}
+            embedded={embedded}
             onPickGlobePoint={(lat, lon) => {
               updateAttributesFor(lat, lon);
             }}
@@ -660,7 +724,7 @@ export default function GlobeCanvas({
 
       {/* FOOTER COORDINATE */}
       <div
-        className="border-t border-neutral-200 bg-white/90 text-xs sm:text-sm"
+        className="shrink-0 border-t border-neutral-200 bg-white/90 text-xs sm:text-sm"
         style={{
           padding: "6px 8px 10px 8px",
           position: "relative",
@@ -688,9 +752,9 @@ export default function GlobeCanvas({
               <input
                 className="min-w-0 flex-1"
                 type="range"
-                min={5}
-                max={500}
-                step={5}
+                min={25}
+                max={5000}
+                step={25}
                 value={radiusKm}
                 onChange={(e) => setRadiusKm(Number(e.target.value))}
               />
@@ -725,6 +789,7 @@ export default function GlobeCanvas({
 
 function Scene({
   radius,
+  embedded,
   onPickGlobePoint,
   cities,
   onDragStart,
@@ -735,6 +800,7 @@ function Scene({
   markerSize,
 }: {
   radius: number;
+  embedded: boolean;
   onPickGlobePoint: (lat: number, lon: number) => void;
   cities: CitiesEntry[];
   onDragStart: () => void;
@@ -744,7 +810,7 @@ function Scene({
   markerPosition: THREE.Vector3 | null;
   markerSize: number;
 }) {
-  useEuropeStart(radius);
+  useEuropeStart(radius, embedded);
 
   const handlePickGlobe = (lat: number, lon: number) => {
     onPickGlobePoint(lat, lon);
@@ -783,8 +849,8 @@ function Scene({
         enableDamping
         dampingFactor={0.08}
         rotateSpeed={0.15}
-        minDistance={1.25}
-        maxDistance={3.2}
+        minDistance={embedded ? 1.7 : 1.25}
+        maxDistance={embedded ? 4.1 : 3.2}
         zoomSpeed={0.35}
       />
     </>

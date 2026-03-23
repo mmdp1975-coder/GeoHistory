@@ -188,12 +188,9 @@ export function Scorecard({
     typeof ratingsCount === "number" &&
     ratingsCount > 0;
 
-  const finalCtaLabel =
-    ctaLabel ?? tUI(langCode, "scorecard.cta.open");
-
   const { className: liExtraClassName, ...restLiProps } = liProps ?? {};
   const cardClassName = mergeClassNames(
-    "group relative overflow-hidden bg-white shadow-sm ring-1 ring-neutral-200 hover:shadow-md transition cursor-pointer",
+    "group relative overflow-hidden border border-neutral-300 bg-gradient-to-b from-white to-neutral-100 shadow-[0_1px_0_rgba(255,255,255,0.96)_inset,0_12px_26px_-18px_rgba(15,23,42,0.45),0_3px_0_rgba(212,212,216,0.95)] transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-400 hover:from-white hover:to-neutral-50 hover:shadow-[0_1px_0_rgba(255,255,255,0.98)_inset,0_18px_34px_-20px_rgba(15,23,42,0.4),0_4px_0_rgba(212,212,216,0.95)] active:translate-y-[2px] active:shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_7px_12px_-12px_rgba(15,23,42,0.28),0_1px_0_rgba(212,212,216,0.9)] cursor-pointer",
     compact ? "rounded-xl" : "rounded-2xl",
     className,
     liExtraClassName
@@ -224,7 +221,7 @@ export function Scorecard({
         <Link
           href={href}
           prefetch={prefetch}
-          className="block w-full h-full"
+          className="block h-full w-full"
           onClick={onCardClick}
         >
           {children}
@@ -236,7 +233,7 @@ export function Scorecard({
         <button
           type="button"
           onClick={onCardClick}
-          className="block w-full text-left"
+          className="block h-full w-full text-left"
         >
           {children}
         </button>
@@ -249,7 +246,7 @@ export function Scorecard({
     <li className={cardClassName} {...restLiProps}>
       <CardWrapper>
         {/* COVER */}
-        <div className={mergeClassNames("relative w-full bg-neutral-100", compact ? "aspect-square" : "aspect-[5/3]")}>
+        <div className={mergeClassNames("relative w-full overflow-hidden bg-neutral-100", compact ? "aspect-square" : "aspect-[5/3]")}>
           {coverUrl ? (
             (() => {
               const browserCoverUrl = normalizeCoverUrl(coverUrl);
@@ -259,7 +256,7 @@ export function Scorecard({
                   src={browserCoverUrl}
                   alt={title}
                   fill
-                  className="object-cover"
+                  className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                   priority={false}
                 />
@@ -268,7 +265,7 @@ export function Scorecard({
                 <img
                   src={browserCoverUrl || coverUrl}
                   alt={title}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   loading="lazy"
                 />
               );
@@ -423,7 +420,7 @@ export function Scorecard({
 
         {/* CONTENUTO */}
         {!compact ? (
-        <div className={compact ? "flex flex-col gap-1 p-1.5" : "flex flex-col gap-2 p-2.5"}>
+        <div className={compact ? "flex flex-col gap-1 p-1.5" : "flex h-full flex-col gap-2 p-2.5"}>
           {/* Titolo + data */}
           <div className="flex items-start justify-between gap-2">
             <h3 className={compact ? "text-[11px] font-semibold text-neutral-900 line-clamp-1" : "text-[13px] font-semibold text-neutral-900 line-clamp-2"}>
@@ -443,7 +440,7 @@ export function Scorecard({
             )}
           </div>
 
-          {/* Riga date/meta + CTA */}
+          {/* Riga date/meta */}
           <div className={compact ? "mt-0 flex items-center justify-end text-[10px] text-neutral-600" : "grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-[11px] text-neutral-600"}>
             {!compact ? (
             <div className="col-[2] row-[2] mt-[1px] flex justify-end">
@@ -493,12 +490,6 @@ export function Scorecard({
                   {formatYear(yearFrom)} - {formatYear(yearTo)}
                 </span>
               </div>
-              ) : null}
-
-              {finalCtaLabel ? (
-                <span className={compact ? "rounded bg-neutral-900/90 px-2 py-0.5 text-[10px] font-semibold text-white" : "rounded-md bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white"}>
-                  {finalCtaLabel}
-                </span>
               ) : null}
             </div>
 

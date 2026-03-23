@@ -57,6 +57,7 @@ type GeWithCard = {
 
 const DEFAULT_FROM = -5000;
 const DEFAULT_TO = 2025;
+const MIN_EFFECTIVE_GEO_RADIUS_KM = 150;
 
 const BRAND_BLUE = "#0b3b60";
 const BRAND_BLUE_SOFT = "#0d4a7a";
@@ -120,10 +121,20 @@ function parseGeoParams(sp: URLSearchParams) {
 
   if (!valid)
     return null as null | { lat: number; lon: number; radiusKm: number };
-  return { lat, lon, radiusKm };
+  return { lat, lon, radiusKm: Math.max(MIN_EFFECTIVE_GEO_RADIUS_KM, radiusKm) };
 }
 
-export default function TimelinePage() {
+type TimelinePageProps = {
+  embedded?: boolean;
+  externalGeoFilter?: { lat: number; lon: number; radiusKm: number } | null;
+  onClearExternalGeoFilter?: () => void;
+};
+
+export default function TimelinePage({
+  embedded = false,
+  externalGeoFilter = null,
+  onClearExternalGeoFilter,
+}: TimelinePageProps) {
   const search = useSearchParams();
   const router = useRouter();
   const supabase = useMemo(() => createClientComponentClient(), []);
@@ -164,7 +175,8 @@ export default function TimelinePage() {
     return () => clearTimeout(id);
   }, [q]);
 
-  const geoFilter = useMemo(() => parseGeoParams(search!), [search]);
+  const geoFilterFromQuery = useMemo(() => parseGeoParams(search!), [search]);
+  const geoFilter = externalGeoFilter ?? geoFilterFromQuery;
   const [geoWarning, setGeoWarning] = useState<string | null>(null);
   const [visibilityFilter, setVisibilityFilter] = useState<
     "all" | "public" | "private"
@@ -790,108 +802,66 @@ export default function TimelinePage() {
     const dMin = Math.round(fromYear);
     const dMax = Math.round(toYear);
     const s = Math.max(1, dMax - dMin);
-    const step = niceStep(s, 7);
+    const step = niceStep(s, embedded ? 10 : 7);
     const first = Math.ceil(dMin / step) * step;
     const out: number[] = [];
     for (let t = first; t <= dMax; t += step) out.push(Math.round(t));
     return out;
-  }, [domainReady, fromYear, toYear]);
+  }, [domainReady, fromYear, toYear, embedded]);
 
   /* ================== RENDER ================== */
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900">
+    <div
+      className={
+        embedded
+          ? "flex h-full min-h-0 w-full flex-col text-neutral-900"
+          : "min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900"
+      }
+    >
       {/* HEADER */}
       <header
-        className="sticky top-16 z-20 border-b border-neutral-200"
-        style={{ backgroundColor: BRAND_BLUE }}
+        className={
+          embedded
+            ? "sticky top-0 z-30"
+            : "sticky top-16 z-20 border-b border-neutral-200"
+        }
+        style={embedded ? undefined : { backgroundColor: BRAND_BLUE }}
       >
-        <div className="mx-auto max-w-7xl px-4 py-3 text-white">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h1 className="text-lg font-semibold tracking-tight">
-              {tUI(langCode, "timeline.header.title")}
-            </h1>
-
-            <div className="flex items-center gap-3">
-              {checking ? (
-                <span className="text-xs text-white/70">
-                  {tUI(langCode, "timeline.header.checking")}
-                </span>
-              ) : authError ? (
-                <span className="text-xs text-white/70">
-                  {tUI(langCode, "timeline.header.guest")}
-                </span>
-              ) : null}
-
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1">
-                  <label className="text-xs text-white/90">
-                    {tUI(langCode, "timeline.header.from")}
-                  </label>
-                  <input
-                    type="number"
-                    className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                    value={fromYear}
-                    onChange={(e) => {
-                      let f = Number(e.target.value);
-                      if (!Number.isFinite(f)) return;
-                      if (f < minDomain) f = minDomain;
-                      if (f > toYear - 1) f = toYear - 1;
-                      setFromYear(Math.round(f));
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-1">
-                  <label className="text-xs text-white/90">
-                    {tUI(langCode, "timeline.header.to")}
-                  </label>
-                  <input
-                    type="number"
-                    className="w-24 rounded-md border border-white/25 bg-white/10 px-2 py-1 text-xs text-white placeholder-white/60 focus:border-white/40 focus:outline-none"
-                    value={toYear}
-                    onChange={(e) => {
-                      let t = Number(e.target.value);
-                      if (!Number.isFinite(t)) return;
-                      if (t > maxDomain) t = maxDomain;
-                      if (t < fromYear + 1) t = fromYear + 1;
-                      setToYear(Math.round(t));
-                    }}
-                  />
-                </div>
-                <button
-                  onClick={() => {
-                    const params = new URLSearchParams(
-                      search?.toString() || ""
-                  );
-                  params.delete("lat");
-                  params.delete("lon");
-                  params.delete("radiusKm");
-                  router.replace(`?${params.toString()}`);
-                  setFromYear(minDomain);
-                  setToYear(maxDomain);
-                  setQ("");
-                }}
-                className="rounded-md border border-white/25 bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/15"
-                title={tUI(
-                  langCode,
-                  "timeline.header.show_all.title"
-                  )}
-                >
-                  {tUI(langCode, "timeline.header.show_all")}
-                </button>
-              </div>
-            </div>
+        <div
+          className={
+            embedded
+              ? "px-0 pb-2 text-neutral-700"
+              : "mx-auto max-w-7xl px-4 py-3 text-white"
+          }
+        >
+          <div className="flex min-h-5 items-center justify-end">
+            {checking ? (
+              <span className={embedded ? "text-xs text-neutral-500" : "text-xs text-white/70"}>
+                {tUI(langCode, "timeline.header.checking")}
+              </span>
+            ) : authError ? (
+              <span className={embedded ? "text-xs text-neutral-500" : "text-xs text-white/70"}>
+                {tUI(langCode, "timeline.header.guest")}
+              </span>
+            ) : null}
           </div>
 
           {/* Geo filter badge */}
           {geoFilter && (
-            <div className="mt-2 flex items-center justify-between rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-xs">
+            <div
+              className={
+                embedded
+                  ? "mt-2 flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[11px] text-neutral-700 shadow-sm"
+                  : "mt-2 flex items-center justify-between rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-[11px]"
+              }
+            >
               <div>
                 {tUI(langCode, "timeline.geo.badge.label")}: lat{" "}
                 <b>{geoFilter.lat.toFixed(4)}</b>, lon{" "}
                 <b>{geoFilter.lon.toFixed(4)}</b>, radius{" "}
                 <b>{geoFilter.radiusKm}</b> km
                 {geoWarning && (
-                  <span className="ml-2 text-amber-200">
+                  <span className={embedded ? "ml-2 text-amber-600" : "ml-2 text-amber-200"}>
                     {" "}
                     — {geoWarning}
                   </span>
@@ -899,6 +869,10 @@ export default function TimelinePage() {
               </div>
               <button
                 onClick={() => {
+                  if (embedded && externalGeoFilter && onClearExternalGeoFilter) {
+                    onClearExternalGeoFilter();
+                    return;
+                  }
                   const params = new URLSearchParams(
                     search?.toString() || ""
                   );
@@ -907,7 +881,11 @@ export default function TimelinePage() {
                   params.delete("radiusKm");
                   router.replace(`?${params.toString()}`);
                 }}
-                className="rounded border border-white/25 bg-white/10 px-2 py-1 text-[11px] hover:bg-white/20"
+                className={
+                  embedded
+                    ? "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] hover:bg-neutral-100"
+                    : "rounded-lg border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
+                }
                 title={tUI(
                   langCode,
                   "timeline.geo.badge.clear.title"
@@ -919,21 +897,98 @@ export default function TimelinePage() {
           )}
 
           {/* TIMELINE */}
-          <div className="mt-2 rounded-xl border border-white/15 bg-white/5 shadow-sm">
-            <div className="p-2">
+          <div
+            className={
+              embedded
+                ? "rounded-t-2xl border border-neutral-200 bg-gradient-to-b from-[#1d4d77] to-[#173f63] shadow-sm"
+                : "mt-2 rounded-2xl border border-white/15 bg-gradient-to-b from-white/8 to-white/4 shadow-sm"
+            }
+          >
+            <div className="px-2.5 py-2">
               {!domainReady ? (
                 <div className="py-4 text-sm text-white/80">
                   {tUI(langCode, "timeline.timeline.loading")}
                 </div>
               ) : (
-                <div className="relative h-24 select-none">
+                <div className="relative h-[86px] select-none">
+                  <div className="absolute inset-x-3 top-0 flex items-center justify-between">
+                    <label className="flex items-center gap-1 rounded-full border border-white/18 bg-white/10 px-2 py-1 text-[10px] text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm">
+                      <span className="uppercase tracking-[0.16em] text-white/70">
+                        {tUI(langCode, "timeline.header.from")}
+                      </span>
+                      <input
+                        type="number"
+                        className="w-16 border-0 bg-transparent p-0 text-right text-[11px] font-semibold text-white focus:outline-none"
+                        value={fromYear}
+                        onChange={(e) => {
+                          let f = Number(e.target.value);
+                          if (!Number.isFinite(f)) return;
+                          if (f < minDomain) f = minDomain;
+                          if (f > toYear - 1) f = toYear - 1;
+                          setFromYear(Math.round(f));
+                        }}
+                      />
+                    </label>
+
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(
+                          search?.toString() || ""
+                        );
+                        params.delete("lat");
+                        params.delete("lon");
+                        params.delete("radiusKm");
+                        params.delete("q");
+                        router.replace(`?${params.toString()}`);
+                        if (
+                          embedded &&
+                          externalGeoFilter &&
+                          onClearExternalGeoFilter
+                        ) {
+                          onClearExternalGeoFilter();
+                        }
+                        setFromYear(minDomain);
+                        setToYear(maxDomain);
+                        setQ("");
+                        setQDebounced("");
+                        setVisibilityFilter("all");
+                        setGeoWarning(null);
+                      }}
+                      className="rounded-full border border-white/18 bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm hover:bg-white/15"
+                      title={tUI(
+                        langCode,
+                        "timeline.header.show_all.title"
+                      )}
+                    >
+                      {tUI(langCode, "timeline.header.show_all")}
+                    </button>
+
+                    <label className="flex items-center gap-1 rounded-full border border-white/18 bg-white/10 px-2 py-1 text-[10px] text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm">
+                      <span className="uppercase tracking-[0.16em] text-white/70">
+                        {tUI(langCode, "timeline.header.to")}
+                      </span>
+                      <input
+                        type="number"
+                        className="w-16 border-0 bg-transparent p-0 text-right text-[11px] font-semibold text-white focus:outline-none"
+                        value={toYear}
+                        onChange={(e) => {
+                          let t = Number(e.target.value);
+                          if (!Number.isFinite(t)) return;
+                          if (t > maxDomain) t = maxDomain;
+                          if (t < fromYear + 1) t = fromYear + 1;
+                          setToYear(Math.round(t));
+                        }}
+                      />
+                    </label>
+                  </div>
+
                   {/* pista */}
                   <div
-                    className="absolute left-3 right-3 top-1/2 -translate-y-1/2"
+                    className="absolute left-3 right-3 top-[42px] -translate-y-1/2"
                     ref={trackRef}
                   >
                     <div
-                      className="h-[8px] w-full rounded-full"
+                      className="h-[6px] w-full rounded-full"
                       style={{
                         background:
                           "linear-gradient(180deg, #f4f6f9 0%, #e8ecf2 50%, #dfe5ee 100%)",
@@ -946,9 +1001,9 @@ export default function TimelinePage() {
                   {/* banda selezione + maniglie */}
                   <div
                     ref={selectedBarRef}
-                    className="absolute top-1/2 -translate-y-1/2 left-[10%] w-[80%]"
+                    className="absolute left-[10%] top-[42px] w-[80%] -translate-y-1/2"
                     style={{
-                      height: 8,
+                      height: 6,
                       borderRadius: 9999,
                       background: `linear-gradient(180deg, ${BRAND_BLUE_SOFT} 0%, ${BRAND_BLUE} 60%, #072b46 100%)`,
                       boxShadow:
@@ -983,8 +1038,8 @@ export default function TimelinePage() {
                       <span
                         className={
                           activeThumb === "left"
-                            ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100"
-                            : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"
+                            ? "block h-[18px] w-[18px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100"
+                            : "block h-3.5 w-3.5 rounded-full border border-black/20 bg-white shadow transition-all duration-100"
                         }
                         style={
                           activeThumb === "left"
@@ -1013,8 +1068,8 @@ export default function TimelinePage() {
                       <span
                         className={
                           activeThumb === "right"
-                            ? "block h-[22px] w-[22px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100"
-                            : "block h-4 w-4 rounded-full border border-black/20 bg-white shadow transition-all duration-100"
+                            ? "block h-[18px] w-[18px] rounded-full border border-white shadow-lg ring-2 ring-white ring-offset-2 transition-all duration-100"
+                            : "block h-3.5 w-3.5 rounded-full border border-black/20 bg-white shadow transition-all duration-100"
                         }
                         style={
                           activeThumb === "right"
@@ -1026,8 +1081,8 @@ export default function TimelinePage() {
                   </div>
 
                   {/* tick dinamici */}
-                  <div className="absolute inset-x-3 bottom-1">
-                    <div className="relative h-5">
+                  <div className="absolute inset-x-3 bottom-0.5">
+                    <div className="relative h-4">
                       {ticks.map((t) => (
                         <div
                           key={t}
@@ -1044,8 +1099,8 @@ export default function TimelinePage() {
                             }%)`,
                           }}
                         >
-                          <div className="h-[10px] w-px bg-white/85" />
-                          <div className="mt-0.5 whitespace-nowrap text-[10px] leading-none text-white/95 translate-x-1/2">
+                          <div className="mx-auto h-[8px] w-px bg-white/85" />
+                          <div className="mt-0.5 whitespace-nowrap text-center text-[9px] leading-none text-white/95">
                             {t < 0 ? `${Math.abs(t)} BC` : `${t}`}
                           </div>
                         </div>
@@ -1060,9 +1115,21 @@ export default function TimelinePage() {
       </header>
 
       {/* BODY */}
-      <main className="mx-auto max-w-7xl px-4 py-5">
-        <div className="sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-neutral-600">
+      <main
+        className={
+          embedded
+            ? "min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1"
+            : "mx-auto max-w-7xl px-4 py-5"
+        }
+      >
+        <div
+          className={
+            embedded
+              ? "sticky top-0 z-20 -mx-5 mb-3 flex flex-col gap-2.5 border-x border-b border-neutral-200/40 bg-gradient-to-b from-[#1a456b] to-[#153a5b] px-5 py-2.5 text-white backdrop-blur xl:flex-row xl:items-center xl:justify-between"
+              : "sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between"
+          }
+        >
+          <div className="min-w-[120px] text-[11px] leading-3.5 text-white/70">
             {initializing ? (
               <span>
                 {tUI(langCode, "timeline.summary.initializing")}
@@ -1072,33 +1139,46 @@ export default function TimelinePage() {
                 {tUI(langCode, "timeline.summary.loading")}
               </span>
             ) : (
-              <span>
-                {tUI(
-                  langCode,
-                  "timeline.summary.in_range_prefix"
-                )}{" "}
-                <span className="font-medium">
-                  {cards.length}
-                </span>{" "}
-                {tUI(langCode, "timeline.summary.group_events")} •{" "}
-                {tUI(
-                  langCode,
-                  "timeline.summary.total_events_prefix"
-                )}{" "}
-                <span className="font-medium">
-                  {totalMatches}
-                </span>
-              </span>
+              <div className="space-y-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[16px] font-semibold leading-none text-white">
+                    {cards.length}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/65">
+                    {tUI(langCode, "timeline.summary.group_events")}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[16px] font-semibold leading-none text-white">
+                    {totalMatches}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/65">
+                    eventi
+                  </span>
+                </div>
+              </div>
             )}
           </div>
 
           {/* Free text search + visibility filter */}
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div
+                className={
+                  embedded
+                    ? "flex w-full flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"
+                    : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
+                }
+              >
             <div className="flex items-center gap-2">
-              <label className="whitespace-nowrap text-sm text-neutral-700">
+              <label className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.14em] text-white/65">
                 {tUI(langCode, "timeline.search.label")}
               </label>
-              <div className="flex items-center gap-2">
+              <div
+                className={
+                  embedded
+                    ? "flex min-w-0 flex-1 items-center"
+                    : "flex items-center"
+                }
+              >
                 <input
                   type="text"
                   value={q}
@@ -1107,23 +1187,17 @@ export default function TimelinePage() {
                     langCode,
                     "timeline.search.placeholder"
                   )}
-                  className="w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
+                  className={
+                    embedded
+                      ? "w-full min-w-0 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[12px] text-white placeholder-white/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none lg:w-60"
+                      : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
+                  }
                 />
-                <button
-                  onClick={() => setQ("")}
-                  className="rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
-                  title={tUI(
-                    langCode,
-                    "timeline.search.clear.title"
-                  )}
-                >
-                  {tUI(langCode, "timeline.search.clear")}
-                </button>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-sm text-neutral-700">
+              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/65">
                 {tUI(langCode, "timeline.visibility.label")}
               </span>
               {["all", "public", "private"].map((v) => {
@@ -1138,8 +1212,8 @@ export default function TimelinePage() {
                     }
                     className={
                       active
-                        ? "rounded-md border border-neutral-300 bg-neutral-900 px-3 py-1 text-sm text-white"
-                        : "rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-700 hover:bg-neutral-50"
+                        ? "rounded-xl border border-white/20 bg-white px-2.5 py-1 text-[11px] text-[#153a5b] shadow-sm"
+                        : "rounded-xl border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] text-white hover:bg-white/15"
                     }
                     title={tUI(
                       langCode,
@@ -1176,7 +1250,13 @@ export default function TimelinePage() {
           )}
 
         {/* GRID: scorecard unificata */}
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul
+          className={
+            embedded
+              ? "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+              : "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          }
+        >
           {cards.map((g) => {
             const isFav = favs.has(g.id);
             return (
