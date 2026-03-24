@@ -190,8 +190,8 @@ export function Scorecard({
 
   const { className: liExtraClassName, ...restLiProps } = liProps ?? {};
   const cardClassName = mergeClassNames(
-    "group relative overflow-hidden border border-neutral-300 bg-gradient-to-b from-white to-neutral-100 shadow-[0_1px_0_rgba(255,255,255,0.96)_inset,0_12px_26px_-18px_rgba(15,23,42,0.45),0_3px_0_rgba(212,212,216,0.95)] transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-400 hover:from-white hover:to-neutral-50 hover:shadow-[0_1px_0_rgba(255,255,255,0.98)_inset,0_18px_34px_-20px_rgba(15,23,42,0.4),0_4px_0_rgba(212,212,216,0.95)] active:translate-y-[2px] active:shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_7px_12px_-12px_rgba(15,23,42,0.28),0_1px_0_rgba(212,212,216,0.9)] cursor-pointer",
-    compact ? "rounded-xl" : "rounded-2xl",
+    "group relative overflow-hidden border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(246,241,233,0.9))] shadow-[0_16px_42px_-32px_rgba(16,32,51,0.52)] transition-all duration-300 hover:-translate-y-1 hover:border-[rgba(18,49,78,0.16)] hover:shadow-[0_28px_64px_-38px_rgba(16,32,51,0.58)] cursor-pointer",
+    compact ? "rounded-2xl" : "h-[238px] rounded-[28px]",
     className,
     liExtraClassName
   );
@@ -209,7 +209,7 @@ export function Scorecard({
         : tUI(langCode, "scorecard.favourite.action.add")
       : tUI(langCode, "scorecard.favourite.state.generic"));
   const favouriteWrapperClassName = mergeClassNames(
-    "inline-flex items-center justify-center rounded-full bg-white/90 shadow px-2 py-1 text-xs font-medium",
+    "inline-flex items-center justify-center rounded-full border border-white/50 bg-white/88 px-2.5 py-1 text-xs font-medium shadow-[0_12px_28px_-18px_rgba(16,32,51,0.7)] backdrop-blur",
     favouriteToggleClassName
   );
   const showFavouriteBadge = !!onToggleFavourite || isFavourite !== null && isFavourite !== undefined;
@@ -221,7 +221,7 @@ export function Scorecard({
         <Link
           href={href}
           prefetch={prefetch}
-          className="block h-full w-full"
+          className="flex h-full w-full flex-col"
           onClick={onCardClick}
         >
           {children}
@@ -233,20 +233,20 @@ export function Scorecard({
         <button
           type="button"
           onClick={onCardClick}
-          className="block h-full w-full text-left"
+          className="flex h-full w-full flex-col text-left"
         >
           {children}
         </button>
       );
     }
-    return <div>{children}</div>;
+    return <div className="flex h-full w-full flex-col">{children}</div>;
   };
 
   return (
     <li className={cardClassName} {...restLiProps}>
       <CardWrapper>
         {/* COVER */}
-        <div className={mergeClassNames("relative w-full overflow-hidden bg-neutral-100", compact ? "aspect-square" : "aspect-[5/3]")}>
+        <div className={mergeClassNames("relative w-full overflow-hidden bg-neutral-100", compact ? "aspect-square" : "h-[148px]")}>
           {coverUrl ? (
             (() => {
               const browserCoverUrl = normalizeCoverUrl(coverUrl);
@@ -256,7 +256,7 @@ export function Scorecard({
                   src={browserCoverUrl}
                   alt={title}
                   fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  className="object-cover transition-transform duration-500 group-hover:scale-[1.05]"
                   sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
                   priority={false}
                 />
@@ -265,7 +265,7 @@ export function Scorecard({
                 <img
                   src={browserCoverUrl || coverUrl}
                   alt={title}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
                   loading="lazy"
                 />
               );
@@ -275,6 +275,7 @@ export function Scorecard({
               {tUI(langCode, "scorecard.cover.missing")}
             </div>
           )}
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(8,18,30,0.02)_0%,rgba(8,18,30,0.08)_45%,rgba(8,18,30,0.24)_100%)]" />
 
           {/* AUDIO indicator (alto a sinistra) */}
           {audioAvailable ? (
@@ -420,16 +421,16 @@ export function Scorecard({
 
         {/* CONTENUTO */}
         {!compact ? (
-        <div className={compact ? "flex flex-col gap-1 p-1.5" : "flex h-full flex-col gap-2 p-2.5"}>
+        <div className={compact ? "flex flex-col gap-1 p-1.5" : "flex min-h-0 flex-1 flex-col gap-1.5 px-3 py-2.5"}>
           {/* Titolo + data */}
           <div className="flex items-start justify-between gap-2">
-            <h3 className={compact ? "text-[11px] font-semibold text-neutral-900 line-clamp-1" : "text-[13px] font-semibold text-neutral-900 line-clamp-2"}>
+            <h3 className={compact ? "text-[11px] font-semibold text-neutral-900 line-clamp-1" : "text-[13px] font-semibold leading-[1.35] text-[var(--geo-navy)] line-clamp-2"}>
               {title}
             </h3>
 
             {!compact && publishedLabel && (
               <span
-                className="mt-[2px] inline-flex items-center rounded bg-neutral-100 px-2 py-[2px] text-[10px] font-medium text-neutral-600 whitespace-nowrap"
+                className="mt-[1px] inline-flex whitespace-nowrap rounded-full border border-[rgba(18,49,78,0.08)] bg-[rgba(255,255,255,0.72)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-[rgba(16,32,51,0.54)]"
                 title={tUI(
                   langCode,
                   "scorecard.publication_date.title"
@@ -441,16 +442,16 @@ export function Scorecard({
           </div>
 
           {/* Riga date/meta */}
-          <div className={compact ? "mt-0 flex items-center justify-end text-[10px] text-neutral-600" : "grid grid-cols-[1fr,auto] grid-rows-[auto,auto] gap-1 text-[11px] text-neutral-600"}>
+          <div className={compact ? "mt-0 flex items-center justify-end text-[10px] text-neutral-600" : "grid grid-cols-1 gap-0.5 text-[10px] text-[rgba(16,32,51,0.62)]"}>
             {!compact ? (
-            <div className="col-[2] row-[2] mt-[1px] flex justify-end">
+            <div className="hidden">
               {/* lo spazio per eventuali future badge a destra, lasciato come in origine */}
             </div>
             ) : null}
 
-            <div className={compact ? "flex items-center justify-end" : "col-span-2 mt-1.5 flex items-center justify-between gap-2 text-[11px] text-neutral-600"}>
+            <div className={compact ? "flex items-center justify-end" : "mt-0 flex items-center justify-between gap-2 text-[10px] text-[rgba(16,32,51,0.62)]"}>
               {!compact ? (
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 {/* Numero eventi */}
                 <span
                   className="inline-flex items-center gap-1"
@@ -461,7 +462,7 @@ export function Scorecard({
                 >
                   <svg
                     viewBox="0 0 24 24"
-                    className="h-4 w-4"
+                    className="h-3.5 w-3.5"
                     fill="currentColor"
                     aria-hidden
                   >
@@ -481,7 +482,7 @@ export function Scorecard({
                 >
                   <svg
                     viewBox="0 0 24 24"
-                    className="h-4 w-4"
+                    className="h-3.5 w-3.5"
                     fill="currentColor"
                     aria-hidden
                   >

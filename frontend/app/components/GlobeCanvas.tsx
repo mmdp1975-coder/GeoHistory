@@ -694,10 +694,10 @@ export default function GlobeCanvas({
 
   const infoPanel = (
     <div
-      className={`shrink-0 bg-white/90 text-xs sm:text-sm ${
+      className={`shrink-0 bg-[linear-gradient(180deg,rgba(255,252,246,0.88),rgba(247,242,234,0.72))] text-xs sm:text-sm ${
         footerPosition === "top"
-          ? "border-b border-neutral-200"
-          : "border-t border-neutral-200"
+          ? "border-b border-[rgba(18,49,78,0.08)]"
+          : "border-t border-[rgba(18,49,78,0.08)]"
       }`}
       style={{
         padding: compactInfo ? "6px 8px" : "6px 8px 10px 8px",
@@ -745,7 +745,7 @@ export default function GlobeCanvas({
               onChange={(e) => setRadiusKm(Number(e.target.value))}
             />
             <span
-              className="font-medium text-neutral-800"
+              className="font-semibold text-[var(--geo-navy)]"
               style={{ width: compactInfo ? 34 : 40, textAlign: "right" }}
             >
               {radiusKm}
@@ -788,7 +788,7 @@ export default function GlobeCanvas({
       className={
         embedded
           ? "flex h-full min-h-0 flex-col overflow-hidden bg-transparent"
-          : "rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur"
+          : "overflow-hidden rounded-[28px] border border-[rgba(18,49,78,0.08)] bg-[rgba(255,252,246,0.72)] backdrop-blur-xl"
       }
     >
       {footerPosition === "top" ? infoPanel : null}
@@ -805,7 +805,7 @@ export default function GlobeCanvas({
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute right-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/85 text-neutral-700 shadow backdrop-blur hover:bg-white"
+          className="absolute right-4 top-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/60 bg-white/82 text-[var(--geo-navy)] shadow-[0_18px_34px_-18px_rgba(16,32,51,0.8)] backdrop-blur hover:bg-white"
           title={
             isFullscreen
               ? "Chiudi schermo intero"

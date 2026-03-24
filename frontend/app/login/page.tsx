@@ -28,12 +28,12 @@ export default function LoginPage() {
 
   // Cooldown locale se scatta il rate-limit
   const [cooldown, setCooldown] = useState<number>(0);
+  const [cooldownEmail, setCooldownEmail] = useState<string>("");
   const cooldownRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Guardia contro invii ravvicinati
-  const inFlight = useRef<boolean>(false);
-
   const pwdType = useMemo(() => (showPwd ? "text" : "password"), [showPwd]);
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const isCooldownActive = cooldown > 0 && normalizedEmail === cooldownEmail;
 
   // ✅ Se esiste già una sessione → redirect immediato e certo
   useEffect(() => {
@@ -85,6 +85,18 @@ export default function LoginPage() {
   }, [cooldown]);
 
   useEffect(() => {
+    if (!cooldownEmail) return;
+    if (normalizedEmail === cooldownEmail) return;
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = null;
+    setCooldown(0);
+    setCooldownEmail("");
+    setError((current) =>
+      current === "Too many login attempts. Please wait 2 minutes and try again." ? null : current
+    );
+  }, [cooldownEmail, normalizedEmail]);
+
+  useEffect(() => {
     const mq = window.matchMedia("(max-width: 900px)");
     const applyMatch = (matches: boolean) => {
       setIsMobile(matches);
@@ -132,20 +144,19 @@ export default function LoginPage() {
   }, [videoSrc]);
 
   // 🔹 Submit con redirect immediato e fallback
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (loading || inFlight.current || cooldown > 0) return;
+  async function submitLogin() {
+    if (loading || isCooldownActive) return;
 
     setError(null);
     setInfo(null);
     setLoading(true);
-    inFlight.current = true;
 
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         const msg = (error.message || "").toLowerCase();
         if (msg.includes("too many") || msg.includes("rate limit") || msg.includes("try again")) {
+          setCooldownEmail(normalizedEmail);
           setCooldown(120);
           setError("Too many login attempts. Please wait 2 minutes and try again.");
         } else {
@@ -172,15 +183,16 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err?.message ?? "Login failed.");
     } finally {
-      // ✅ lo spinner non resta mai appeso
       setLoading(false);
-      setTimeout(() => {
-        inFlight.current = false;
-      }, 300);
     }
   }
 
-  const submitDisabled = loading || cooldown > 0;
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    await submitLogin();
+  }
+
+  const submitDisabled = loading || isCooldownActive;
 
   return (
     <div className={styles.page}>
@@ -325,7 +337,7 @@ export default function LoginPage() {
               {error && (
                 <div className={`${styles.alert} ${styles.alertError}`}>
                   {error}
-                  {cooldown > 0 && <span style={{ marginLeft: 8 }}>({cooldown}s)</span>}
+                  {isCooldownActive && <span style={{ marginLeft: 8 }}>({cooldown}s)</span>}
                 </div>
               )}
               {info && !error && (
@@ -334,8 +346,16 @@ export default function LoginPage() {
 
               <div className={styles.field}>
                 <div className={styles.actions}>
-                  <button className={styles.btnPrimary} disabled={submitDisabled} type="submit">
-                    {cooldown > 0
+                  <button
+                    className={styles.btnPrimary}
+                    disabled={submitDisabled}
+                    type="submit"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      void submitLogin();
+                    }}
+                  >
+                    {isCooldownActive
                       ? `Please wait (${cooldown}s)`
                       : loading
                       ? "Signing in..."

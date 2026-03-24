@@ -173,10 +173,10 @@ export default function TopBar() {
   return (
     <>
       <nav
-        className="sticky top-0 z-20 bg-white border-b border-slate-200"
+        className="sticky top-0 z-20 border-b border-[rgba(18,49,78,0.08)] bg-white"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="mx-auto max-w-7xl px-4 h-16 flex flex-nowrap items-center justify-between">
+        <div className="mx-auto flex h-[74px] max-w-[1600px] flex-nowrap items-center justify-between px-4 lg:px-6">
           {isQuiz ? (
             <>
               <div className="flex min-w-0 items-end space-x-3">
@@ -188,13 +188,13 @@ export default function TopBar() {
                   priority
                   className="h-10 md:h-12 w-auto flex-none"
                 />
-                <span className="topbar-tagline flex-1 min-w-0 truncate text-slate-600 text-xs md:text-sm italic mt-2">
+                <span className="topbar-tagline mt-2 min-w-0 flex-1 truncate text-xs italic text-[rgba(16,32,51,0.72)] md:text-sm">
                   {tUI(langCode, 'topbar.motto')}
                 </span>
               </div>
               <button
                 onClick={() => router.back()}
-                className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-semibold text-slate-700 hover:text-slate-900"
+                className="inline-flex items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/70 px-4 py-2 text-sm font-semibold text-[var(--geo-navy)] transition hover:bg-white"
                 type="button"
                 aria-label="Chiudi"
                 title="Chiudi"
@@ -217,15 +217,15 @@ export default function TopBar() {
                   priority
                   className="h-10 md:h-12 w-auto flex-none"
                 />
-                <span className="topbar-tagline flex-1 min-w-0 truncate text-slate-600 text-xs md:text-sm italic mt-2">
+                <span className="topbar-tagline mt-2 min-w-0 flex-1 truncate text-xs italic text-[rgba(16,32,51,0.72)] md:text-sm">
                   {tUI(langCode, 'topbar.motto')}
                 </span>
               </Link>
 
-              <div className="flex min-w-0 flex-nowrap items-center gap-4 md:gap-6 text-sm md:text-base">
+              <div className="flex min-w-0 flex-nowrap items-center gap-2 text-sm md:gap-3 md:text-base">
                 <button
                   onClick={goHome}
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
                   type="button"
                   aria-label={tUI(langCode, 'topbar.home')}
                   title={tUI(langCode, 'topbar.home.title')}
@@ -238,7 +238,7 @@ export default function TopBar() {
 
                 <button
                   onClick={() => router.back()}
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
                   type="button"
                   aria-label={tUI(langCode, 'topbar.back')}
                   title={tUI(langCode, 'topbar.back.title')}
@@ -251,7 +251,7 @@ export default function TopBar() {
 
                 <Link
                   href="/module/settings"
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
                   aria-label={tUI(langCode, 'topbar.settings')}
                   title={tUI(langCode, 'topbar.settings.title')}
                 >
@@ -264,7 +264,7 @@ export default function TopBar() {
 
                 <Link
                   href="/about"
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
                   aria-label="About"
                   title="About"
                 >
@@ -274,7 +274,7 @@ export default function TopBar() {
 
                 <button
                   onClick={openVideo}
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
                   type="button"
                   aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
                   title={tUI(langCode, 'topbar.guide.title')}
@@ -287,7 +287,7 @@ export default function TopBar() {
 
                 <button
                   onClick={handleLogout}
-                  className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900"
+                  className="inline-flex items-center gap-2 rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-3.5 py-2 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white"
                   type="button"
                   aria-label={tUI(langCode, 'topbar.logout')}
                   title={tUI(langCode, 'topbar.logout.title')}

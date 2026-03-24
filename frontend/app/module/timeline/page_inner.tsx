@@ -130,6 +130,8 @@ type TimelinePageProps = {
   onClearExternalGeoFilter?: () => void;
 };
 
+type SortMode = "timeline" | "rating" | "favourites" | "published";
+
 export default function TimelinePage({
   embedded = false,
   externalGeoFilter = null,
@@ -181,6 +183,7 @@ export default function TimelinePage({
   const [visibilityFilter, setVisibilityFilter] = useState<
     "all" | "public" | "private"
   >("all");
+  const [sortMode, setSortMode] = useState<SortMode>("timeline");
 
   /* ===== Lingua UI: profiles.language_code (id = user.id) ===== */
   useEffect(() => {
@@ -549,14 +552,6 @@ export default function TimelinePage({
           };
         });
 
-        // Ordinamento: earliest year asc, poi più eventi
-        mapped.sort((a, b) => {
-          const ae = a.year_from_min ?? Number.POSITIVE_INFINITY;
-          const be = b.year_from_min ?? Number.POSITIVE_INFINITY;
-          if (ae !== be) return ae - be;
-          return (b.events_count ?? 0) - (a.events_count ?? 0);
-        });
-
         if (!cancelled) {
           setCards(mapped);
           setTotalMatches(
@@ -809,6 +804,34 @@ export default function TimelinePage({
     return out;
   }, [domainReady, fromYear, toYear, embedded]);
 
+  const displayCards = useMemo(() => {
+    const sorted = [...cards];
+    sorted.sort((a, b) => {
+      if (sortMode === "rating") {
+        const ar = a.avg_rating ?? -1;
+        const br = b.avg_rating ?? -1;
+        if (ar !== br) return br - ar;
+        const ac = a.ratings_count ?? 0;
+        const bc = b.ratings_count ?? 0;
+        if (ac !== bc) return bc - ac;
+      } else if (sortMode === "favourites") {
+        const af = favs.has(a.id) ? 1 : 0;
+        const bf = favs.has(b.id) ? 1 : 0;
+        if (af !== bf) return bf - af;
+      } else if (sortMode === "published") {
+        const ap = a.approved_at ? new Date(a.approved_at).getTime() : 0;
+        const bp = b.approved_at ? new Date(b.approved_at).getTime() : 0;
+        if (ap !== bp) return bp - ap;
+      }
+
+      const ae = a.year_from_min ?? Number.POSITIVE_INFINITY;
+      const be = b.year_from_min ?? Number.POSITIVE_INFINITY;
+      if (ae !== be) return ae - be;
+      return (b.events_count ?? 0) - (a.events_count ?? 0);
+    });
+    return sorted;
+  }, [cards, favs, sortMode]);
+
   /* ================== RENDER ================== */
   return (
     <div
@@ -822,19 +845,19 @@ export default function TimelinePage({
       <header
         className={
           embedded
-            ? "sticky top-0 z-30"
-            : "sticky top-16 z-20 border-b border-neutral-200"
+              ? "sticky top-0 z-30"
+              : "sticky top-16 z-20 border-b border-neutral-200"
         }
         style={embedded ? undefined : { backgroundColor: BRAND_BLUE }}
       >
         <div
           className={
             embedded
-              ? "px-0 pb-2 text-neutral-700"
+              ? "px-0 pb-0 text-neutral-700"
               : "mx-auto max-w-7xl px-4 py-3 text-white"
           }
         >
-          <div className="flex min-h-5 items-center justify-end">
+          <div className="flex min-h-0 items-center justify-end">
             {checking ? (
               <span className={embedded ? "text-xs text-neutral-500" : "text-xs text-white/70"}>
                 {tUI(langCode, "timeline.header.checking")}
@@ -851,7 +874,7 @@ export default function TimelinePage({
             <div
               className={
                 embedded
-                  ? "mt-2 flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[11px] text-neutral-700 shadow-sm"
+                  ? "mt-1.5 flex items-center justify-between rounded-2xl border border-[rgba(18,49,78,0.08)] bg-[rgba(255,252,246,0.72)] px-3 py-2 text-[11px] text-[var(--geo-navy)] shadow-[0_14px_30px_-22px_rgba(16,32,51,0.45)]"
                   : "mt-2 flex items-center justify-between rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-[11px]"
               }
             >
@@ -883,7 +906,7 @@ export default function TimelinePage({
                 }}
                 className={
                   embedded
-                    ? "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[11px] hover:bg-neutral-100"
+                    ? "rounded-full border border-[rgba(18,49,78,0.08)] bg-white/82 px-2.5 py-1 text-[11px] font-medium hover:bg-white"
                     : "rounded-lg border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
                 }
                 title={tUI(
@@ -900,7 +923,7 @@ export default function TimelinePage({
           <div
             className={
               embedded
-                ? "rounded-t-2xl border border-neutral-200 bg-gradient-to-b from-[#1d4d77] to-[#173f63] shadow-sm"
+                ? "mt-0 rounded-t-[28px] border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,#214f75_0%,#14344f_100%)] shadow-[0_24px_54px_-38px_rgba(16,32,51,0.8)]"
                 : "mt-2 rounded-2xl border border-white/15 bg-gradient-to-b from-white/8 to-white/4 shadow-sm"
             }
           >
@@ -1118,67 +1141,23 @@ export default function TimelinePage({
       <main
         className={
           embedded
-            ? "min-h-0 flex-1 overflow-y-auto px-4 pb-2 pt-1 sm:px-5 sm:pb-5"
+            ? "min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-2 sm:px-5 sm:pb-5"
             : "mx-auto max-w-7xl px-4 py-5"
         }
       >
         <div
           className={
             embedded
-              ? "sticky top-0 z-20 -mx-5 mb-2 flex flex-col gap-2 border-x border-b border-neutral-200/40 bg-gradient-to-b from-[#1a456b] to-[#153a5b] px-4 py-2 text-white backdrop-blur xl:flex-row xl:items-center xl:justify-between"
+              ? "sticky top-0 z-20 -mx-5 mb-3 flex flex-col gap-2 border-x border-b border-[rgba(255,255,255,0.08)] bg-[linear-gradient(180deg,#1c486d_0%,#112f48_100%)] px-4 py-3 text-white backdrop-blur"
               : "sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between"
           }
         >
-          <div className="min-w-[100px] text-[10px] leading-3 text-white/70">
-            {initializing ? (
-              <span>
-                {tUI(langCode, "timeline.summary.initializing")}
-              </span>
-            ) : loading ? (
-              <span className="animate-pulse">
-                {tUI(langCode, "timeline.summary.loading")}
-              </span>
-            ) : (
-              <div className="flex items-center gap-3">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[14px] font-semibold leading-none text-white">
-                    {cards.length}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
-                    {tUI(langCode, "timeline.summary.group_events")}
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[14px] font-semibold leading-none text-white">
-                    {totalMatches}
-                  </span>
-                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
-                    eventi
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Free text search + visibility filter */}
-          <div
-                className={
-                  embedded
-                    ? "flex w-full flex-col gap-1.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"
-                    : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
-                }
-              >
-            <div className="flex items-center gap-1.5">
-              <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
-                {tUI(langCode, "timeline.search.label")}
-              </label>
-              <div
-                className={
-                  embedded
-                    ? "flex min-w-0 flex-1 items-center"
-                    : "flex items-center"
-                }
-              >
+          <div className="flex w-full flex-col gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2.5">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
+                  {tUI(langCode, "timeline.search.label")}
+                </label>
                 <input
                   type="text"
                   value={q}
@@ -1189,41 +1168,166 @@ export default function TimelinePage({
                   )}
                   className={
                     embedded
-                      ? "w-full min-w-0 rounded-xl border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none lg:w-60"
+                      ? "w-full max-w-[360px] min-w-0 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-[11px] text-white placeholder-white/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none"
                       : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
                   }
                 />
               </div>
+
+              {embedded ? (
+                <button
+                  type="button"
+                  onClick={() => router.push("/module/build-journey")}
+                  className="ml-auto inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-4 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90"
+                  title={tUI(langCode, "timeline.new_button_long")}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                  >
+                    <path d="M12 5v14" strokeLinecap="round" />
+                    <path d="M5 12h14" strokeLinecap="round" />
+                  </svg>
+                  <span>{tUI(langCode, "timeline.new_button_long")}</span>
+                </button>
+              ) : null}
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <span className="hidden text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
-                {tUI(langCode, "timeline.visibility.label")}
-              </span>
-              {["all", "public", "private"].map((v) => {
-                const active = visibilityFilter === v;
-                return (
-                  <button
-                    key={v}
-                    onClick={() =>
-                      setVisibilityFilter(
-                        v as "all" | "public" | "private"
-                      )
-                    }
+            <div className="flex w-full flex-wrap items-end gap-2">
+              <div className="flex items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+                <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
+                  {tUI(langCode, "timeline.sort.label")}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {(["timeline", "rating", "favourites", "published"] as SortMode[]).map((mode) => {
+                    const active = sortMode === mode;
+                    const icon =
+                      mode === "timeline" ? (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M4 12h16" strokeLinecap="round" />
+                          <path d="M7 8v8" strokeLinecap="round" />
+                          <path d="M12 6v12" strokeLinecap="round" />
+                          <path d="M17 9v6" strokeLinecap="round" />
+                        </svg>
+                      ) : mode === "rating" ? (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                          <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                        </svg>
+                      ) : mode === "favourites" ? (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M7 3v3" strokeLinecap="round" />
+                          <path d="M17 3v3" strokeLinecap="round" />
+                          <path d="M4 9h16" strokeLinecap="round" />
+                          <rect x="4" y="5" width="16" height="15" rx="2" />
+                        </svg>
+                      );
+
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setSortMode(mode)}
+                        className={
+                          active
+                            ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm"
+                            : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
+                        }
+                        title={tUI(langCode, `timeline.sort.title.${mode}`)}
+                        aria-label={tUI(langCode, `timeline.sort.${mode}`)}
+                      >
+                        {icon}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+                <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
+                  {tUI(langCode, "timeline.visibility.label")}
+                </span>
+                <div className="flex items-center gap-1.5">
+                {(["all", "public", "private"] as const).map((v) => {
+                  const active = visibilityFilter === v;
+                  const icon =
+                    v === "all" ? (
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <circle cx="12" cy="12" r="7.5" />
+                        <path d="M4.5 12h15" strokeLinecap="round" />
+                        <path d="M12 4.5c2.3 2.1 3.5 4.6 3.5 7.5S14.3 17.4 12 19.5c-2.3-2.1-3.5-4.6-3.5-7.5S9.7 6.6 12 4.5Z" />
+                      </svg>
+                    ) : v === "public" ? (
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5-10-5-10-5Z" />
+                        <circle cx="12" cy="12" r="2.5" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <rect x="5" y="11" width="14" height="9" rx="2" />
+                        <path d="M8 11V8.5A4 4 0 0 1 12 4.5a4 4 0 0 1 4 4V11" />
+                      </svg>
+                    );
+                  return (
+                    <button
+                      key={v}
+                      onClick={() =>
+                        setVisibilityFilter(
+                          v as "all" | "public" | "private"
+                        )
+                      }
                     className={
                       active
-                        ? "rounded-xl border border-white/20 bg-white px-2 py-1 text-[10px] text-[#153a5b] shadow-sm"
-                        : "rounded-xl border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white hover:bg-white/15"
-                    }
-                    title={tUI(
-                      langCode,
-                      `timeline.visibility.title.${v}`
-                    )}
-                  >
-                    {tUI(langCode, `timeline.visibility.${v}`)}
-                  </button>
-                );
-              })}
+                        ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm"
+                        : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
+                      }
+                      title={tUI(
+                        langCode,
+                        `timeline.visibility.title.${v}`
+                      )}
+                      aria-label={tUI(langCode, `timeline.visibility.${v}`)}
+                    >
+                      {icon}
+                    </button>
+                  );
+                })}
+                </div>
+              </div>
+
+              <div className="ml-auto min-w-[140px] text-right text-[10px] leading-3 text-white/70">
+                {initializing ? (
+                  <span>{tUI(langCode, "timeline.summary.initializing")}</span>
+                ) : loading ? (
+                  <span className="animate-pulse">
+                    {tUI(langCode, "timeline.summary.loading")}
+                  </span>
+                ) : (
+                  <div className="flex justify-end gap-3">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[14px] font-semibold leading-none text-white">
+                        {cards.length}
+                      </span>
+                      <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                        {tUI(langCode, "timeline.summary.group_events")}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[14px] font-semibold leading-none text-white">
+                        {totalMatches}
+                      </span>
+                      <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                        eventi
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1253,11 +1357,11 @@ export default function TimelinePage({
         <ul
           className={
             embedded
-              ? "flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-3 2xl:grid-cols-4"
+              ? "flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-3 2xl:grid-cols-4"
               : "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           }
         >
-          {cards.map((g) => {
+          {displayCards.map((g) => {
             const isFav = favs.has(g.id);
             return (
                 <Scorecard
@@ -1274,7 +1378,7 @@ export default function TimelinePage({
                   }
                   className={
                     embedded
-                      ? "w-[244px] min-w-[244px] flex-none snap-start md:w-auto md:min-w-0"
+                      ? "w-[272px] min-w-[272px] flex-none snap-start md:w-auto md:min-w-0"
                       : undefined
                   }
                 publishedAt={g.approved_at}
