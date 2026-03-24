@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import GlobeCanvas from "@/app/components/GlobeCanvas";
 import TimelinePage from "@/app/module/timeline/page_inner";
@@ -133,11 +133,19 @@ export default function LandingPage(): JSX.Element {
 
       <div className="relative z-10 mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(520px,0.88fr)] lg:grid-rows-[calc(100vh-11.5rem)_auto] lg:items-start lg:gap-6 lg:px-6 lg:py-3">
         <section className="min-w-0 overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md lg:h-full">
-          <TimelinePage
-            embedded
-            externalGeoFilter={selectedGeoFilter}
-            onClearExternalGeoFilter={clearGeoSelection}
-          />
+          <Suspense
+            fallback={
+              <div className="flex h-full min-h-[660px] items-center justify-center text-sm text-neutral-500">
+                Loading timeline...
+              </div>
+            }
+          >
+            <TimelinePage
+              embedded
+              externalGeoFilter={selectedGeoFilter}
+              onClearExternalGeoFilter={clearGeoSelection}
+            />
+          </Suspense>
         </section>
 
         <section className="min-w-0 overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md lg:h-full">
