@@ -345,6 +345,7 @@ export default function GlobeCanvas({
   height,
   radius: globeRadius,
   embedded = false,
+  footerPosition = "bottom",
 }: {
   onPointSelect?: (info: {
     lat: number;
@@ -359,8 +360,10 @@ export default function GlobeCanvas({
   height?: number; // default 700
   radius?: number;
   embedded?: boolean;
+  footerPosition?: "top" | "bottom";
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
 
   const [picked, setPicked] = React.useState<{ lat: number; lon: number } | null>(null);
   const [continent, setContinent] = React.useState<string>("");
@@ -374,6 +377,7 @@ export default function GlobeCanvas({
 
   const [dragging, setDragging] = React.useState(false);
   const [hoveringCity, setHoveringCity] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
 
   const supabase = React.useMemo(() => createClientComponentClient(), []);
   const [langCode, setLangCode] = React.useState<string>("en");
@@ -502,6 +506,15 @@ export default function GlobeCanvas({
 
   const setCityAsNearest = React.useCallback((name: string) => {
     setNearestCity(name || "Unknown");
+  }, []);
+
+  React.useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
   const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 1500);
@@ -663,14 +676,122 @@ export default function GlobeCanvas({
     return value;
   };
 
+  const toggleFullscreen = React.useCallback(async () => {
+    const node = containerRef.current;
+    if (!node) return;
+    try {
+      if (document.fullscreenElement === node) {
+        await document.exitFullscreen();
+      } else {
+        await node.requestFullscreen();
+      }
+    } catch {
+      /* no-op */
+    }
+  }, []);
+
+  const compactInfo = embedded && footerPosition === "top";
+
+  const infoPanel = (
+    <div
+      className={`shrink-0 bg-white/90 text-xs sm:text-sm ${
+        footerPosition === "top"
+          ? "border-b border-neutral-200"
+          : "border-t border-neutral-200"
+      }`}
+      style={{
+        padding: compactInfo ? "6px 8px" : "6px 8px 10px 8px",
+        position: "relative",
+        zIndex: 5,
+      }}
+    >
+      <div
+        className={
+          compactInfo
+            ? "grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px] leading-4"
+            : "grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"
+        }
+      >
+        <div className="min-w-0">
+          <div className={compactInfo ? "truncate" : "whitespace-nowrap"}>
+            <span className="text-neutral-500">
+              {tUI(langCode, "globe.footer.lat")}
+            </span>{" "}
+            <span className="break-words font-medium text-neutral-800">
+              {picked ? picked.lat.toFixed(4) : "-"}
+            </span>
+          </div>
+          <div className={compactInfo ? "truncate" : "whitespace-nowrap"}>
+            <span className="text-neutral-500">
+              {tUI(langCode, "globe.footer.lon")}
+            </span>{" "}
+            <span className="break-words font-medium text-neutral-800">
+              {picked ? picked.lon.toFixed(4) : "-"}
+            </span>
+          </div>
+          <div
+            className={`flex items-center ${compactInfo ? "mt-1 gap-2" : "mt-2 max-w-[220px] gap-3"}`}
+          >
+            <span className="whitespace-nowrap text-neutral-500">
+              {tUI(langCode, "globe.footer.city_radius")}
+            </span>
+            <input
+              className="min-w-0 flex-1"
+              type="range"
+              min={25}
+              max={5000}
+              step={25}
+              value={radiusKm}
+              onChange={(e) => setRadiusKm(Number(e.target.value))}
+            />
+            <span
+              className="font-medium text-neutral-800"
+              style={{ width: compactInfo ? 34 : 40, textAlign: "right" }}
+            >
+              {radiusKm}
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0 break-words">
+          <div className={compactInfo ? "truncate" : undefined}>
+            <span className="text-neutral-500">
+              {tUI(langCode, "globe.footer.continent")}
+            </span>{" "}
+            <span className="break-words font-medium text-neutral-800">
+              {displayUnknown(continent)}
+            </span>
+          </div>
+          <div className={compactInfo ? "truncate" : undefined}>
+            <span className="text-neutral-500">
+              {tUI(langCode, "globe.footer.country")}
+            </span>{" "}
+            <span className="break-words font-medium text-neutral-800">
+              {displayUnknown(country)}
+            </span>
+          </div>
+          <div className={compactInfo ? "truncate" : undefined}>
+            <span className="text-neutral-500">
+              {tUI(langCode, "globe.footer.nearest_city")}
+            </span>{" "}
+            <span className="break-words font-medium text-neutral-800">
+              {displayUnknown(nearestCity)}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div
+      ref={containerRef}
       className={
         embedded
           ? "flex h-full min-h-0 flex-col overflow-hidden bg-transparent"
           : "rounded-xl border border-neutral-200 overflow-hidden bg-white/70 backdrop-blur"
       }
     >
+      {footerPosition === "top" ? infoPanel : null}
       <div
         style={{
           width: "100%",
@@ -681,6 +802,37 @@ export default function GlobeCanvas({
           flex: embedded ? "1 1 auto" : undefined,
         }}
       >
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute right-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/60 bg-white/85 text-neutral-700 shadow backdrop-blur hover:bg-white"
+          title={
+            isFullscreen
+              ? "Chiudi schermo intero"
+              : "Apri a schermo intero"
+          }
+          aria-label={
+            isFullscreen
+              ? "Chiudi schermo intero"
+              : "Apri a schermo intero"
+          }
+        >
+          {isFullscreen ? (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M9 15H5v4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 9h4V5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 15l5-5" strokeLinecap="round" />
+              <path d="M19 9l-5 5" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M9 5H5v4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M15 19h4v-4" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 9l5-5" strokeLinecap="round" />
+              <path d="M19 15l-5 5" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
         <Canvas
           style={{
             width: "100%",
@@ -721,68 +873,7 @@ export default function GlobeCanvas({
           />
         </Canvas>
       </div>
-
-      {/* FOOTER COORDINATE */}
-      <div
-        className="shrink-0 border-t border-neutral-200 bg-white/90 text-xs sm:text-sm"
-        style={{
-          padding: "6px 8px 10px 8px",
-          position: "relative",
-          zIndex: 5,
-        }}
-      >
-        <div className="grid gap-x-4 gap-y-2 grid-cols-1 sm:grid-cols-2">
-          <div className="min-w-0">
-            <div className="whitespace-nowrap">
-              {tUI(langCode, "globe.footer.lat")}{" "}
-              <span className="break-words">
-                {picked ? picked.lat.toFixed(4) : "-"}
-              </span>
-            </div>
-            <div className="whitespace-nowrap">
-              {tUI(langCode, "globe.footer.lon")}{" "}
-              <span className="break-words">
-                {picked ? picked.lon.toFixed(4) : "-"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 mt-2 max-w-[220px]">
-              <span className="whitespace-nowrap">
-                {tUI(langCode, "globe.footer.city_radius")}
-              </span>
-              <input
-                className="min-w-0 flex-1"
-                type="range"
-                min={25}
-                max={5000}
-                step={25}
-                value={radiusKm}
-                onChange={(e) => setRadiusKm(Number(e.target.value))}
-              />
-              <span style={{ width: 40, textAlign: "right" }}>{radiusKm}</span>
-            </div>
-          </div>
-          <div className="min-w-0 break-words">
-            <div>
-              {tUI(langCode, "globe.footer.continent")}{" "}
-              <span className="break-words">
-                {displayUnknown(continent)}
-              </span>
-            </div>
-            <div>
-              {tUI(langCode, "globe.footer.country")}{" "}
-              <span className="break-words">
-                {displayUnknown(country)}
-              </span>
-            </div>
-            <div>
-              {tUI(langCode, "globe.footer.nearest_city")}{" "}
-              <span className="break-words">
-                {displayUnknown(nearestCity)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {footerPosition === "bottom" ? infoPanel : null}
     </div>
   );
 }

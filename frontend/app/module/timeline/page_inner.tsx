@@ -1118,18 +1118,18 @@ export default function TimelinePage({
       <main
         className={
           embedded
-            ? "min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-1"
+            ? "min-h-0 flex-1 overflow-y-auto px-4 pb-2 pt-1 sm:px-5 sm:pb-5"
             : "mx-auto max-w-7xl px-4 py-5"
         }
       >
         <div
           className={
             embedded
-              ? "sticky top-0 z-20 -mx-5 mb-3 flex flex-col gap-2.5 border-x border-b border-neutral-200/40 bg-gradient-to-b from-[#1a456b] to-[#153a5b] px-5 py-2.5 text-white backdrop-blur xl:flex-row xl:items-center xl:justify-between"
+              ? "sticky top-0 z-20 -mx-5 mb-2 flex flex-col gap-2 border-x border-b border-neutral-200/40 bg-gradient-to-b from-[#1a456b] to-[#153a5b] px-4 py-2 text-white backdrop-blur xl:flex-row xl:items-center xl:justify-between"
               : "sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between"
           }
         >
-          <div className="min-w-[120px] text-[11px] leading-3.5 text-white/70">
+          <div className="min-w-[100px] text-[10px] leading-3 text-white/70">
             {initializing ? (
               <span>
                 {tUI(langCode, "timeline.summary.initializing")}
@@ -1139,20 +1139,20 @@ export default function TimelinePage({
                 {tUI(langCode, "timeline.summary.loading")}
               </span>
             ) : (
-              <div className="space-y-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[16px] font-semibold leading-none text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[14px] font-semibold leading-none text-white">
                     {cards.length}
                   </span>
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/65">
+                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                     {tUI(langCode, "timeline.summary.group_events")}
                   </span>
                 </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[16px] font-semibold leading-none text-white">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[14px] font-semibold leading-none text-white">
                     {totalMatches}
                   </span>
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-white/65">
+                  <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                     eventi
                   </span>
                 </div>
@@ -1164,12 +1164,12 @@ export default function TimelinePage({
           <div
                 className={
                   embedded
-                    ? "flex w-full flex-col gap-2.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"
+                    ? "flex w-full flex-col gap-1.5 lg:flex-row lg:flex-wrap lg:items-center lg:justify-end"
                     : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
                 }
               >
-            <div className="flex items-center gap-2">
-              <label className="whitespace-nowrap text-[10px] font-medium uppercase tracking-[0.14em] text-white/65">
+            <div className="flex items-center gap-1.5">
+              <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
                 {tUI(langCode, "timeline.search.label")}
               </label>
               <div
@@ -1189,15 +1189,15 @@ export default function TimelinePage({
                   )}
                   className={
                     embedded
-                      ? "w-full min-w-0 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-[12px] text-white placeholder-white/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none lg:w-60"
+                      ? "w-full min-w-0 rounded-xl border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] text-white placeholder-white/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none lg:w-60"
                       : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
                   }
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-white/65">
+            <div className="flex items-center gap-1.5">
+              <span className="hidden text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
                 {tUI(langCode, "timeline.visibility.label")}
               </span>
               {["all", "public", "private"].map((v) => {
@@ -1212,8 +1212,8 @@ export default function TimelinePage({
                     }
                     className={
                       active
-                        ? "rounded-xl border border-white/20 bg-white px-2.5 py-1 text-[11px] text-[#153a5b] shadow-sm"
-                        : "rounded-xl border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] text-white hover:bg-white/15"
+                        ? "rounded-xl border border-white/20 bg-white px-2 py-1 text-[10px] text-[#153a5b] shadow-sm"
+                        : "rounded-xl border border-white/15 bg-white/10 px-2 py-1 text-[10px] text-white hover:bg-white/15"
                     }
                     title={tUI(
                       langCode,
@@ -1253,7 +1253,7 @@ export default function TimelinePage({
         <ul
           className={
             embedded
-              ? "grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+              ? "flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-3 2xl:grid-cols-4"
               : "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           }
         >
@@ -1271,6 +1271,11 @@ export default function TimelinePage({
                   hasAudio={g.has_audio}
                   onToggleFavourite={(event) =>
                     toggleFavourite(event, g.id)
+                  }
+                  className={
+                    embedded
+                      ? "w-[244px] min-w-[244px] flex-none snap-start md:w-auto md:min-w-0"
+                      : undefined
                   }
                 publishedAt={g.approved_at}
                 averageRating={g.avg_rating}

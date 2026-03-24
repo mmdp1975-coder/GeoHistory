@@ -23,6 +23,9 @@ export default function LandingPage(): JSX.Element {
   const [pointInfo, setPointInfo] = useState<PointInfo>(null);
   const [globeResetKey, setGlobeResetKey] = useState(0);
   const [langCode, setLangCode] = useState("it");
+  const [mobilePanel, setMobilePanel] = useState<"timeline" | "globe">(
+    "timeline"
+  );
 
   const clearGeoSelection = () => {
     setPointInfo(null);
@@ -131,7 +134,94 @@ export default function LandingPage(): JSX.Element {
         }}
       />
 
-      <div className="relative z-10 mx-auto grid w-full max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(520px,0.88fr)] lg:grid-rows-[calc(100vh-11.5rem)_auto] lg:items-start lg:gap-6 lg:px-6 lg:py-3">
+      <div className="relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 lg:px-6 lg:py-3">
+        <div className="flex flex-col gap-2.5 lg:hidden">
+          <section className="rounded-[24px] border border-neutral-200/90 bg-white/85 p-1 shadow-[0_18px_48px_-32px_rgba(15,23,42,0.35)] backdrop-blur-md">
+            <div className="grid grid-cols-2 gap-1">
+              <button
+                type="button"
+                onClick={() => setMobilePanel("timeline")}
+                className={
+                  mobilePanel === "timeline"
+                    ? "rounded-[18px] bg-[#163f63] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                    : "rounded-[18px] px-4 py-2 text-sm font-medium text-neutral-600"
+                }
+              >
+                Timeline
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobilePanel("globe")}
+                className={
+                  mobilePanel === "globe"
+                    ? "rounded-[18px] bg-[#163f63] px-4 py-2 text-sm font-semibold text-white shadow-sm"
+                    : "rounded-[18px] px-4 py-2 text-sm font-medium text-neutral-600"
+                }
+              >
+                Mappa
+              </button>
+            </div>
+          </section>
+
+          <section
+            className={
+              mobilePanel === "timeline"
+                ? "overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md"
+                : "min-h-0 overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md"
+            }
+          >
+            {mobilePanel === "timeline" ? (
+              <Suspense
+                fallback={
+                  <div className="flex h-full min-h-[420px] items-center justify-center text-sm text-neutral-500">
+                    Loading timeline...
+                  </div>
+                }
+              >
+                <TimelinePage
+                  embedded
+                  externalGeoFilter={selectedGeoFilter}
+                  onClearExternalGeoFilter={clearGeoSelection}
+                />
+              </Suspense>
+            ) : (
+              <div className="h-[560px]">
+                <GlobeCanvas
+                  embedded
+                  height={460}
+                  radius={1.18}
+                  onPointSelect={(info: any) => setPointInfo(info)}
+                  initialRadiusKm={pointInfo?.radiusKm ?? DEFAULT_GEO_RADIUS_KM}
+                  clearSelectionSignal={globeResetKey}
+                  footerPosition="top"
+                />
+              </div>
+            )}
+          </section>
+
+          <section className="grid grid-cols-4 gap-2">
+            {discoverCards.map((card) => (
+              <Link
+                key={card.href}
+                href={card.href}
+                className="group relative overflow-hidden rounded-2xl border border-neutral-300 bg-gradient-to-b from-white to-neutral-100 px-2 py-2 shadow-[0_1px_0_rgba(255,255,255,0.96)_inset,0_8px_16px_-16px_rgba(15,23,42,0.4),0_3px_0_rgba(212,212,216,0.95)] transition-all duration-150 active:translate-y-[2px] active:shadow-[0_1px_0_rgba(255,255,255,0.9)_inset,0_6px_10px_-12px_rgba(15,23,42,0.28),0_1px_0_rgba(212,212,216,0.9)]"
+              >
+                <div className="flex flex-col items-center gap-1.5 text-center">
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${card.iconWrap}`}
+                  >
+                    {card.icon}
+                  </span>
+                  <h3 className="line-clamp-2 text-[10px] font-semibold leading-3.5 text-neutral-900">
+                    {card.title}
+                  </h3>
+                </div>
+              </Link>
+            ))}
+          </section>
+        </div>
+
+        <div className="hidden grid-cols-1 gap-6 lg:grid lg:grid-cols-[minmax(0,1.12fr)_minmax(520px,0.88fr)] lg:grid-rows-[calc(100vh-11.5rem)_auto] lg:items-start lg:gap-6">
         <section className="min-w-0 overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md lg:h-full">
           <Suspense
             fallback={
@@ -194,6 +284,7 @@ export default function LandingPage(): JSX.Element {
             ))}
           </div>
         </section>
+        </div>
       </div>
     </main>
   );
