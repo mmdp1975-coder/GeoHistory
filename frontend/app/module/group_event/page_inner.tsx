@@ -778,13 +778,15 @@ const [desiredLang, setDesiredLang] = useState<string>(() => {
   if (qp && qp.trim()) return qp.trim().slice(0, 2).toLowerCase();
   return "it";
 });
+const [preferredAudioLang, setPreferredAudioLang] = useState<string>("it");
+const [audioPreferenceReady, setAudioPreferenceReady] = useState(false);
 
 useEffect(() => {
   let active = true;
   const qp = queryLang;
-  if (qp && qp.trim()) {
-    setDesiredLang(qp.trim().slice(0, 2).toLowerCase());
-    return () => { active = false; };
+  const queryLangShort = qp && qp.trim() ? qp.trim().slice(0, 2).toLowerCase() : null;
+  if (queryLangShort) {
+    setDesiredLang(queryLangShort);
   }
   (async () => {
     const browserLang =
@@ -799,7 +801,11 @@ useEffect(() => {
         console.warn("[GE] auth.getUser error:", userError.message);
       }
       if (!user) {
-        if (active) setDesiredLang(browserShort);
+        if (active) {
+          setPreferredAudioLang(browserShort);
+          if (!queryLangShort) setDesiredLang(browserShort);
+          setAudioPreferenceReady(true);
+        }
         return;
       }
       const { data, error } = await supabase
@@ -809,18 +815,35 @@ useEffect(() => {
         .maybeSingle();
       if (error) {
         console.warn("[GE] profiles.language_code error:", error.message);
-        if (active) setDesiredLang(browserShort);
+        if (active) {
+          setPreferredAudioLang(browserShort);
+          if (!queryLangShort) setDesiredLang(browserShort);
+          setAudioPreferenceReady(true);
+        }
         return;
       }
       if (!data || typeof data.language_code !== "string") {
-        if (active) setDesiredLang(browserShort);
+        if (active) {
+          setPreferredAudioLang(browserShort);
+          if (!queryLangShort) setDesiredLang(browserShort);
+          setAudioPreferenceReady(true);
+        }
         return;
       }
       const dbLang = (data.language_code as string).trim() || browserShort;
-      if (active) setDesiredLang(dbLang.slice(0, 2).toLowerCase());
+      if (active) {
+        const nextLang = dbLang.slice(0, 2).toLowerCase();
+        setPreferredAudioLang(nextLang);
+        if (!queryLangShort) setDesiredLang(nextLang);
+        setAudioPreferenceReady(true);
+      }
     } catch (err: any) {
       console.warn("[GE] Unexpected error loading language:", err?.message);
-      if (active) setDesiredLang(browserShort);
+      if (active) {
+        setPreferredAudioLang(browserShort);
+        if (!queryLangShort) setDesiredLang(browserShort);
+        setAudioPreferenceReady(true);
+      }
     }
   })();
   return () => { active = false; };
@@ -847,7 +870,7 @@ const [isPlaying, setIsPlaying] = useState(false);
 const [isBuffering, setIsBuffering] = useState(false);
 const [mapMode, setMapMode] = useState<"normal" | "fullscreen">("normal");
 const [mobileSheetSnap, setMobileSheetSnap] = useState<"peek" | "half">("peek");
-const [mobileTab, setMobileTab] = useState<"event" | "related" | "concurrent">("event");
+const [mobileTab, setMobileTab] = useState<"event" | "related">("event");
 const [mobileJourneyDescOpen, setMobileJourneyDescOpen] = useState(false);
 const [mobileTopMediaOpen, setMobileTopMediaOpen] = useState(false);
 const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
@@ -993,10 +1016,22 @@ useEffect(() => {
 useEffect(() => {
   if (!journeyAudioTracks.length) return;
   if (audioSource) return;
+  if (!audioPreferenceReady) return;
+  const preferred = (preferredAudioLang || "").slice(0, 2).toLowerCase();
+  const preferredIdx = journeyAudioTracks.findIndex((t) => (t.lang || "").toLowerCase() === preferred);
+  const sameFamilyIdx =
+    preferredIdx >= 0
+      ? preferredIdx
+      : journeyAudioTracks.findIndex((t) => (t.lang || "").toLowerCase().startsWith(preferred));
   const itIdx = journeyAudioTracks.findIndex((t) => t.lang === "it");
-  const nextIdx = itIdx >= 0 ? itIdx : 0;
+  const enIdx = journeyAudioTracks.findIndex((t) => t.lang === "en");
+  const nextIdx = sameFamilyIdx >= 0 ? sameFamilyIdx : itIdx >= 0 ? itIdx : enIdx >= 0 ? enIdx : 0;
   setAudioSource(`mp3:${nextIdx}`);
-}, [journeyAudioTracks, audioSource]);
+}, [journeyAudioTracks, audioSource, preferredAudioLang, audioPreferenceReady]);
+
+useEffect(() => {
+  setAudioSource("");
+}, [gid]);
 
 useEffect(() => {
   isPlayingRef.current = isPlaying;
@@ -2331,6 +2366,20 @@ const renderMapPlayerBox = useCallback(
           <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
+      <button
+        onClick={() => {
+          if (!selectedEvent || selectedEvent.latitude == null || selectedEvent.longitude == null) return;
+          moveMapToVisibleCenter(selectedEvent.longitude, selectedEvent.latitude);
+        }}
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+        aria-label="Centra evento selezionato"
+        title="Centra evento selezionato"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </button>
       {audioSourceOptions.length ? (
         <select
           value={audioSource}
@@ -2400,12 +2449,48 @@ const openQuiz = useCallback(() => {
 const closeQuiz = useCallback(() => setQuizOpen(false), []);
 
  /* ===== Mappa ===== */
- const mapRef = useRef<MapLibreMap | null>(null);
+const mapRef = useRef<MapLibreMap | null>(null);
 const markersRef = useRef<MapLibreMarker[]>([]);
 const popupRef = useRef<maplibregl.Popup | null>(null);
+const suppressMapRecenteringRef = useRef(false);
 const [mapReady, setMapReady] = useState(false);
 const [mapLoaded, setMapLoaded] = useState(false);
  const [mapVersion, setMapVersion] = useState(0);
+
+const mobileMapBottomInset = useMemo(() => {
+  if (isLg) return 0;
+  return mobileSheetSnap === "peek" ? 300 : 420;
+}, [isLg, mobileSheetSnap]);
+
+const moveMapToVisibleCenter = useCallback(
+  (lng: number, lat: number, zoom?: number) => {
+    const map = mapRef.current as any;
+    if (!map) return;
+    try {
+      if (isLg || mobileMapBottomInset <= 0) {
+        map.flyTo({
+          center: [lng, lat],
+          zoom: zoom ?? Math.max(map.getZoom(), 6),
+          speed: 0.8,
+        });
+        return;
+      }
+
+      const point = map.project([lng, lat]);
+      const shifted = {
+        x: point.x,
+        y: point.y + mobileMapBottomInset / 2,
+      };
+      const targetCenter = map.unproject(shifted);
+      map.flyTo({
+        center: targetCenter,
+        zoom: zoom ?? Math.max(map.getZoom(), 6),
+        speed: 0.8,
+      });
+    } catch {}
+  },
+  [isLg, mobileMapBottomInset]
+);
 
 const fitMapToRows = useCallback(() => {
   const map = mapRef.current;
@@ -2425,9 +2510,17 @@ const fitMapToRows = useCallback(() => {
         [pts[0][0], pts[0][1]],
       ]
     );
-    (map as any).fitBounds(bounds as any, { padding: 100, duration: 800 });
+    const padding = isLg
+      ? 100
+      : {
+          top: 84,
+          right: 24,
+          bottom: mobileMapBottomInset,
+          left: 24,
+        };
+    (map as any).fitBounds(bounds as any, { padding, duration: 800 });
   } catch {}
-}, [rows, mapReady]);
+}, [rows, mapReady, isLg, mobileMapBottomInset]);
 
 const showPopup = useCallback((ev?: EventVM | null) => {
   if (popupRef.current) {
@@ -2435,6 +2528,20 @@ const showPopup = useCallback((ev?: EventVM | null) => {
     popupRef.current = null;
   }
 }, [mapMode, mapReady]);
+
+const recenterSelectedEvent = useCallback(() => {
+  const ev = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
+  if (!ev || ev.latitude == null || ev.longitude == null) return;
+  suppressMapRecenteringRef.current = true;
+  moveMapToVisibleCenter(ev.longitude, ev.latitude);
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => {
+      suppressMapRecenteringRef.current = false;
+    }, 450);
+  } else {
+    suppressMapRecenteringRef.current = false;
+  }
+}, [activeEventIndex, rows, moveMapToVisibleCenter]);
 
 // Lock scroll quando la mappa è full-screen
 useEffect(() => {
@@ -2459,6 +2566,27 @@ useEffect(() => {
   if (!mapReady || !mapLoaded) return;
   fitMapToRows();
 }, [fitMapToRows, mapReady, mapLoaded]);
+
+useEffect(() => {
+  const map = mapRef.current as any;
+  if (!map || !mapReady || isLg || mapMode === "fullscreen") return;
+
+  const onInteractionEnd = () => {
+    if (suppressMapRecenteringRef.current) return;
+    recenterSelectedEvent();
+  };
+
+  map.on("moveend", onInteractionEnd);
+  map.on("zoomend", onInteractionEnd);
+  map.on("rotateend", onInteractionEnd);
+  map.on("pitchend", onInteractionEnd);
+  return () => {
+    try { map.off("moveend", onInteractionEnd); } catch {}
+    try { map.off("zoomend", onInteractionEnd); } catch {}
+    try { map.off("rotateend", onInteractionEnd); } catch {}
+    try { map.off("pitchend", onInteractionEnd); } catch {}
+  };
+}, [mapReady, isLg, mapMode, recenterSelectedEvent]);
 
 // Popup evento quando la mappa Š full-screen
 useEffect(() => {
@@ -3051,14 +3179,12 @@ if (!map || !mapReady || !gid) return;
  }, [rows, mapReady, activeEventIndex, mapMode, showPopup]);
 
  useEffect(() => {
- const map = mapRef.current as any;
- const ev = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
- if (map && ev && ev.latitude !== null && ev.longitude !== null) {
- try {
- map.flyTo({ center: [ev.longitude, ev.latitude], zoom: Math.max(map.getZoom(), 6), speed: 0.8 });
- } catch {}
- }
- }, [activeEventIndex, rows, gid, mapReady]);
+  const map = mapRef.current as any;
+  const ev = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
+  if (map && ev && ev.latitude !== null && ev.longitude !== null) {
+    moveMapToVisibleCenter(ev.longitude, ev.latitude, Math.max(map.getZoom(), 6));
+  }
+ }, [activeEventIndex, rows, gid, mapReady, moveMapToVisibleCenter]);
 
 /* ===== Refs per elenchi eventi (mobile + desktop) ===== */
 const bandRef = useRef<HTMLDivElement | null>(null);
@@ -3154,75 +3280,86 @@ useEffect(() => {
   }
 
  return (
- <div className="relative flex flex-col items-center justify-center h-full">
- {/* Barra timeline */}
-  <div
-    className="relative w-full h-[8px] rounded-full shadow-inner"
-    style={{ background: "linear-gradient(90deg, #0f3c8c 0%, #1a64d6 60%, #0f3c8c 100%)" }}
-  >
-  <div
-  className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white shadow"
-  style={{ left: `${pct}%`, width: `${diamondSize}px`, height: `${diamondSize}px`, backgroundColor: "#1a64d6", boxShadow: "0 0 8px rgba(15,60,140,0.55)" }}
-  />
- {minorTicks.map((t, i) => {
- const pos = ((t - data.min) / data.range) * 100;
-  return (
- <div
- key={`mtick-${i}`}
-  className="absolute top-1/2 -translate-y-1/2 h-[10px] w-[1px] -translate-x-1/2"
-  style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.35)" }}
-  />
- );
- })}
- {tickYears.map((t, i) => {
- const pos = ((t - data.min) / data.range) * 100;
- return (
- <div
- key={`tick-${i}`}
-  className="absolute top-1/2 -translate-y-1/2 h-[14px] w-[2px] -translate-x-1/2"
-  style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.7)" }}
-  />
- );
- })}
- </div>
+ <div className="relative flex h-full flex-col justify-center">
+  <div className="rounded-[26px] border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,241,233,0.82))] px-4 py-4 shadow-[0_18px_48px_-34px_rgba(16,32,51,0.48)]">
+   <div className="mb-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(15,60,140,0.78)]">
+    <span>{formatTimelineYearLabel(data.min)}</span>
+    <span>{formatTimelineYearLabel(data.max)}</span>
+   </div>
 
- {/* Etichette sotto la barra (alternate su due righe) */}
- <div className="relative mt-1 h-10 w-full">
- <span className="absolute left-0 top-0 -translate-x-0 text-[10px] text-slate-700 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm">
- {formatTimelineYearLabel(data.min)}
- </span>
- {(() => {
- const inner = tickYears.slice(1, -1).map((y, i) => ({
- year: y,
- pos: ((y - data.min) / Math.max(1, data.range)) * 100,
- key: `ilbl-${i}`,
- }));
- const kept: { year: number; pos: number; key: string }[] = [];
- const minGap = Math.max(isLg ? 8 : 16, 100 / Math.max(2, inner.length + 1));
- let last = -Infinity;
- inner.forEach((c) => {
- if (c.pos - last >= minGap) { kept.push(c); last = c.pos; }
- });
- return (
- <>
- {kept.map((c, idx) => (
- <span
- key={c.key}
- className="absolute text-[10px] text-slate-700 -translate-x-1/2 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm"
- style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? '0px' : '16px' }}
- >
- {formatTimelineYearLabel(c.year)}
- </span>
- ))}
- </>
- );
- })()}
- <span
- className="absolute right-0 text-[10px] text-slate-700 whitespace-nowrap bg-white/90 px-1.5 py-[2px] rounded-md shadow-sm"
- style={{ top: '16px' }}
- >
- {formatTimelineYearLabel(data.max)}
- </span>
+   <div className="relative">
+    <div className="absolute inset-x-0 top-1/2 h-[30px] -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(26,100,214,0.14),transparent_72%)]" />
+    <div className="relative h-[18px] w-full overflow-visible rounded-full border border-[rgba(15,60,140,0.08)] bg-[rgba(255,255,255,0.78)] px-[2px] shadow-inner">
+     <div
+       className="absolute inset-y-[3px] left-[2px] right-[2px] rounded-full"
+       style={{ background: "linear-gradient(90deg, rgba(15,60,140,0.86) 0%, rgba(26,100,214,0.92) 50%, rgba(15,60,140,0.86) 100%)" }}
+     />
+     <div
+       className="absolute top-1/2 h-[20px] w-[20px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#1a64d6] shadow-[0_0_0_4px_rgba(26,100,214,0.18),0_10px_20px_-8px_rgba(15,60,140,0.75)]"
+       style={{ left: `${pct}%` }}
+     >
+       <div className="absolute inset-[4px] rounded-full bg-white/95" />
+     </div>
+     {minorTicks.map((t, i) => {
+      const pos = ((t - data.min) / data.range) * 100;
+      return (
+       <div
+        key={`mtick-${i}`}
+        className="absolute top-1/2 h-[8px] w-[1px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.24)" }}
+       />
+      );
+     })}
+     {tickYears.map((t, i) => {
+      const pos = ((t - data.min) / data.range) * 100;
+      return (
+       <div
+        key={`tick-${i}`}
+        className="absolute top-1/2 h-[12px] w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ left: `${pos}%`, backgroundColor: "rgba(255,255,255,0.92)" }}
+       />
+      );
+     })}
+    </div>
+   </div>
+
+   <div className="relative mt-4 h-11 w-full">
+    <span className="absolute left-0 top-0 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm">
+     {formatTimelineYearLabel(data.min)}
+    </span>
+    {(() => {
+     const inner = tickYears.slice(1, -1).map((y, i) => ({
+      year: y,
+      pos: ((y - data.min) / Math.max(1, data.range)) * 100,
+      key: `ilbl-${i}`,
+     }));
+     const kept: { year: number; pos: number; key: string }[] = [];
+     const minGap = Math.max(isLg ? 8 : 16, 100 / Math.max(2, inner.length + 1));
+     let last = -Infinity;
+     inner.forEach((c) => {
+      if (c.pos - last >= minGap) { kept.push(c); last = c.pos; }
+     });
+     return (
+      <>
+       {kept.map((c, idx) => (
+        <span
+         key={c.key}
+         className="absolute -translate-x-1/2 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm"
+         style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? "0px" : "18px" }}
+        >
+         {formatTimelineYearLabel(c.year)}
+        </span>
+       ))}
+      </>
+     );
+    })()}
+    <span
+     className="absolute right-0 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm"
+     style={{ top: "18px" }}
+    >
+     {formatTimelineYearLabel(data.max)}
+    </span>
+   </div>
   </div>
  </div>
  );
@@ -3428,18 +3565,30 @@ const journeyAndEventMedia = useMemo(() => {
  );
  }
 
-const mapTextureStyle: CSSProperties = {
- backgroundImage: "url(/bg/login-map.jpg)",
- backgroundSize: "cover",
- backgroundPosition: "center",
- backgroundAttachment: "fixed",
- };
  /* ===================== RENDER ===================== */
  return (
- <div
- className="flex min-h-screen flex-col"
- style={mapTextureStyle}
- >
+ <div className="relative flex min-h-screen flex-col overflow-hidden">
+  <div
+    aria-hidden
+    className="pointer-events-none absolute inset-0 z-0"
+    style={{
+      backgroundImage: 'url("/bg/login-map.jpg")',
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      filter: "grayscale(0.15) saturate(0.55) contrast(0.95)",
+      opacity: 0.1,
+    }}
+  />
+  <div
+    aria-hidden
+    className="pointer-events-none absolute inset-0 z-0"
+    style={{
+      background:
+        "radial-gradient(circle at 12% 12%, rgba(199,147,67,0.18), transparent 24%), radial-gradient(circle at 84% 10%, rgba(28,77,117,0.2), transparent 18%), linear-gradient(180deg, rgba(247,244,237,0.7) 0%, rgba(243,239,230,0.92) 48%, rgba(238,233,224,0.98) 100%)",
+    }}
+  />
+  <div className="relative z-10 flex min-h-screen flex-col">
   <style jsx global>{`
     .maplibregl-ctrl-attrib.maplibregl-compact {
       font-size: 0;
@@ -3468,7 +3617,7 @@ const mapTextureStyle: CSSProperties = {
     }
   `}</style>
  {/* ===== MOBILE MAP-FIRST ===== */}
- <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "56px" }}>
+ <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "calc(env(safe-area-inset-top) + var(--gh-topbar-height, 52px))" }}>
   <div className="absolute inset-0">
     <div
       data-map="gehj"
@@ -3477,15 +3626,21 @@ const mapTextureStyle: CSSProperties = {
       aria-label="Map canvas"
     />
     {!mapLoaded && (
-      <div className="absolute left-3 top-[calc(env(safe-area-inset-top)+66px)] z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow">
+      <div
+        className="absolute left-3 z-10 rounded-full border border-indigo-200 bg-indigo-50/90 px-3 py-1 text-xs text-indigo-900 shadow"
+        style={{ top: "14px" }}
+      >
         Inizializzazione mappa.
       </div>
     )}
-    <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+8px)] z-20 px-3">
+    <div
+      className="pointer-events-none absolute inset-x-0 z-20 px-3"
+      style={{ top: "8px" }}
+    >
       <div className="pointer-events-auto mr-[44px] w-[calc(100%_-_44px)] max-w-none rounded-2xl border border-white/45 bg-white/90 p-2 shadow backdrop-blur">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[14px] font-semibold text-slate-900">
+            <h1 className="truncate text-[18px] font-semibold text-slate-900">
               {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
             </h1>
             {mobileJourneyDescOpen ? (
@@ -3643,8 +3798,8 @@ const mapTextureStyle: CSSProperties = {
       style={{
         bottom:
           mobileSheetSnap === "peek"
-            ? "calc(env(safe-area-inset-bottom) + 84px)"
-            : "calc(env(safe-area-inset-bottom) + 42svh + 8px)",
+            ? "calc(env(safe-area-inset-bottom) + 210px)"
+            : "calc(env(safe-area-inset-bottom) + 52svh + 16px)",
       }}
     >
       {mobileSheetSnap === "peek" && timelineData?.items?.length ? (
@@ -3741,9 +3896,10 @@ const mapTextureStyle: CSSProperties = {
   </div>
 
   <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
+    <div className="mx-auto flex w-full max-w-[860px] flex-col gap-2">
     <div
-      className={`${BOX_3D} pointer-events-auto mx-auto flex w-full max-w-[860px] flex-col overflow-hidden bg-white/95 backdrop-blur-xl transition-[height] duration-300`}
-      style={{ height: mobileSheetSnap === "peek" ? "9svh" : "42svh" }}
+      className={`${BOX_3D} pointer-events-auto flex w-full flex-col overflow-hidden bg-white/95 backdrop-blur-xl transition-[height] duration-300`}
+      style={{ height: mobileSheetSnap === "peek" ? "58px" : "34svh" }}
     >
       <div className="border-b border-black/10 px-2 py-1.5">
         <div className="flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
@@ -3756,9 +3912,13 @@ const mapTextureStyle: CSSProperties = {
                 setMobileSheetSnap("half");
               }
             }}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+            title={tUI(uiLang, "journey.tab.description")}
+            aria-label={tUI(uiLang, "journey.tab.description")}
           >
-            {tUI(uiLang, "journey.tab.description")}
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </button>
           <button
             onClick={() => {
@@ -3769,35 +3929,49 @@ const mapTextureStyle: CSSProperties = {
                 setMobileSheetSnap("half");
               }
             }}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+            title={tUI(uiLang, "journey.related.title")}
+            aria-label={tUI(uiLang, "journey.related.title")}
           >
-            {tUI(uiLang, "journey.related.title")}
-          </button>
-          <button
-            onClick={() => {
-              if (mobileSheetSnap !== "peek" && mobileTab === "concurrent") {
-                setMobileSheetSnap("peek");
-              } else {
-                setMobileTab("concurrent");
-                setMobileSheetSnap("half");
-              }
-            }}
-            className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold text-white ${mobileTab === "concurrent" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
-          >
-            {tUI(uiLang, "journey.concurrent.title")}
+            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+              <path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H9.5A3.5 3.5 0 0 1 6 15V5.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M9 9h6M9 12h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M14.5 14.5 18.5 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="13" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
           </button>
           {selectedEvent?.wiki_url ? (
             <a
               href={selectedEvent.wiki_url}
               target="_blank"
               rel="noreferrer"
-              className="ml-auto shrink-0 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-800"
+              className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-800"
+              title={tUI(uiLang, "journey.tab.wiki")}
+              aria-label={tUI(uiLang, "journey.tab.wiki")}
             >
-              {tUI(uiLang, "journey.tab.wiki")}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/wiki.png"
+                alt=""
+                aria-hidden="true"
+                className="h-8 w-8 object-contain"
+                loading="lazy"
+              />
             </a>
           ) : (
-            <span className="ml-auto shrink-0 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-500">
-              {tUI(uiLang, "journey.tab.wiki")}
+            <span
+              className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+              title={tUI(uiLang, "journey.tab.wiki")}
+              aria-label={tUI(uiLang, "journey.tab.wiki")}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icons/wiki.png"
+                alt=""
+                aria-hidden="true"
+                className="h-8 w-8 object-contain opacity-60 grayscale"
+                loading="lazy"
+              />
             </span>
           )}
         </div>
@@ -3859,34 +4033,73 @@ const mapTextureStyle: CSSProperties = {
           )
         ) : null}
 
-        {mobileTab === "concurrent" ? (
-          concurrentOther && concurrentOther.length ? (
-            <div className="space-y-2">
-              {concurrentOther.map((c) => {
-                return (
-                  <ConcurrentJourneyCard
-                    key={`${c.geId}:${c.evId}`}
-                    item={c}
-                    href={geUrl(c.geId, c.evId)}
-                    onClick={() => router.push(geUrl(c.geId, c.evId))}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <div className="text-[12.5px] text-gray-600">
-              {tUI(uiLang, "journey.concurrent.none")}
-            </div>
-          )
-        ) : null}
       </div>
       ) : null}
+    </div>
+    <div className={`${BOX_3D} pointer-events-auto w-full overflow-hidden bg-white/95 backdrop-blur-xl`}>
+      <div className="border-b border-black/5 px-2 py-2">
+        <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/80">
+          {tUI(uiLang, "journey.concurrent.title")}
+        </div>
+        {concurrentOther && concurrentOther.length ? (
+          <div className="overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+            <div className="flex min-w-max gap-2">
+              {concurrentOther.map((c) => (
+                <button
+                  key={`${c.geId}:${c.evId}`}
+                  type="button"
+                  onClick={() => router.push(geUrl(c.geId, c.evId))}
+                  className="w-[76vw] max-w-[300px] shrink-0 overflow-hidden rounded-2xl border border-[rgba(18,49,78,0.08)] bg-white/90 text-left shadow-[0_12px_28px_-24px_rgba(16,32,51,0.45)]"
+                  title={c.geTitle ?? c.evTitle}
+                >
+                  <div className="flex items-stretch gap-3 p-2.5">
+                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                      {c.coverUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={c.coverUrl}
+                          alt=""
+                          aria-hidden="true"
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#dbeafe,#eff6ff)] text-[9px] font-semibold uppercase tracking-wide text-[#0f3c8c]/70">
+                          GH
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="line-clamp-1 text-[11px] font-semibold text-[#0f3c8c]">
+                        {c.geTitle ?? c.evTitle}
+                      </div>
+                      <div className="line-clamp-2 text-[12px] font-medium leading-4 text-slate-800">
+                        {c.evTitle}
+                      </div>
+                      {c.evRangeLabel ? (
+                        <div className="text-[10px] text-slate-500">
+                          {c.evRangeLabel}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="px-1 text-[11px] text-slate-500">
+            {tUI(uiLang, "journey.concurrent.none")}
+          </div>
+        )}
+      </div>
+    </div>
     </div>
   </div>
  </section>
 
    {/* ===== DESKTOP (container allargato) ===== */}
-<div className="mx-auto hidden w-full max-w-[120rem] lg:block" style={mapTextureStyle}>
+<div className="mx-auto hidden w-full max-w-[120rem] lg:block">
   <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)] gap-3 px-4 py-6 items-stretch">
     {/* Sinistra: Titolo + Media Journey */}
     <div className="flex flex-col gap-3 h-full">
@@ -4117,6 +4330,7 @@ const mapTextureStyle: CSSProperties = {
         {renderMapPlayerBox()}
       </section>
     </section>
+  </div>
   </div>
  </div>
 

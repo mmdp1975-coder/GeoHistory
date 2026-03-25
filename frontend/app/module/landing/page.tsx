@@ -74,33 +74,6 @@ export default function LandingPage(): JSX.Element {
 
       <div className="relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 lg:h-full lg:px-6 lg:py-3">
         <div className="flex flex-col gap-2.5 lg:hidden">
-          <section className="rounded-[24px] border border-neutral-200/90 bg-white/85 p-1 shadow-[0_18px_48px_-32px_rgba(15,23,42,0.35)] backdrop-blur-md">
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => setMobilePanel("timeline")}
-                className={
-                  mobilePanel === "timeline"
-                    ? "rounded-[18px] bg-[#163f63] px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                    : "rounded-[18px] px-4 py-2 text-sm font-medium text-neutral-600"
-                }
-              >
-                Timeline
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobilePanel("globe")}
-                className={
-                  mobilePanel === "globe"
-                    ? "rounded-[18px] bg-[#163f63] px-4 py-2 text-sm font-semibold text-white shadow-sm"
-                    : "rounded-[18px] px-4 py-2 text-sm font-medium text-neutral-600"
-                }
-              >
-                Mappa
-              </button>
-            </div>
-          </section>
-
           <section
             className={
               mobilePanel === "timeline"
@@ -120,10 +93,27 @@ export default function LandingPage(): JSX.Element {
                   embedded
                   externalGeoFilter={selectedGeoFilter}
                   onClearExternalGeoFilter={clearGeoSelection}
+                  onOpenEmbeddedMap={() => setMobilePanel("globe")}
                 />
               </Suspense>
             ) : (
-              <div className="h-[560px]">
+              <div className="relative h-[560px]">
+                <button
+                  type="button"
+                  onClick={() => setMobilePanel("timeline")}
+                  className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-full border border-neutral-200/90 bg-white/92 px-3 py-2 text-xs font-semibold text-[#163f63] shadow-[0_14px_32px_-24px_rgba(16,32,51,0.45)] backdrop-blur-md"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M5 7h14M5 12h14M5 17h9" strokeLinecap="round" />
+                  </svg>
+                  <span>Timeline</span>
+                </button>
                 <GlobeCanvas
                   embedded
                   height={460}
@@ -137,26 +127,6 @@ export default function LandingPage(): JSX.Element {
             )}
           </section>
 
-          <section>
-            <Link
-              href="/module/build-journey"
-              className="group flex items-center justify-center gap-2 rounded-2xl border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,rgba(255,255,255,0.82),rgba(248,244,237,0.7))] px-4 py-3 text-sm font-semibold text-[var(--geo-navy)] shadow-[0_14px_32px_-24px_rgba(16,32,51,0.45)]"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky-50 text-sky-700 ring-1 ring-sky-100">
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5 text-sky-600"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M12 5v14" strokeLinecap="round" />
-                  <path d="M5 12h14" strokeLinecap="round" />
-                </svg>
-              </span>
-              <span>{tUI(langCode, "timeline.new_button_long")}</span>
-            </Link>
-          </section>
         </div>
 
         <div className="hidden grid-cols-1 gap-6 lg:grid lg:h-full lg:grid-cols-[minmax(0,1.08fr)_minmax(520px,0.92fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-6">

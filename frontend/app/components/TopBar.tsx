@@ -12,6 +12,8 @@ import {
   Settings as SettingsIcon,
   LogOut,
   PlayCircle,
+  Maximize,
+  Minimize,
   X,
   Volume2,
   Info,
@@ -24,6 +26,7 @@ export default function TopBar() {
   const supabase = createClientComponentClient();
 
   const [isVideoOpen, setIsVideoOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [volume, setVolume] = useState(100);
   const [shouldAutoplay, setShouldAutoplay] = useState(false);
   const [playbackError, setPlaybackError] = useState(false);
@@ -135,6 +138,37 @@ export default function TopBar() {
   }
 
   useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  async function toggleFullscreen() {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void> | void;
+    };
+    const doc = document as Document & {
+      webkitExitFullscreen?: () => Promise<void> | void;
+      webkitFullscreenElement?: Element | null;
+    };
+
+    try {
+      if (document.fullscreenElement || doc.webkitFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else await doc.webkitExitFullscreen?.();
+      } else {
+        if (root.requestFullscreen) await root.requestFullscreen();
+        else await root.webkitRequestFullscreen?.();
+      }
+    } catch (error) {
+      console.warn('[TopBar] fullscreen toggle failed:', error);
+    }
+  }
+
+  useEffect(() => {
     if (!isVideoOpen || !videoRef.current) return;
 
     const normalizedVolume = volume / 100;
@@ -169,14 +203,21 @@ export default function TopBar() {
   const guideVideoSrc = langCode.toLowerCase().startsWith('it')
     ? '/GeoHistoryGuide/GeoHistoryGuide_IT.mp4'
     : '/GeoHistoryGuide/GeoHistoryGuide_EN.mp4';
+  const mobileBarHeight = isFullscreen ? 42 : 52;
 
   return (
     <>
       <nav
         className="sticky top-0 z-20 border-b border-[rgba(18,49,78,0.08)] bg-white"
-        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          ['--gh-topbar-height' as string]: `${mobileBarHeight}px`,
+        }}
       >
-        <div className="mx-auto flex h-[74px] max-w-[1600px] flex-nowrap items-center justify-between px-4 lg:px-6">
+        <div
+          className="mx-auto flex max-w-[1600px] min-w-0 flex-nowrap items-center justify-between gap-1.5 px-2.5 sm:h-[74px] sm:gap-2 sm:px-4 lg:px-6"
+          style={{ height: `${mobileBarHeight}px` }}
+        >
           {isQuiz ? (
             <>
               <div className="flex min-w-0 items-end space-x-3">
@@ -186,7 +227,7 @@ export default function TopBar() {
                   width={220}
                   height={64}
                   priority
-                  className="h-10 md:h-12 w-auto flex-none"
+                  className={`${isFullscreen ? 'h-7' : 'h-8'} w-auto flex-none md:h-12`}
                 />
                 <span className="topbar-tagline mt-2 min-w-0 flex-1 truncate text-xs italic text-[rgba(16,32,51,0.72)] md:text-sm">
                   {tUI(langCode, 'topbar.motto')}
@@ -222,10 +263,10 @@ export default function TopBar() {
                 </span>
               </Link>
 
-              <div className="flex min-w-0 flex-nowrap items-center gap-2 text-sm md:gap-3 md:text-base">
+              <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 text-sm sm:gap-2 md:gap-3 md:text-base">
                 <button
                   onClick={goHome}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.home')}
                   title={tUI(langCode, 'topbar.home.title')}
@@ -238,7 +279,7 @@ export default function TopBar() {
 
                 <button
                   onClick={() => router.back()}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.back')}
                   title={tUI(langCode, 'topbar.back.title')}
@@ -251,7 +292,7 @@ export default function TopBar() {
 
                 <Link
                   href="/module/settings"
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   aria-label={tUI(langCode, 'topbar.settings')}
                   title={tUI(langCode, 'topbar.settings.title')}
                 >
@@ -264,7 +305,7 @@ export default function TopBar() {
 
                 <Link
                   href="/about"
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
+                  className={`hidden ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 sm:inline-flex md:h-auto md:w-auto md:gap-2 md:px-3`}
                   aria-label="About"
                   title="About"
                 >
@@ -274,7 +315,7 @@ export default function TopBar() {
 
                 <button
                   onClick={openVideo}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-[var(--geo-navy)] transition hover:bg-white/70"
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
                   title={tUI(langCode, 'topbar.guide.title')}
@@ -286,8 +327,21 @@ export default function TopBar() {
                 </button>
 
                 <button
+                  onClick={toggleFullscreen}
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  type="button"
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                  <span className="hidden md:inline">
+                    {isFullscreen ? 'Window' : 'Fullscreen'}
+                  </span>
+                </button>
+
+                <button
                   onClick={handleLogout}
-                  className="inline-flex items-center gap-2 rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-3.5 py-2 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white"
+                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-0 py-0 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white md:h-auto md:w-auto md:gap-2 md:px-3.5 md:py-2`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.logout')}
                   title={tUI(langCode, 'topbar.logout.title')}

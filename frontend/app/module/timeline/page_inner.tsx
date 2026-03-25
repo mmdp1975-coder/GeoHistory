@@ -1,7 +1,7 @@
 ﻿﻿// frontend/app/module/timeline/page_inner.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Scorecard } from "@/app/components/Scorecard";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -128,6 +128,7 @@ type TimelinePageProps = {
   embedded?: boolean;
   externalGeoFilter?: { lat: number; lon: number; radiusKm: number } | null;
   onClearExternalGeoFilter?: () => void;
+  onOpenEmbeddedMap?: () => void;
 };
 
 type SortMode = "timeline" | "rating" | "favourites" | "published";
@@ -136,6 +137,7 @@ export default function TimelinePage({
   embedded = false,
   externalGeoFilter = null,
   onClearExternalGeoFilter,
+  onOpenEmbeddedMap,
 }: TimelinePageProps) {
   const search = useSearchParams();
   const router = useRouter();
@@ -184,6 +186,7 @@ export default function TimelinePage({
     "all" | "public" | "private"
   >("all");
   const [sortMode, setSortMode] = useState<SortMode>("timeline");
+  const cardsListRef = useRef<HTMLUListElement | null>(null);
 
   /* ===== Lingua UI: profiles.language_code (id = user.id) ===== */
   useEffect(() => {
@@ -831,6 +834,64 @@ export default function TimelinePage({
     });
     return sorted;
   }, [cards, favs, sortMode]);
+  const carouselResetKey = embedded
+    ? `${sortMode}:${displayCards[0]?.id ?? "none"}:${displayCards.length}`
+    : "static";
+
+  const forceEmbeddedCarouselToEdge = () => {
+    const list = cardsListRef.current;
+    if (!list || !embedded) return;
+
+    const apply = () => {
+      list.scrollLeft = 0;
+      list.scrollTop = 0;
+    };
+
+    apply();
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(apply);
+      window.setTimeout(apply, 0);
+      window.setTimeout(apply, 80);
+      window.setTimeout(apply, 180);
+    }
+  };
+
+  useLayoutEffect(() => {
+    const list = cardsListRef.current;
+    if (!list) return;
+    const firstId = displayCards[0]?.id;
+    if (!firstId) return;
+
+    const selector =
+      typeof CSS !== "undefined" && typeof CSS.escape === "function"
+        ? `li[data-jid="${CSS.escape(firstId)}"]`
+        : "li";
+
+    const moveToFirst = () => {
+      const firstCard = list.querySelector<HTMLElement>(selector);
+      if (embedded) {
+        forceEmbeddedCarouselToEdge();
+        if (firstCard) {
+          firstCard.style.scrollMarginLeft = "0px";
+          firstCard.style.scrollSnapAlign = "start";
+        }
+        return;
+      }
+
+      firstCard?.scrollIntoView({
+        behavior: "auto",
+        block: "start",
+        inline: "nearest",
+      });
+    };
+
+    moveToFirst();
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(moveToFirst);
+      window.setTimeout(moveToFirst, 0);
+      window.setTimeout(moveToFirst, 80);
+    }
+  }, [displayCards, sortMode, embedded]);
 
   /* ================== RENDER ================== */
   return (
@@ -1181,26 +1242,48 @@ export default function TimelinePage({
               </div>
 
               {embedded ? (
-                <button
-                  type="button"
-                  onClick={() => router.push("/module/build-journey")}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-3 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90 sm:ml-auto sm:px-4"
-                  title={tUI(langCode, "timeline.new_button_long")}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.9"
+                <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+                  {onOpenEmbeddedMap ? (
+                    <button
+                      type="button"
+                      onClick={onOpenEmbeddedMap}
+                      className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm transition hover:bg-white/90"
+                      title="Apri mappa"
+                      aria-label="Apri mappa"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-4.5 w-4.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="M9 5 4 7.5v11L9 16l6 3 5-2.5v-11L15 8 9 5Z" strokeLinejoin="round" />
+                        <path d="M9 5v11M15 8v11" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => router.push("/module/build-journey")}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-3 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90 sm:px-4"
+                    title={tUI(langCode, "timeline.new_button_long")}
                   >
-                    <path d="M12 5v14" strokeLinecap="round" />
-                    <path d="M5 12h14" strokeLinecap="round" />
-                  </svg>
-                  <span className="hidden sm:inline">
-                    {tUI(langCode, "timeline.new_button_long")}
-                  </span>
-                </button>
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                    >
+                      <path d="M12 5v14" strokeLinecap="round" />
+                      <path d="M5 12h14" strokeLinecap="round" />
+                    </svg>
+                    <span className="hidden sm:inline">
+                      {tUI(langCode, "timeline.new_button_long")}
+                    </span>
+                  </button>
+                </div>
               ) : null}
             </div>
 
@@ -1273,7 +1356,10 @@ export default function TimelinePage({
                       <button
                         key={mode}
                         type="button"
-                        onClick={() => setSortMode(mode)}
+                        onClick={() => {
+                          setSortMode(mode);
+                          forceEmbeddedCarouselToEdge();
+                        }}
                         className={
                           active
                             ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm"
@@ -1419,9 +1505,11 @@ export default function TimelinePage({
 
         {/* GRID: scorecard unificata */}
         <ul
+          key={carouselResetKey}
+          ref={cardsListRef}
           className={
             embedded
-              ? "flex snap-x snap-mandatory gap-4 overflow-x-auto pb-1 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 xl:grid-cols-3 2xl:grid-cols-4"
+              ? "grid auto-cols-[184px] grid-flow-col grid-rows-2 gap-2.5 overflow-x-auto pb-1 md:grid-cols-2 md:grid-flow-row md:grid-rows-none md:overflow-visible md:pb-0 xl:grid-cols-3 2xl:grid-cols-4"
               : "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           }
         >
@@ -1442,7 +1530,7 @@ export default function TimelinePage({
                   }
                   className={
                     embedded
-                      ? "w-[272px] min-w-[272px] flex-none snap-start md:w-auto md:min-w-0"
+                      ? "w-[184px] min-w-[184px] h-[168px] flex-none md:w-auto md:min-w-0 md:h-[238px]"
                       : undefined
                   }
                 publishedAt={g.approved_at}
