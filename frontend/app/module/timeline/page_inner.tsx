@@ -1219,8 +1219,27 @@ export default function TimelinePage({
                 }
               >
               <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
-                <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
-                  {tUI(langCode, "timeline.sort.label")}
+                <span
+                  className="flex items-center text-white/60"
+                  title={tUI(langCode, "timeline.sort.label")}
+                  aria-label={tUI(langCode, "timeline.sort.label")}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5 sm:hidden"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M7 6h10" strokeLinecap="round" />
+                    <path d="M9 12h8" strokeLinecap="round" />
+                    <path d="M11 18h6" strokeLinecap="round" />
+                    <path d="M7 6l-2 2" strokeLinecap="round" />
+                    <path d="M7 6l-2-2" strokeLinecap="round" />
+                  </svg>
+                  <span className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] sm:inline">
+                    {tUI(langCode, "timeline.sort.label")}
+                  </span>
                 </span>
                 <div className="flex items-center gap-1.5">
                   {(["timeline", "rating", "favourites", "published"] as SortMode[]).map((mode) => {
@@ -1271,8 +1290,24 @@ export default function TimelinePage({
               </div>
 
               <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
-                <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
-                  {tUI(langCode, "timeline.visibility.label")}
+                <span
+                  className="flex items-center text-white/60"
+                  title={tUI(langCode, "timeline.visibility.label")}
+                  aria-label={tUI(langCode, "timeline.visibility.label")}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5 sm:hidden"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5-10-5-10-5Z" />
+                    <circle cx="12" cy="12" r="2.5" />
+                  </svg>
+                  <span className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] sm:inline">
+                    {tUI(langCode, "timeline.visibility.label")}
+                  </span>
                 </span>
                 <div className="flex items-center gap-1.5">
                 {(["all", "public", "private"] as const).map((v) => {
