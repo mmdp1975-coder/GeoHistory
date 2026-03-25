@@ -1152,9 +1152,15 @@ export default function TimelinePage({
               : "sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between"
           }
         >
-          <div className="flex w-full flex-col gap-2">
-            <div className="flex w-full flex-wrap items-center gap-2.5">
-              <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex w-full flex-col gap-2">
+              <div
+                className={
+                  embedded
+                    ? "flex w-full items-center gap-2"
+                    : "flex w-full flex-wrap items-center gap-2.5"
+                }
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                 <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
                   {tUI(langCode, "timeline.search.label")}
                 </label>
@@ -1168,7 +1174,7 @@ export default function TimelinePage({
                   )}
                   className={
                     embedded
-                      ? "w-full max-w-[360px] min-w-0 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-[11px] text-white placeholder-white/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none"
+                      ? "w-full min-w-0 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-[11px] text-white placeholder-white/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none"
                       : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
                   }
                 />
@@ -1178,7 +1184,7 @@ export default function TimelinePage({
                 <button
                   type="button"
                   onClick={() => router.push("/module/build-journey")}
-                  className="ml-auto inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-4 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-3 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90 sm:ml-auto sm:px-4"
                   title={tUI(langCode, "timeline.new_button_long")}
                 >
                   <svg
@@ -1191,13 +1197,28 @@ export default function TimelinePage({
                     <path d="M12 5v14" strokeLinecap="round" />
                     <path d="M5 12h14" strokeLinecap="round" />
                   </svg>
-                  <span>{tUI(langCode, "timeline.new_button_long")}</span>
+                  <span className="hidden sm:inline">
+                    {tUI(langCode, "timeline.new_button_long")}
+                  </span>
                 </button>
               ) : null}
             </div>
 
-            <div className="flex w-full flex-wrap items-end gap-2">
-              <div className="flex items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+            <div
+              className={
+                embedded
+                  ? "flex w-full flex-col gap-2"
+                  : "flex w-full flex-wrap items-end gap-2"
+              }
+            >
+              <div
+                className={
+                  embedded
+                    ? "flex w-full items-center gap-2 overflow-x-auto pb-1"
+                    : "flex w-full flex-wrap items-end gap-2"
+                }
+              >
+              <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
                 <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
                   {tUI(langCode, "timeline.sort.label")}
                 </span>
@@ -1249,7 +1270,7 @@ export default function TimelinePage({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+              <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
                 <span className="whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60">
                   {tUI(langCode, "timeline.visibility.label")}
                 </span>
@@ -1300,7 +1321,15 @@ export default function TimelinePage({
                 </div>
               </div>
 
-              <div className="ml-auto min-w-[140px] text-right text-[10px] leading-3 text-white/70">
+              </div>
+
+              <div
+                className={
+                  embedded
+                    ? "w-full text-right text-[10px] leading-3 text-white/70"
+                    : "ml-auto min-w-[140px] text-right text-[10px] leading-3 text-white/70"
+                }
+              >
                 {initializing ? (
                   <span>{tUI(langCode, "timeline.summary.initializing")}</span>
                 ) : loading ? (
