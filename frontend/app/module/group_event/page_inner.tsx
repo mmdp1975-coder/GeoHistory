@@ -2271,6 +2271,7 @@ const seekToEventIndex = useCallback(
     manualSeekUntilRef.current = Date.now() + 1500;
     // Evita un secondo seek immediato nel listener su selectedIndex.
     ignoreNextSeekRef.current = true;
+    setMapViewportMode("focus-selected");
     selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
     if (hasSegmentedMp3) {
@@ -2361,6 +2362,8 @@ const handleNextEvent = useCallback(() => {
 const handleSelectEvent = useCallback(
   (nextIndex: number) => {
     playOnSelectRef.current = true;
+    pendingSelectedMapFocusRef.current = nextIndex;
+    setMapViewportMode("focus-selected");
     seekToEventIndex(nextIndex, { autoplay: true });
   },
   [seekToEventIndex],
@@ -2422,11 +2425,12 @@ const renderMapPlayerBox = useCallback(
           <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      <button
-        onClick={() => {
-          if (!selectedEvent || selectedEvent.latitude == null || selectedEvent.longitude == null) return;
-          moveMapToVisibleCenter(selectedEvent.longitude, selectedEvent.latitude);
-        }}
+        <button
+          onClick={() => {
+            if (!selectedEvent || selectedEvent.latitude == null || selectedEvent.longitude == null) return;
+            setMapViewportMode("focus-selected");
+            moveMapToVisibleCenter(selectedEvent.longitude, selectedEvent.latitude);
+          }}
         className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-slate-800 shadow hover:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
         aria-label="Centra evento selezionato"
         title="Centra evento selezionato"
@@ -2509,6 +2513,9 @@ const mapRef = useRef<MapLibreMap | null>(null);
 const markersRef = useRef<MapLibreMarker[]>([]);
 const popupRef = useRef<maplibregl.Popup | null>(null);
 const suppressMapRecenteringRef = useRef(false);
+const initialMobileMapFitDoneRef = useRef(false);
+const pendingSelectedMapFocusRef = useRef<number | null>(null);
+const [mapViewportMode, setMapViewportMode] = useState<"fit-all" | "focus-selected">("fit-all");
 const [mapReady, setMapReady] = useState(false);
 const [mapLoaded, setMapLoaded] = useState(false);
  const [mapVersion, setMapVersion] = useState(0);
@@ -2524,6 +2531,12 @@ const mobileMapBottomInset = useMemo(() => {
   const measured = Math.ceil(mobileConcurrentHeight) + 12;
   return Math.max(fallback, measured);
 }, [isLg, mobileConcurrentHeight]);
+
+const mobileTopStackOffset = useMemo(() => {
+  if (isLg) return 0;
+  const measured = Math.ceil(mobileOverlayHeights.top);
+  return measured > 0 ? measured : 220;
+}, [isLg, mobileOverlayHeights.top]);
 
 const moveMapToVisibleCenter = useCallback(
   (lng: number, lat: number, zoom?: number) => {
@@ -2586,6 +2599,28 @@ const fitMapToRows = useCallback(() => {
   } catch {}
 }, [rows, mapReady, isLg, mobileMapBottomInset, mobileMapTopInset]);
 
+const applyMapViewport = useCallback(
+  (opts?: { forceFit?: boolean; minZoom?: number }) => {
+    const map = mapRef.current as any;
+    if (!map || !mapReady) return;
+    if (opts?.forceFit || mapViewportMode === "fit-all") {
+      fitMapToRows();
+      return;
+    }
+    const selected = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
+    if (selected?.latitude != null && selected?.longitude != null) {
+      moveMapToVisibleCenter(
+        selected.longitude,
+        selected.latitude,
+        Math.max((opts?.minZoom ?? map.getZoom?.() ?? 6), 6),
+      );
+      return;
+    }
+    fitMapToRows();
+  },
+  [mapReady, mapViewportMode, activeEventIndex, rows, fitMapToRows, moveMapToVisibleCenter],
+);
+
 const showPopup = useCallback((ev?: EventVM | null) => {
   if (popupRef.current) {
     try { popupRef.current.remove(); } catch {}
@@ -2630,40 +2665,33 @@ useEffect(() => {
   };
 }, [isLg, mapMode]);
 
-// Forza resize + fit dopo toggle view
+// Forza resize + viewport coerente dopo toggle view
 useEffect(() => {
   if (!mapRef.current || !mapReady) return;
   try { mapRef.current.resize(); } catch {}
   setTimeout(() => { try { mapRef.current?.resize(); } catch {} }, 120);
   if (mapMode === "fullscreen") {
-    fitMapToRows();
+    applyMapViewport({ forceFit: true });
+    return;
   }
-}, [mapMode, mapReady, fitMapToRows]);
-
-// Fit mappa quando cambiano dati e la mappa è pronta/caricata
-useEffect(() => {
-  if (!mapReady || !mapLoaded) return;
-  fitMapToRows();
-}, [fitMapToRows, mapReady, mapLoaded]);
+  applyMapViewport();
+}, [mapMode, mapReady, applyMapViewport]);
 
 useEffect(() => {
   const map = mapRef.current;
   if (!map || !mapReady || !mapLoaded || isLg) return;
   try { map.resize(); } catch {}
-  const selected = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
-  if (selected?.latitude != null && selected?.longitude != null) {
-    moveMapToVisibleCenter(selected.longitude, selected.latitude, Math.max((map as any).getZoom?.() ?? 6, 6));
+  if (!initialMobileMapFitDoneRef.current) {
+    initialMobileMapFitDoneRef.current = true;
+    applyMapViewport({ forceFit: true });
     return;
   }
-  fitMapToRows();
+  applyMapViewport();
 }, [
   isLg,
   mapReady,
   mapLoaded,
-  activeEventIndex,
-  rows,
-  moveMapToVisibleCenter,
-  fitMapToRows,
+  applyMapViewport,
   mobileOverlayHeights.top,
   mobileOverlayHeights.band,
   mobileOverlayHeights.sheet,
@@ -2671,25 +2699,14 @@ useEffect(() => {
 ]);
 
 useEffect(() => {
+  const pendingIndex = pendingSelectedMapFocusRef.current;
+  if (pendingIndex == null || pendingIndex !== activeEventIndex) return;
   const map = mapRef.current as any;
-  if (!map || !mapReady || isLg || mapMode === "fullscreen") return;
-
-  const onInteractionEnd = () => {
-    if (suppressMapRecenteringRef.current) return;
-    recenterSelectedEvent();
-  };
-
-  map.on("moveend", onInteractionEnd);
-  map.on("zoomend", onInteractionEnd);
-  map.on("rotateend", onInteractionEnd);
-  map.on("pitchend", onInteractionEnd);
-  return () => {
-    try { map.off("moveend", onInteractionEnd); } catch {}
-    try { map.off("zoomend", onInteractionEnd); } catch {}
-    try { map.off("rotateend", onInteractionEnd); } catch {}
-    try { map.off("pitchend", onInteractionEnd); } catch {}
-  };
-}, [mapReady, isLg, mapMode, recenterSelectedEvent]);
+  const ev = rows[pendingIndex];
+  if (!map || !mapReady || !mapLoaded || !ev || ev.latitude == null || ev.longitude == null) return;
+  pendingSelectedMapFocusRef.current = null;
+  moveMapToVisibleCenter(ev.longitude, ev.latitude, Math.max(map.getZoom?.() ?? 6, 6));
+}, [activeEventIndex, rows, mapReady, mapLoaded, moveMapToVisibleCenter]);
 
 // Popup evento quando la mappa Š full-screen
 useEffect(() => {
@@ -2706,6 +2723,8 @@ useEffect(() => {
 useEffect(() => {
   setCorrByEvent({});
   markersRef.current = [];
+  initialMobileMapFitDoneRef.current = false;
+  setMapViewportMode("fit-all");
   setMapVersion((v) => v + 1);
 }, [gid]);
 
@@ -3280,21 +3299,11 @@ if (!map || !mapReady || !gid) return;
  });
 
  try {
-  if (pts.length) {
-    fitMapToRows();
-  } else {
+  if (!pts.length) {
     (map as any).flyTo({ center: [9.19, 45.46], zoom: 3.5, duration: 600 });
   }
  } catch {}
  }, [rows, mapReady, activeEventIndex, mapMode, showPopup]);
-
- useEffect(() => {
-  const map = mapRef.current as any;
-  const ev = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
-  if (map && ev && ev.latitude !== null && ev.longitude !== null) {
-    moveMapToVisibleCenter(ev.longitude, ev.latitude, Math.max(map.getZoom(), 6));
-  }
- }, [activeEventIndex, rows, gid, mapReady, moveMapToVisibleCenter]);
 
 /* ===== Refs per elenchi eventi (mobile + desktop) ===== */
 const bandRef = useRef<HTMLDivElement | null>(null);
@@ -3735,8 +3744,8 @@ const journeyAndEventMedia = useMemo(() => {
       key={`map-mobile-${gid ?? "unknown"}`}
       className="w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
       style={{
-        marginTop: `${Math.max(0, mobileOverlayHeights.top)}px`,
-        height: `calc(100% - ${Math.max(120, mobileConcurrentHeight)}px - ${Math.max(0, mobileOverlayHeights.top)}px)`,
+        marginTop: `${mobileTopStackOffset}px`,
+        height: `calc(100% - ${Math.max(120, mobileConcurrentHeight)}px - ${mobileTopStackOffset}px)`,
       }}
       aria-label="Map canvas"
     />
@@ -3786,7 +3795,7 @@ const journeyAndEventMedia = useMemo(() => {
             title={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
             aria-label={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
               <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
@@ -3817,7 +3826,7 @@ const journeyAndEventMedia = useMemo(() => {
             title={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
             aria-label={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
           >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
               <rect x="3" y="5" width="18" height="14" rx="2" ry="2" fill="none" stroke="currentColor" strokeWidth="1.9" />
               <path d="M10 9l6 3-6 3V9z" fill="currentColor" />
             </svg>
@@ -3831,7 +3840,7 @@ const journeyAndEventMedia = useMemo(() => {
               title={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
               aria-label={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
                 {mobilePlayerOpen ? (
                   <path d="M6 5h3v14H6zm9 0h3v14h-3z" fill="currentColor" />
                 ) : (
@@ -3855,7 +3864,7 @@ const journeyAndEventMedia = useMemo(() => {
               title={tUI(uiLang, "journey.tab.description")}
               aria-label={tUI(uiLang, "journey.tab.description")}
             >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
                 <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </button>
@@ -3875,7 +3884,7 @@ const journeyAndEventMedia = useMemo(() => {
               title={tUI(uiLang, "journey.related.title")}
               aria-label={tUI(uiLang, "journey.related.title")}
             >
-              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
                 <path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H9.5A3.5 3.5 0 0 1 6 15V5.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
                 <path d="M9 9h6M9 12h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 <path d="M14.5 14.5 18.5 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -3893,10 +3902,10 @@ const journeyAndEventMedia = useMemo(() => {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/icons/wiki.png"
+                  src="/icons/Wiki.png"
                   alt=""
                   aria-hidden="true"
-                  className="h-7 w-7 object-contain mix-blend-multiply"
+                  className="h-7.5 w-7.5 object-contain mix-blend-multiply"
                   loading="lazy"
                 />
               </a>
@@ -3908,10 +3917,10 @@ const journeyAndEventMedia = useMemo(() => {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/icons/wiki.png"
+                  src="/icons/Wiki.png"
                   alt=""
                   aria-hidden="true"
-                  className="h-7 w-7 object-contain opacity-60 grayscale mix-blend-multiply"
+                  className="h-7.5 w-7.5 object-contain opacity-60 grayscale mix-blend-multiply"
                   loading="lazy"
                 />
               </span>
@@ -4091,7 +4100,7 @@ const journeyAndEventMedia = useMemo(() => {
       ref={mobileBandOverlayRef}
       className="pointer-events-none absolute inset-x-0 z-20"
       style={{
-        top: `${Math.max(168, Math.ceil(mobileOverlayHeights.top))}px`,
+        top: `${mobileTopStackOffset}px`,
       }}
     >
       <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
@@ -4109,7 +4118,7 @@ const journeyAndEventMedia = useMemo(() => {
                 ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
                 onClick={() => handleSelectEvent(idx)}
                 className={`snap-center h-[56px] w-[74vw] max-w-[320px] shrink-0 rounded-2xl border px-2.5 py-1.5 text-left transition ${
-                  active ? "text-white shadow-lg" : "border-black/20 bg-white/88 text-gray-800 backdrop-blur"
+                  active ? "text-white shadow-lg" : "border-black/15 bg-white text-gray-800 shadow-md"
                 }`}
                 style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
                 title={ev.title}

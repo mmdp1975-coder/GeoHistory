@@ -286,7 +286,7 @@ export default function TopBar() {
               <div className="flex min-w-0 shrink-0 flex-nowrap items-center gap-1 text-sm sm:gap-2 md:gap-3 md:text-base">
                 <button
                   onClick={goHome}
-                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.home')}
                   title={tUI(langCode, 'topbar.home.title')}
@@ -304,7 +304,7 @@ export default function TopBar() {
                   aria-label={tUI(langCode, 'topbar.back')}
                   title={tUI(langCode, 'topbar.back.title')}
                 >
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">
                     {tUI(langCode, 'topbar.back')}
                   </span>
@@ -312,11 +312,11 @@ export default function TopBar() {
 
                 <Link
                   href="/module/settings"
-                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   aria-label={tUI(langCode, 'topbar.settings')}
                   title={tUI(langCode, 'topbar.settings.title')}
                 >
-                  <SettingsIcon className="w-5 h-5" />
+                  <SettingsIcon className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">
                     {tUI(langCode, 'topbar.settings')}
                   </span>
@@ -325,22 +325,22 @@ export default function TopBar() {
 
                 <Link
                   href="/about"
-                  className={`hidden ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 sm:inline-flex md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  className={`hidden ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 sm:inline-flex md:h-auto md:w-auto md:gap-2 md:px-3`}
                   aria-label="About"
                   title="About"
                 >
-                  <Info className="w-5 h-5" />
+                  <Info className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">About</span>
                 </Link>
 
                 <button
                   onClick={openVideo}
-                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
                   title={tUI(langCode, 'topbar.guide.title')}
                 >
-                  <PlayCircle className="w-5 h-5" />
+                  <PlayCircle className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">
                     {tUI(langCode, 'topbar.guide')}
                   </span>
@@ -348,12 +348,12 @@ export default function TopBar() {
 
                 <button
                   onClick={toggleFullscreen}
-                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
                   type="button"
                   aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                   title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
                 >
-                  {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                  {isFullscreen ? <Minimize className="h-6 w-6 md:h-5 md:w-5" /> : <Maximize className="h-6 w-6 md:h-5 md:w-5" />}
                   <span className="hidden md:inline">
                     {isFullscreen ? 'Window' : 'Fullscreen'}
                   </span>
@@ -361,12 +361,12 @@ export default function TopBar() {
 
                 <button
                   onClick={handleLogout}
-                  className={`inline-flex ${isFullscreen ? 'h-7 w-7' : 'h-8 w-8'} shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-0 py-0 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white md:h-auto md:w-auto md:gap-2 md:px-3.5 md:py-2`}
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-0 py-0 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white md:h-auto md:w-auto md:gap-2 md:px-3.5 md:py-2`}
                   type="button"
                   aria-label={tUI(langCode, 'topbar.logout')}
                   title={tUI(langCode, 'topbar.logout.title')}
                 >
-                  <LogOut className="w-5 h-5" />
+                  <LogOut className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">
                     {tUI(langCode, 'topbar.logout')}
                   </span>
