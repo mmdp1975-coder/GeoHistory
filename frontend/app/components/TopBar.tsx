@@ -205,13 +205,33 @@ export default function TopBar() {
     : '/GeoHistoryGuide/GeoHistoryGuide_EN.mp4';
   const mobileBarHeight = isFullscreen ? 42 : 52;
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.style.setProperty('--gh-topbar-height', `${mobileBarHeight}px`);
+    root.style.setProperty(
+      '--gh-topbar-offset',
+      isFullscreen
+        ? `${mobileBarHeight}px`
+        : `calc(env(safe-area-inset-top) + ${mobileBarHeight}px)`
+    );
+    return () => {
+      root.style.removeProperty('--gh-topbar-height');
+      root.style.removeProperty('--gh-topbar-offset');
+    };
+  }, [isFullscreen, mobileBarHeight]);
+
   return (
     <>
       <nav
-        className="sticky top-0 z-20 border-b border-[rgba(18,49,78,0.08)] bg-white"
+        data-topbar
+        className={`${isFullscreen ? 'fixed inset-x-0 top-0' : 'sticky top-0'} z-20 border-b border-[rgba(18,49,78,0.08)] bg-white`}
         style={{
-          paddingTop: 'env(safe-area-inset-top)',
+          paddingTop: isFullscreen ? '0px' : 'env(safe-area-inset-top)',
           ['--gh-topbar-height' as string]: `${mobileBarHeight}px`,
+          ['--gh-topbar-offset' as string]: isFullscreen
+            ? `${mobileBarHeight}px`
+            : `calc(env(safe-area-inset-top) + ${mobileBarHeight}px)`,
         }}
       >
         <div
@@ -356,6 +376,13 @@ export default function TopBar() {
           )}
         </div>
       </nav>
+      {isFullscreen ? (
+        <div
+          aria-hidden
+          className="block md:hidden"
+          style={{ height: `${mobileBarHeight}px` }}
+        />
+      ) : null}
 
       <style jsx>{`
         .topbar-tagline {

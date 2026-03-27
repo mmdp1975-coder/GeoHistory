@@ -91,6 +91,7 @@ export default function LandingPage(): JSX.Element {
               >
                 <TimelinePage
                   embedded
+                  initialSortMode="published"
                   externalGeoFilter={selectedGeoFilter}
                   onClearExternalGeoFilter={clearGeoSelection}
                   onOpenEmbeddedMap={() => setMobilePanel("globe")}
@@ -140,6 +141,7 @@ export default function LandingPage(): JSX.Element {
           >
             <TimelinePage
               embedded
+              initialSortMode="published"
               externalGeoFilter={selectedGeoFilter}
               onClearExternalGeoFilter={clearGeoSelection}
             />

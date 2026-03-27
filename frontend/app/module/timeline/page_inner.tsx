@@ -129,6 +129,7 @@ type TimelinePageProps = {
   externalGeoFilter?: { lat: number; lon: number; radiusKm: number } | null;
   onClearExternalGeoFilter?: () => void;
   onOpenEmbeddedMap?: () => void;
+  initialSortMode?: SortMode;
 };
 
 type SortMode = "timeline" | "rating" | "favourites" | "published";
@@ -138,6 +139,7 @@ export default function TimelinePage({
   externalGeoFilter = null,
   onClearExternalGeoFilter,
   onOpenEmbeddedMap,
+  initialSortMode = "timeline",
 }: TimelinePageProps) {
   const search = useSearchParams();
   const router = useRouter();
@@ -185,7 +187,7 @@ export default function TimelinePage({
   const [visibilityFilter, setVisibilityFilter] = useState<
     "all" | "public" | "private"
   >("all");
-  const [sortMode, setSortMode] = useState<SortMode>("timeline");
+  const [sortMode, setSortMode] = useState<SortMode>(initialSortMode);
   const cardsListRef = useRef<HTMLUListElement | null>(null);
 
   /* ===== Lingua UI: profiles.language_code (id = user.id) ===== */

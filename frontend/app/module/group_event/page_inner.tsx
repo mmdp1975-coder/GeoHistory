@@ -873,8 +873,18 @@ const [mobileSheetSnap, setMobileSheetSnap] = useState<"peek" | "half">("peek");
 const [mobileTab, setMobileTab] = useState<"event" | "related">("event");
 const [mobileJourneyDescOpen, setMobileJourneyDescOpen] = useState(false);
 const [mobileTopMediaOpen, setMobileTopMediaOpen] = useState(false);
+const [mobileTopTabOpen, setMobileTopTabOpen] = useState(false);
 const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
 const mobileMediaRef = useRef<HTMLDivElement | null>(null);
+const mobileTopTabRef = useRef<HTMLDivElement | null>(null);
+const mobileTopOverlayRef = useRef<HTMLDivElement | null>(null);
+const mobileBandOverlayRef = useRef<HTMLDivElement | null>(null);
+const mobileBottomOverlayRef = useRef<HTMLDivElement | null>(null);
+const mobileConcurrentRef = useRef<HTMLDivElement | null>(null);
+const mobileMapHostRef = useRef<HTMLDivElement | null>(null);
+const desktopMapHostRef = useRef<HTMLDivElement | null>(null);
+const [mobileOverlayHeights, setMobileOverlayHeights] = useState({ top: 0, band: 0, sheet: 0 });
+const [mobileConcurrentHeight, setMobileConcurrentHeight] = useState(0);
 const BRAND_BLUE = "#0f3c8c";
 
 const toggleMapModeView = useCallback(() => {
@@ -884,6 +894,52 @@ const toggleMapModeView = useCallback(() => {
 useEffect(() => {
   setMapMode(isLg ? "normal" : "fullscreen");
 }, [isLg]);
+
+useEffect(() => {
+  if (isLg) {
+    setMobileOverlayHeights({ top: 0, band: 0, sheet: 0 });
+    return;
+  }
+
+  const measure = () => {
+    setMobileOverlayHeights({
+      top: mobileTopOverlayRef.current?.getBoundingClientRect().height ?? 0,
+      band: mobileBandOverlayRef.current?.getBoundingClientRect().height ?? 0,
+      sheet: mobileBottomOverlayRef.current?.getBoundingClientRect().height ?? 0,
+    });
+    setMobileConcurrentHeight(
+      mobileConcurrentRef.current?.getBoundingClientRect().height ?? 0
+    );
+  };
+
+  measure();
+  const ro = new ResizeObserver(() => measure());
+  const nodes = [
+    mobileTopOverlayRef.current,
+    mobileBandOverlayRef.current,
+    mobileBottomOverlayRef.current,
+    mobileConcurrentRef.current,
+  ].filter(Boolean) as Element[];
+  nodes.forEach((node) => ro.observe(node));
+  window.addEventListener("resize", measure);
+  window.addEventListener("orientationchange", measure);
+  document.addEventListener("fullscreenchange", measure);
+  return () => {
+    ro.disconnect();
+    window.removeEventListener("resize", measure);
+    window.removeEventListener("orientationchange", measure);
+    document.removeEventListener("fullscreenchange", measure);
+  };
+}, [
+  isLg,
+  mobileJourneyDescOpen,
+  mobileTopMediaOpen,
+  mobileTopTabOpen,
+  mobilePlayerOpen,
+  mobileSheetSnap,
+  mobileTab,
+  rows.length,
+]);
 
 const [gid, setGid] = useState<string | null>(null);
 const [eidParam, setEidParam] = useState<string | null>(null);
@@ -2457,10 +2513,17 @@ const [mapReady, setMapReady] = useState(false);
 const [mapLoaded, setMapLoaded] = useState(false);
  const [mapVersion, setMapVersion] = useState(0);
 
+const mobileMapTopInset = useMemo(() => {
+  if (isLg) return 0;
+  return Math.max(112, Math.ceil(mobileOverlayHeights.top + mobileOverlayHeights.band) + 12);
+}, [isLg, mobileOverlayHeights.top, mobileOverlayHeights.band]);
+
 const mobileMapBottomInset = useMemo(() => {
   if (isLg) return 0;
-  return mobileSheetSnap === "peek" ? 300 : 420;
-}, [isLg, mobileSheetSnap]);
+  const fallback = 160;
+  const measured = Math.ceil(mobileConcurrentHeight) + 12;
+  return Math.max(fallback, measured);
+}, [isLg, mobileConcurrentHeight]);
 
 const moveMapToVisibleCenter = useCallback(
   (lng: number, lat: number, zoom?: number) => {
@@ -2477,9 +2540,10 @@ const moveMapToVisibleCenter = useCallback(
       }
 
       const point = map.project([lng, lat]);
+      const visibleOffsetY = (mobileMapBottomInset - mobileMapTopInset) / 2;
       const shifted = {
         x: point.x,
-        y: point.y + mobileMapBottomInset / 2,
+        y: point.y + visibleOffsetY,
       };
       const targetCenter = map.unproject(shifted);
       map.flyTo({
@@ -2489,7 +2553,7 @@ const moveMapToVisibleCenter = useCallback(
       });
     } catch {}
   },
-  [isLg, mobileMapBottomInset]
+  [isLg, mobileMapBottomInset, mobileMapTopInset]
 );
 
 const fitMapToRows = useCallback(() => {
@@ -2513,14 +2577,14 @@ const fitMapToRows = useCallback(() => {
     const padding = isLg
       ? 100
       : {
-          top: 84,
+          top: mobileMapTopInset,
           right: 24,
           bottom: mobileMapBottomInset,
           left: 24,
         };
     (map as any).fitBounds(bounds as any, { padding, duration: 800 });
   } catch {}
-}, [rows, mapReady, isLg, mobileMapBottomInset]);
+}, [rows, mapReady, isLg, mobileMapBottomInset, mobileMapTopInset]);
 
 const showPopup = useCallback((ev?: EventVM | null) => {
   if (popupRef.current) {
@@ -2551,6 +2615,21 @@ useEffect(() => {
   return () => { document.body.style.overflow = prev; };
 }, [mapMode]);
 
+useEffect(() => {
+  const className = "ge-map-fullscreen";
+  if (typeof document === "undefined") return;
+  if (isLg && mapMode === "fullscreen") {
+    document.body.classList.add(className);
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }
+  document.body.classList.remove(className);
+  return () => {
+    document.body.classList.remove(className);
+  };
+}, [isLg, mapMode]);
+
 // Forza resize + fit dopo toggle view
 useEffect(() => {
   if (!mapRef.current || !mapReady) return;
@@ -2566,6 +2645,30 @@ useEffect(() => {
   if (!mapReady || !mapLoaded) return;
   fitMapToRows();
 }, [fitMapToRows, mapReady, mapLoaded]);
+
+useEffect(() => {
+  const map = mapRef.current;
+  if (!map || !mapReady || !mapLoaded || isLg) return;
+  try { map.resize(); } catch {}
+  const selected = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
+  if (selected?.latitude != null && selected?.longitude != null) {
+    moveMapToVisibleCenter(selected.longitude, selected.latitude, Math.max((map as any).getZoom?.() ?? 6, 6));
+    return;
+  }
+  fitMapToRows();
+}, [
+  isLg,
+  mapReady,
+  mapLoaded,
+  activeEventIndex,
+  rows,
+  moveMapToVisibleCenter,
+  fitMapToRows,
+  mobileOverlayHeights.top,
+  mobileOverlayHeights.band,
+  mobileOverlayHeights.sheet,
+  mobileConcurrentHeight,
+]);
 
 useEffect(() => {
   const map = mapRef.current as any;
@@ -2606,20 +2709,27 @@ useEffect(() => {
   setMapVersion((v) => v + 1);
 }, [gid]);
 
+ function isUsableMapContainer(el: HTMLElement | null): el is HTMLElement {
+ const rect = el?.getBoundingClientRect();
+ if (!el || !rect) return false;
+ const style = window.getComputedStyle(el);
+ return rect.width >= 120 && rect.height >= 120 && style.display !== "none" && style.visibility !== "hidden";
+ }
+ 
  function getVisibleMapContainer(): HTMLElement | null {
+ const preferred = isLg ? desktopMapHostRef.current : mobileMapHostRef.current;
+ if (isUsableMapContainer(preferred)) return preferred;
+ const alternate = isLg ? mobileMapHostRef.current : desktopMapHostRef.current;
+ if (isUsableMapContainer(alternate)) return alternate;
  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-map="gehj"]'));
  for (const el of nodes) {
- const rect = el.getBoundingClientRect();
- const style = window.getComputedStyle(el);
- if (rect.width >= 120 && rect.height >= 120 && style.display !== "none" && style.visibility !== "hidden") {
- return el;
- }
+ if (isUsableMapContainer(el)) return el;
  }
  return null;
  }
-
+ 
 useEffect(() => {
- if (typeof window === "undefined") return;
+ if (typeof window === "undefined" || loading || !gid) return;
 
  let cancelled = false;
 
@@ -2698,7 +2808,7 @@ useEffect(() => {
      mapRef.current = null;
    }
  };
-}, [mapVersion]);
+ }, [mapVersion, loading, gid, isLg]);
 
  /* ===== Fetch ===== */
  useEffect(() => {
@@ -3521,10 +3631,7 @@ const selectedEvent = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
 const selectedTimelineItem = timelineData?.items?.find((it) => it.index === activeEventIndex) ?? null;
 const selectedTimelineLeftPct = selectedTimelineItem ? Math.max(6, Math.min(94, selectedTimelineItem.progress * 100)) : null;
 const selectedTimelineRangeLabel = selectedEvent ? formatEventRange(selectedEvent) : null;
-const panelDescription =
-  isIntroPlaybackActive
-    ? journeyDescription || tUI(uiLang, "journey.description.none")
-    : selectedEvent?.description || tUI(uiLang, "journey.description.none");
+const panelDescription = selectedEvent?.description ?? "";
 const concurrentDisplay = useMemo(() => {
  return concurrentOther || [];
 }, [concurrentOther]);
@@ -3615,14 +3722,22 @@ const journeyAndEventMedia = useMemo(() => {
       color: #111827;
       font-weight: 700;
     }
+    :global(body.ge-map-fullscreen [data-topbar]) {
+      display: none !important;
+    }
   `}</style>
  {/* ===== MOBILE MAP-FIRST ===== */}
- <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "calc(env(safe-area-inset-top) + var(--gh-topbar-height, 52px))" }}>
+ <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "var(--gh-topbar-offset, calc(env(safe-area-inset-top) + 52px))" }}>
   <div className="absolute inset-0">
     <div
+      ref={mobileMapHostRef}
       data-map="gehj"
       key={`map-mobile-${gid ?? "unknown"}`}
-      className="h-full w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+      className="w-full bg-[linear-gradient(180deg,#eef2ff,transparent)]"
+      style={{
+        marginTop: `${Math.max(0, mobileOverlayHeights.top)}px`,
+        height: `calc(100% - ${Math.max(120, mobileConcurrentHeight)}px - ${Math.max(0, mobileOverlayHeights.top)}px)`,
+      }}
       aria-label="Map canvas"
     />
     {!mapLoaded && (
@@ -3634,13 +3749,26 @@ const journeyAndEventMedia = useMemo(() => {
       </div>
     )}
     <div
-      className="pointer-events-none absolute inset-x-0 z-20 px-3"
-      style={{ top: "8px" }}
+      ref={mobileTopOverlayRef}
+      className="pointer-events-none absolute inset-x-0 top-0 z-20"
     >
-      <div className="pointer-events-auto mr-[44px] w-[calc(100%_-_44px)] max-w-none rounded-2xl border border-white/45 bg-white/90 p-2 shadow backdrop-blur">
-        <div className="flex items-start gap-2">
+      <div className="pointer-events-auto w-full border-b border-black/5 bg-white/96 px-3 py-2.5 backdrop-blur">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={toggleFavourite}
+            disabled={!group_event_id || savingFav}
+            aria-pressed={isFav}
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
+            aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+          >
+            <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" />
+              </svg>
+            </span>
+          </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[18px] font-semibold text-slate-900">
+            <h1 className="truncate text-[18px] font-semibold leading-tight text-slate-900">
               {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
             </h1>
             {mobileJourneyDescOpen ? (
@@ -3650,7 +3778,7 @@ const journeyAndEventMedia = useMemo(() => {
             ) : null}
           </div>
         </div>
-        <div className="mt-2 flex flex-nowrap items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
           <button
             onClick={() => setMobileJourneyDescOpen((v) => !v)}
             className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobileJourneyDescOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
@@ -3662,20 +3790,7 @@ const journeyAndEventMedia = useMemo(() => {
               <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          <button
-            onClick={toggleFavourite}
-            disabled={!group_event_id || savingFav}
-            aria-pressed={isFav}
-            className={`inline-flex items-center justify-center rounded-full p-1.5 transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
-            aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
-          >
-            <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            </span>
-          </button>
-          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact /> : null}
           <button
             onClick={openQuiz}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[16px] font-semibold text-white shadow"
@@ -3690,6 +3805,7 @@ const journeyAndEventMedia = useMemo(() => {
               const next = !mobileTopMediaOpen;
               setMobileTopMediaOpen(next);
               if (next) {
+                setMobileTopTabOpen(false);
                 setMobilePlayerOpen(false);
                 window.setTimeout(() => {
                   mobileMediaRef.current?.scrollIntoView({ block: "nearest" });
@@ -3706,21 +3822,101 @@ const journeyAndEventMedia = useMemo(() => {
               <path d="M10 9l6 3-6 3V9z" fill="currentColor" />
             </svg>
           </button>
-          <button
-            onClick={() => setMobilePlayerOpen((v) => !v)}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobilePlayerOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
-            style={{ backgroundColor: "#0f3c8c" }}
-            title={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
-            aria-label={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              {mobilePlayerOpen ? (
-                <path d="M6 5h3v14H6zm9 0h3v14h-3z" fill="currentColor" />
-              ) : (
-                <path d="M8 6l10 6-10 6V6z" fill="currentColor" />
-              )}
-            </svg>
-          </button>
+          <div className="ml-auto flex items-center gap-1 pl-1">
+            <span aria-hidden className="mr-1 h-6 w-px shrink-0 bg-black/10" />
+            <button
+              onClick={() => setMobilePlayerOpen((v) => !v)}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobilePlayerOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
+              style={{ backgroundColor: "#0f3c8c" }}
+              title={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+              aria-label={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                {mobilePlayerOpen ? (
+                  <path d="M6 5h3v14H6zm9 0h3v14h-3z" fill="currentColor" />
+                ) : (
+                  <path d="M8 6l10 6-10 6V6z" fill="currentColor" />
+                )}
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                const nextOpen = !(mobileTopTabOpen && mobileTab === "event");
+                setMobileTab("event");
+                setMobileTopTabOpen(nextOpen);
+                if (nextOpen) {
+                  setMobileTopMediaOpen(false);
+                  window.setTimeout(() => {
+                    mobileTopTabRef.current?.scrollIntoView({ block: "nearest" });
+                  }, 0);
+                }
+              }}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+              title={tUI(uiLang, "journey.tab.description")}
+              aria-label={tUI(uiLang, "journey.tab.description")}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                const nextOpen = !(mobileTopTabOpen && mobileTab === "related");
+                setMobileTab("related");
+                setMobileTopTabOpen(nextOpen);
+                if (nextOpen) {
+                  setMobileTopMediaOpen(false);
+                  window.setTimeout(() => {
+                    mobileTopTabRef.current?.scrollIntoView({ block: "nearest" });
+                  }, 0);
+                }
+              }}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+              title={tUI(uiLang, "journey.related.title")}
+              aria-label={tUI(uiLang, "journey.related.title")}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                <path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H9.5A3.5 3.5 0 0 1 6 15V5.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M9 9h6M9 12h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M14.5 14.5 18.5 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <circle cx="13" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              </svg>
+            </button>
+            {selectedEvent?.wiki_url ? (
+              <a
+                href={selectedEvent.wiki_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-800"
+                title={tUI(uiLang, "journey.tab.wiki")}
+                aria-label={tUI(uiLang, "journey.tab.wiki")}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/icons/wiki.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-7 w-7 object-contain mix-blend-multiply"
+                  loading="lazy"
+                />
+              </a>
+            ) : (
+              <span
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                title={tUI(uiLang, "journey.tab.wiki")}
+                aria-label={tUI(uiLang, "journey.tab.wiki")}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/icons/wiki.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-7 w-7 object-contain opacity-60 grayscale mix-blend-multiply"
+                  loading="lazy"
+                />
+              </span>
+            )}
+          </div>
         </div>
         {mobilePlayerOpen ? (
           <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-black/10 bg-white/85 px-2 py-1.5">
@@ -3791,20 +3987,64 @@ const journeyAndEventMedia = useMemo(() => {
             />
           </div>
         ) : null}
-      </div>
-    </div>
-    <div
-      className="pointer-events-none absolute inset-x-0 z-20"
-      style={{
-        bottom:
-          mobileSheetSnap === "peek"
-            ? "calc(env(safe-area-inset-bottom) + 210px)"
-            : "calc(env(safe-area-inset-bottom) + 52svh + 16px)",
-      }}
-    >
-      {mobileSheetSnap === "peek" && timelineData?.items?.length ? (
-        <div className="pointer-events-auto px-3 pb-1">
-          <div className="rounded-2xl border border-white/45 bg-white/88 px-2 py-2 shadow backdrop-blur">
+        {mobileTopTabOpen ? (
+          <div ref={mobileTopTabRef} className="mt-2 rounded-xl border border-black/10 bg-white/85 p-2.5">
+            {mobileTab === "event" ? (
+              <div className="space-y-2">
+                <div className="max-h-[16svh] overflow-y-auto whitespace-pre-wrap text-[12px] leading-5 text-slate-700" style={{ scrollbarWidth: "thin" }}>
+                  {panelDescription}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedEvent?.video_url ? (
+                    <a
+                      href={selectedEvent.video_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
+                      title="Guarda il video dell'evento"
+                    >
+                      {tUI(uiLang, "journey.video.open")}
+                    </a>
+                  ) : null}
+                </div>
+                {selectedEvent?.event_media?.length ? (
+                  <MediaBox
+                    items={selectedEvent.event_media}
+                    firstPreview={selectedEvent.event_media_first || undefined}
+                    onOpenOverlay={openOverlay}
+                    compact
+                    height="sm"
+                    hoverPreviewList
+                    hoverPreviewDirection="horizontal"
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {mobileTab === "related" ? (
+              related?.length ? (
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {related.map((r) => (
+                    <Scorecard
+                      key={r.id}
+                      href={geUrl(r.id)}
+                      title={r.title ?? r.slug ?? "Journey"}
+                      coverUrl={r.coverUrl}
+                      ctaLabel=""
+                      compact
+                      className="shadow-none"
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-[12.5px] text-gray-600">
+                  {tUI(uiLang, "journey.related.none")}
+                </div>
+              )
+            ) : null}
+          </div>
+        ) : null}
+        {timelineData?.items?.length ? (
+          <div className="mt-2 border-t border-black/10 pt-2">
             <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/85">
               <span>{formatTimelineYearLabel(timelineData.min)}</span>
               <span>{formatTimelineYearLabel(timelineData.max)}</span>
@@ -3831,7 +4071,7 @@ const journeyAndEventMedia = useMemo(() => {
                 const left = `${Math.max(0, Math.min(100, it.progress * 100))}%`;
                 return (
                   <button
-                    key={`mtl-${it.ev.id}-${it.index}`}
+                    key={`mtl-top-${it.ev.id}-${it.index}`}
                     onClick={() => handleSelectEvent(it.index)}
                     className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${
                       active ? "border-white bg-[#0f3c8c] shadow-[0_0_0_2px_rgba(15,60,140,0.28)]" : "border-[#0f3c8c] bg-white/95"
@@ -3844,8 +4084,16 @@ const journeyAndEventMedia = useMemo(() => {
               })}
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
+    </div>
+    <div
+      ref={mobileBandOverlayRef}
+      className="pointer-events-none absolute inset-x-0 z-20"
+      style={{
+        top: `${Math.max(168, Math.ceil(mobileOverlayHeights.top))}px`,
+      }}
+    >
       <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
         <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
           {rows.map((ev, idx) => {
@@ -3895,165 +4143,27 @@ const journeyAndEventMedia = useMemo(() => {
     </div>
   </div>
 
-  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-2 pb-[calc(env(safe-area-inset-bottom)+8px)]">
-    <div className="mx-auto flex w-full max-w-[860px] flex-col gap-2">
-    <div
-      className={`${BOX_3D} pointer-events-auto flex w-full flex-col overflow-hidden bg-white/95 backdrop-blur-xl transition-[height] duration-300`}
-      style={{ height: mobileSheetSnap === "peek" ? "58px" : "34svh" }}
-    >
-      <div className="border-b border-black/10 px-2 py-1.5">
-        <div className="flex items-center gap-1 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
-          <button
-            onClick={() => {
-              if (mobileSheetSnap !== "peek" && mobileTab === "event") {
-                setMobileSheetSnap("peek");
-              } else {
-                setMobileTab("event");
-                setMobileSheetSnap("half");
-              }
-            }}
-            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
-            title={tUI(uiLang, "journey.tab.description")}
-            aria-label={tUI(uiLang, "journey.tab.description")}
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-          <button
-            onClick={() => {
-              if (mobileSheetSnap !== "peek" && mobileTab === "related") {
-                setMobileSheetSnap("peek");
-              } else {
-                setMobileTab("related");
-                setMobileSheetSnap("half");
-              }
-            }}
-            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
-            title={tUI(uiLang, "journey.related.title")}
-            aria-label={tUI(uiLang, "journey.related.title")}
-          >
-            <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-              <path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H9.5A3.5 3.5 0 0 1 6 15V5.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-              <path d="M9 9h6M9 12h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M14.5 14.5 18.5 18.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <circle cx="13" cy="13" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-            </svg>
-          </button>
-          {selectedEvent?.wiki_url ? (
-            <a
-              href={selectedEvent.wiki_url}
-              target="_blank"
-              rel="noreferrer"
-              className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-800"
-              title={tUI(uiLang, "journey.tab.wiki")}
-              aria-label={tUI(uiLang, "journey.tab.wiki")}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/icons/wiki.png"
-                alt=""
-                aria-hidden="true"
-                className="h-8 w-8 object-contain"
-                loading="lazy"
-              />
-            </a>
-          ) : (
-            <span
-              className="ml-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
-              title={tUI(uiLang, "journey.tab.wiki")}
-              aria-label={tUI(uiLang, "journey.tab.wiki")}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/icons/wiki.png"
-                alt=""
-                aria-hidden="true"
-                className="h-8 w-8 object-contain opacity-60 grayscale"
-                loading="lazy"
-              />
-            </span>
-          )}
-        </div>
-      </div>
-
-      {mobileSheetSnap !== "peek" ? (
-      <div className="flex-1 overflow-y-auto px-3 py-3" style={{ scrollbarWidth: "thin" }}>
-        {mobileTab === "event" ? (
-          <div className="space-y-3">
-            <div className="whitespace-pre-wrap text-[13px] leading-6 text-gray-800 text-justify">
-              {panelDescription}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {selectedEvent?.video_url ? (
-                <a
-                  href={selectedEvent.video_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
-                  title="Guarda il video dell'evento"
-                >
-                  {tUI(uiLang, "journey.video.open")}
-                </a>
-              ) : null}
-            </div>
-            {selectedEvent?.event_media?.length ? (
-              <MediaBox
-                items={selectedEvent.event_media}
-                firstPreview={selectedEvent.event_media_first || undefined}
-                onOpenOverlay={openOverlay}
-                compact
-                height="sm"
-                hoverPreviewList
-                hoverPreviewDirection="horizontal"
-              />
-            ) : null}
-          </div>
-        ) : null}
-
-        {mobileTab === "related" ? (
-          related?.length ? (
-            <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {related.map((r) => (
-                <Scorecard
-                  key={r.id}
-                  href={geUrl(r.id)}
-                  title={r.title ?? r.slug ?? "Journey"}
-                  coverUrl={r.coverUrl}
-                  ctaLabel=""
-                  compact
-                  className="shadow-none"
-                />
-              ))}
-            </ul>
-          ) : (
-            <div className="text-[12.5px] text-gray-600">
-              {tUI(uiLang, "journey.related.none")}
-            </div>
-          )
-        ) : null}
-
-      </div>
-      ) : null}
-    </div>
-    <div className={`${BOX_3D} pointer-events-auto w-full overflow-hidden bg-white/95 backdrop-blur-xl`}>
-      <div className="border-b border-black/5 px-2 py-2">
+  <div
+    ref={mobileConcurrentRef}
+    className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 -mx-2 w-[calc(100%+1rem)] bg-white/96 backdrop-blur-xl"
+  >
+      <div className="border-t border-black/5 border-b border-black/5 px-3 py-2.5">
         <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/80">
           {tUI(uiLang, "journey.concurrent.title")}
         </div>
         {concurrentOther && concurrentOther.length ? (
-          <div className="overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
-            <div className="flex min-w-max gap-2">
+          <div className="overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+            <div className="flex min-w-full gap-3 px-1">
               {concurrentOther.map((c) => (
                 <button
                   key={`${c.geId}:${c.evId}`}
                   type="button"
                   onClick={() => router.push(geUrl(c.geId, c.evId))}
-                  className="w-[76vw] max-w-[300px] shrink-0 overflow-hidden rounded-2xl border border-[rgba(18,49,78,0.08)] bg-white/90 text-left shadow-[0_12px_28px_-24px_rgba(16,32,51,0.45)]"
+                  className="w-[84vw] max-w-none shrink-0 overflow-hidden rounded-2xl border border-[rgba(18,49,78,0.08)] bg-white text-left shadow-[0_12px_28px_-24px_rgba(16,32,51,0.35)]"
                   title={c.geTitle ?? c.evTitle}
                 >
-                  <div className="flex items-stretch gap-3 p-2.5">
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                  <div className="flex items-stretch gap-3 p-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100">
                       {c.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -4069,15 +4179,15 @@ const journeyAndEventMedia = useMemo(() => {
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="line-clamp-1 text-[11px] font-semibold text-[#0f3c8c]">
                         {c.geTitle ?? c.evTitle}
                       </div>
-                      <div className="line-clamp-2 text-[12px] font-medium leading-4 text-slate-800">
+                      <div className="line-clamp-2 text-[13px] font-medium leading-5 text-slate-800">
                         {c.evTitle}
                       </div>
                       {c.evRangeLabel ? (
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[11px] text-slate-500">
                           {c.evRangeLabel}
                         </div>
                       ) : null}
@@ -4093,8 +4203,6 @@ const journeyAndEventMedia = useMemo(() => {
           </div>
         )}
       </div>
-    </div>
-    </div>
   </div>
  </section>
 
@@ -4313,6 +4421,7 @@ const journeyAndEventMedia = useMemo(() => {
         }
       >
         <div
+          ref={desktopMapHostRef}
           data-map="gehj"
           key={`map-desktop-${gid ?? "unknown"}`}
           className={
