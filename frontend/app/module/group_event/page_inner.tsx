@@ -2522,8 +2522,8 @@ const [mapLoaded, setMapLoaded] = useState(false);
 
 const mobileMapTopInset = useMemo(() => {
   if (isLg) return 0;
-  return Math.max(112, Math.ceil(mobileOverlayHeights.top + mobileOverlayHeights.band) + 12);
-}, [isLg, mobileOverlayHeights.top, mobileOverlayHeights.band]);
+  return Math.max(112, Math.ceil(mobileOverlayHeights.top) + 12);
+}, [isLg, mobileOverlayHeights.top]);
 
 const mobileMapBottomInset = useMemo(() => {
   if (isLg) return 0;
@@ -3358,17 +3358,16 @@ useEffect(() => {
  }, [rows]);
 
  function Timeline3D() {
- const data = timelineData;
- if (!data) return null;
+  const data = timelineData;
+  if (!data) return null;
 
- const tickTarget = isLg ? 12 : 6;
- const ticks = buildTimelineTicks(data.min, data.max, tickTarget);
- const tickYears = [data.min, ...ticks, data.max];
- const diamondSize = 12;
- // Minor ticks: per-event start years, dedup + thinning to avoid clutter
- const eventYearsAll = Array.from(
- new Set(
- (data.items || [])
+  const tickTarget = isLg ? 12 : 6;
+  const ticks = buildTimelineTicks(data.min, data.max, tickTarget);
+  const tickYears = [data.min, ...ticks, data.max];
+  // Minor ticks: per-event start years, dedup + thinning to avoid clutter
+  const eventYearsAll = Array.from(
+  new Set(
+  (data.items || [])
  .map((it) => Math.round(it.start))
  .filter((y) => Number.isFinite(y) && y >= data.min && y <= data.max)
  )
@@ -3382,105 +3381,115 @@ useEffect(() => {
  for (const y of eventYearsFiltered) {
  const pos = ((y - data.min) / Math.max(1, data.range)) * 100;
  if (pos - lastPos >= minGapPct) { kept.push(y); lastPos = pos; }
- }
- return kept;
- })();
+  }
+  return kept;
+  })();
 
- let pct = 50;
-  {
- const ev = selectedIndex >= 0 && !isIntroPlaybackActive ? rows[selectedIndex] : null;
-  if (ev) {
-  const span = buildTimelineSpan(ev);
-  if (span) {
-  pct = ((span.start - data.min) / Math.max(1, data.range)) * 100;
-  pct = Math.max(0, Math.min(100, pct));
-  }
-  }
-  }
+  let activeItem: TimelineItem | null = null;
+  let activeLabel: string | null = null;
+  let activeStartPct = 50;
+  let activeEndPct = 50;
+   {
+  const ev = selectedIndex >= 0 && !isIntroPlaybackActive ? rows[selectedIndex] : null;
+   if (ev) {
+   const span = buildTimelineSpan(ev);
+   activeItem = data.items.find((it) => it.index === selectedIndex) ?? null;
+   activeLabel = formatEventRange(ev);
+   if (span) {
+   activeStartPct = Math.max(0, Math.min(100, ((span.min - data.min) / Math.max(1, data.range)) * 100));
+   activeEndPct = Math.max(0, Math.min(100, ((span.max - data.min) / Math.max(1, data.range)) * 100));
+   }
+   }
+   }
 
  return (
- <div className="relative flex h-full flex-col justify-center">
-  <div className="rounded-[26px] border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(246,241,233,0.82))] px-4 py-4 shadow-[0_18px_48px_-34px_rgba(16,32,51,0.48)]">
-   <div className="mb-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(15,60,140,0.78)]">
-    <span>{formatTimelineYearLabel(data.min)}</span>
-    <span>{formatTimelineYearLabel(data.max)}</span>
-   </div>
-
-   <div className="relative">
-    <div className="absolute inset-x-0 top-1/2 h-[30px] -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_center,rgba(26,100,214,0.14),transparent_72%)]" />
-    <div className="relative h-[18px] w-full overflow-visible rounded-full border border-[rgba(15,60,140,0.08)] bg-[rgba(255,255,255,0.78)] px-[2px] shadow-inner">
-     <div
-       className="absolute inset-y-[3px] left-[2px] right-[2px] rounded-full"
-       style={{ background: "linear-gradient(90deg, rgba(15,60,140,0.86) 0%, rgba(26,100,214,0.92) 50%, rgba(15,60,140,0.86) 100%)" }}
-     />
-     <div
-       className="absolute top-1/2 h-[20px] w-[20px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#1a64d6] shadow-[0_0_0_4px_rgba(26,100,214,0.18),0_10px_20px_-8px_rgba(15,60,140,0.75)]"
-       style={{ left: `${pct}%` }}
-     >
-       <div className="absolute inset-[4px] rounded-full bg-white/95" />
-     </div>
-     {minorTicks.map((t, i) => {
-      const pos = ((t - data.min) / data.range) * 100;
-      return (
-       <div
-        key={`mtick-${i}`}
-        className="absolute top-1/2 h-[8px] w-[1px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ left: `${pos}%`, backgroundColor: "rgba(15,60,140,0.24)" }}
-       />
-      );
-     })}
-     {tickYears.map((t, i) => {
-      const pos = ((t - data.min) / data.range) * 100;
-      return (
-       <div
-        key={`tick-${i}`}
-        className="absolute top-1/2 h-[12px] w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ left: `${pos}%`, backgroundColor: "rgba(255,255,255,0.92)" }}
-       />
-      );
-     })}
+  <div className="relative flex h-full flex-col justify-center">
+   <div className="px-1 pt-0 pb-1">
+    <div className="mb-2 flex items-center justify-between text-[11px] text-slate-500">
+      <span>{formatTimelineYearLabel(data.min)}</span>
+      <span>{formatTimelineYearLabel(data.max)}</span>
     </div>
-   </div>
 
-   <div className="relative mt-4 h-11 w-full">
-    <span className="absolute left-0 top-0 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm">
-     {formatTimelineYearLabel(data.min)}
-    </span>
-    {(() => {
-     const inner = tickYears.slice(1, -1).map((y, i) => ({
-      year: y,
-      pos: ((y - data.min) / Math.max(1, data.range)) * 100,
-      key: `ilbl-${i}`,
-     }));
-     const kept: { year: number; pos: number; key: string }[] = [];
-     const minGap = Math.max(isLg ? 8 : 16, 100 / Math.max(2, inner.length + 1));
-     let last = -Infinity;
-     inner.forEach((c) => {
-      if (c.pos - last >= minGap) { kept.push(c); last = c.pos; }
-     });
-     return (
-      <>
-       {kept.map((c, idx) => (
-        <span
-         key={c.key}
-         className="absolute -translate-x-1/2 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm"
-         style={{ left: `${c.pos}%`, top: idx % 2 === 0 ? "0px" : "18px" }}
+    <div className="relative py-2">
+     <div className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 bg-slate-200" />
+     <div className="relative h-[18px] w-full overflow-visible">
+      <div
+        className="absolute inset-x-0 top-1/2 h-[2px] -translate-y-1/2 bg-[#0f3c8c]/12"
+      />
+      {data.items.map((item) => {
+        const spanWidthPct = Math.max(1.4, ((item.max - item.min) / Math.max(1, data.range)) * 100);
+        const leftPct = Math.max(0, Math.min(100, ((item.min - data.min) / Math.max(1, data.range)) * 100));
+        const active = item.index === activeEventIndex;
+        return (
+          <button
+            key={`desktop-span-${item.ev.id}-${item.index}`}
+            onClick={() => handleSelectEvent(item.index)}
+            className={`absolute top-1/2 h-[10px] -translate-y-1/2 rounded-full transition ${
+              active
+                ? "bg-[#0f3c8c]"
+                : "bg-slate-300 hover:bg-slate-400"
+            }`}
+            style={{
+              left: `${leftPct}%`,
+              width: `${spanWidthPct}%`,
+              minWidth: "10px",
+            }}
+            aria-label={`Evento ${item.index + 1}`}
+            title={`${item.ev.title} - ${formatEventRange(item.ev)}`}
+          />
+        );
+      })}
+      {activeItem && activeLabel ? (
+        <div
+          className="pointer-events-none absolute top-1/2 h-[14px] -translate-y-1/2 rounded-full border border-[#0f3c8c]/20 bg-[#0f3c8c]/10"
+          style={{
+            left: `${activeStartPct}%`,
+            width: `${Math.max(0.8, activeEndPct - activeStartPct)}%`,
+          }}
         >
-         {formatTimelineYearLabel(c.year)}
-        </span>
-       ))}
-      </>
-     );
-    })()}
-    <span
-     className="absolute right-0 rounded-full border border-[rgba(18,49,78,0.08)] bg-white/92 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm"
-     style={{ top: "18px" }}
-    >
-     {formatTimelineYearLabel(data.max)}
-    </span>
+          <span className="sr-only">{activeLabel}</span>
+        </div>
+      ) : null}
+      {minorTicks.map((t, i) => {
+       const pos = ((t - data.min) / data.range) * 100;
+       return (
+         <div
+           key={`mtick-${i}`}
+           className="absolute top-1/2 h-[8px] w-px -translate-x-1/2 -translate-y-1/2 bg-slate-300"
+           style={{ left: `${pos}%` }}
+         />
+        );
+      })}
+      {tickYears.map((t, i) => {
+       const pos = ((t - data.min) / data.range) * 100;
+       return (
+        <div
+          key={`tick-${i}`}
+          className="absolute top-1/2 h-[14px] w-px -translate-x-1/2 -translate-y-1/2 bg-slate-500"
+          style={{ left: `${pos}%` }}
+        />
+       );
+      })}
+     </div>
+    </div>
+    {activeItem && activeLabel ? (
+      <div className="mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 text-[12px]">
+        <div className="whitespace-nowrap text-left">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">From</div>
+          <div className="font-medium text-slate-900">{formatTimelineYearLabel(activeItem.min)}</div>
+        </div>
+        <div className="min-w-0 text-center">
+          <div className="truncate text-[12.5px] font-semibold text-slate-900">{activeItem.ev.title}</div>
+          <div className="mt-0.5 text-[11px] text-slate-500">{activeLabel}</div>
+        </div>
+        <div className="whitespace-nowrap text-right">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">To</div>
+          <div className="font-medium text-slate-900">{formatTimelineYearLabel(activeItem.max)}</div>
+        </div>
+      </div>
+    ) : null}
    </div>
   </div>
- </div>
  );
  }
 
@@ -3683,7 +3692,17 @@ const journeyAndEventMedia = useMemo(() => {
 
  /* ===================== RENDER ===================== */
  return (
- <div className="relative flex min-h-screen flex-col overflow-hidden">
+  <div
+    className="relative flex min-h-screen flex-col overflow-hidden"
+    style={
+      isLg
+        ? undefined
+        : {
+            marginTop: "calc(-1 * var(--gh-topbar-offset, calc(env(safe-area-inset-top) + 52px)))",
+            minHeight: "calc(100dvh + var(--gh-topbar-offset, calc(env(safe-area-inset-top) + 52px)))",
+          }
+    }
+  >
   <div
     aria-hidden
     className="pointer-events-none absolute inset-0 z-0"
@@ -3736,7 +3755,7 @@ const journeyAndEventMedia = useMemo(() => {
     }
   `}</style>
  {/* ===== MOBILE MAP-FIRST ===== */}
- <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "var(--gh-topbar-offset, calc(env(safe-area-inset-top) + 52px))" }}>
+ <section className="fixed inset-x-0 bottom-0 z-[120] lg:hidden" style={{ top: "var(--gh-topbar-height, 52px)" }}>
   <div className="absolute inset-0">
     <div
       ref={mobileMapHostRef}
@@ -3757,10 +3776,7 @@ const journeyAndEventMedia = useMemo(() => {
         Inizializzazione mappa.
       </div>
     )}
-    <div
-      ref={mobileTopOverlayRef}
-      className="pointer-events-none absolute inset-x-0 top-0 z-20"
-    >
+    <div ref={mobileTopOverlayRef} className="pointer-events-none absolute inset-x-0 top-0 z-20">
       <div className="pointer-events-auto w-full border-b border-black/5 bg-white/96 px-3 py-2.5 backdrop-blur">
         <div className="flex items-center gap-1.5">
           <button
@@ -4095,15 +4111,14 @@ const journeyAndEventMedia = useMemo(() => {
           </div>
         ) : null}
       </div>
-    </div>
-    <div
-      ref={mobileBandOverlayRef}
-      className="pointer-events-none absolute inset-x-0 z-20"
-      style={{
-        top: `${mobileTopStackOffset}px`,
-      }}
-    >
-      <div className="pointer-events-auto overflow-x-auto px-3 pb-2" ref={bandRef} style={{ scrollbarWidth: "thin" }}>
+      <div
+        ref={(node) => {
+          mobileBandOverlayRef.current = node;
+          bandRef.current = node;
+        }}
+        className="pointer-events-auto overflow-x-auto bg-white/96 px-3 pt-1 pb-0 backdrop-blur"
+        style={{ scrollbarWidth: "thin" }}
+      >
         <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
           {rows.map((ev, idx) => {
             const active = idx === activeEventIndex;
@@ -4409,14 +4424,12 @@ const journeyAndEventMedia = useMemo(() => {
     </div>
 
     {/* Destra: Timeline + Descrizione + Mappa */}
-    <section className={`${BOX_3D} p-3 flex flex-col gap-2 h-[730px]`}>
-      <div className="p-2 shrink-0">
+    <section className={`${BOX_3D} p-3 flex flex-col gap-1 h-[730px]`}>
+      <div className="pt-0 pb-1 shrink-0">
         <Timeline3D />
       </div>
-
-      <div className="h-2" />
-
-        <div className="p-2 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
+ 
+        <div className="p-2 pt-0 flex flex-col flex-[0.7] min-h-[160px] overflow-hidden">
                 <div className="flex-1 overflow-y-auto pr-2 text-[12.5px] leading-5 text-gray-800 whitespace-pre-wrap text-justify" style={{ scrollbarWidth: "thin" }}>
           {panelDescription}
         </div>
