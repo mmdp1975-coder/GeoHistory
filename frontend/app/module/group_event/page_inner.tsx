@@ -2543,6 +2543,7 @@ const moveMapToVisibleCenter = useCallback(
     const map = mapRef.current as any;
     if (!map) return;
     try {
+      try { map.stop?.(); } catch {}
       if (isLg || mobileMapBottomInset <= 0) {
         map.flyTo({
           center: [lng, lat],
@@ -2621,6 +2622,12 @@ const applyMapViewport = useCallback(
   [mapReady, mapViewportMode, activeEventIndex, rows, fitMapToRows, moveMapToVisibleCenter],
 );
 
+const latestApplyMapViewportRef = useRef(applyMapViewport);
+
+useEffect(() => {
+  latestApplyMapViewportRef.current = applyMapViewport;
+}, [applyMapViewport]);
+
 const showPopup = useCallback((ev?: EventVM | null) => {
   if (popupRef.current) {
     try { popupRef.current.remove(); } catch {}
@@ -2671,11 +2678,11 @@ useEffect(() => {
   try { mapRef.current.resize(); } catch {}
   setTimeout(() => { try { mapRef.current?.resize(); } catch {} }, 120);
   if (mapMode === "fullscreen") {
-    applyMapViewport({ forceFit: true });
+    latestApplyMapViewportRef.current({ forceFit: true });
     return;
   }
-  applyMapViewport();
-}, [mapMode, mapReady, applyMapViewport]);
+  latestApplyMapViewportRef.current();
+}, [mapMode, mapReady]);
 
 useEffect(() => {
   const map = mapRef.current;
@@ -2683,15 +2690,14 @@ useEffect(() => {
   try { map.resize(); } catch {}
   if (!initialMobileMapFitDoneRef.current) {
     initialMobileMapFitDoneRef.current = true;
-    applyMapViewport({ forceFit: true });
+    latestApplyMapViewportRef.current({ forceFit: true });
     return;
   }
-  applyMapViewport();
+  latestApplyMapViewportRef.current();
 }, [
   isLg,
   mapReady,
   mapLoaded,
-  applyMapViewport,
   mobileOverlayHeights.top,
   mobileOverlayHeights.band,
   mobileOverlayHeights.sheet,
@@ -2705,7 +2711,19 @@ useEffect(() => {
   const ev = rows[pendingIndex];
   if (!map || !mapReady || !mapLoaded || !ev || ev.latitude == null || ev.longitude == null) return;
   pendingSelectedMapFocusRef.current = null;
-  moveMapToVisibleCenter(ev.longitude, ev.latitude, Math.max(map.getZoom?.() ?? 6, 6));
+  const focusLng = ev.longitude;
+  const focusLat = ev.latitude;
+  const applyFocus = () => {
+    try { map.resize?.(); } catch {}
+    moveMapToVisibleCenter(focusLng, focusLat, Math.max(map.getZoom?.() ?? 6, 6));
+  };
+  if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(applyFocus);
+    });
+    return;
+  }
+  applyFocus();
 }, [activeEventIndex, rows, mapReady, mapLoaded, moveMapToVisibleCenter]);
 
 // Popup evento quando la mappa Š full-screen
