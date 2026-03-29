@@ -59,8 +59,8 @@ export default function LandingPage(): JSX.Element {
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundRepeat: "no-repeat",
-          filter: "grayscale(0.15) saturate(0.55) contrast(0.95)",
-          opacity: 0.1,
+          filter: "grayscale(0.18) saturate(0.45) contrast(0.9)",
+          opacity: 0.16,
         }}
       />
       <div
@@ -68,23 +68,31 @@ export default function LandingPage(): JSX.Element {
         className="pointer-events-none absolute inset-0 z-0"
         style={{
           background:
+            "radial-gradient(circle at 12% 12%, rgba(199,147,67,0.14), transparent 22%), radial-gradient(circle at 84% 10%, rgba(78,123,255,0.16), transparent 18%), linear-gradient(180deg, rgba(9,11,18,0.92) 0%, rgba(11,16,32,0.96) 48%, rgba(9,11,18,0.99) 100%)",
+        }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-0 hidden lg:block"
+        style={{
+          background:
             "radial-gradient(circle at 12% 12%, rgba(199,147,67,0.18), transparent 24%), radial-gradient(circle at 84% 10%, rgba(28,77,117,0.2), transparent 18%), linear-gradient(180deg, rgba(247,244,237,0.7) 0%, rgba(243,239,230,0.92) 48%, rgba(238,233,224,0.98) 100%)",
         }}
       />
 
-      <div className="relative z-10 mx-auto w-full max-w-[1600px] px-4 py-4 lg:h-full lg:px-6 lg:py-3">
-        <div className="flex flex-col gap-2.5 lg:hidden">
+      <div className="relative z-10 mx-auto w-full max-w-[1600px] px-0 py-0 lg:h-full lg:px-6 lg:py-3">
+        <div className="flex flex-col gap-3 lg:hidden">
           <section
             className={
               mobilePanel === "timeline"
-                ? "overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md"
-                : "min-h-0 overflow-hidden rounded-[28px] border border-neutral-200/90 bg-white/90 shadow-[0_24px_80px_-40px_rgba(15,23,42,0.35)] backdrop-blur-md"
+                ? "overflow-hidden"
+                : "min-h-0 overflow-hidden"
             }
           >
             {mobilePanel === "timeline" ? (
               <Suspense
                 fallback={
-                  <div className="flex h-full min-h-[420px] items-center justify-center text-sm text-neutral-500">
+                  <div className="flex h-full min-h-[420px] items-center justify-center text-sm text-white/55">
                     Loading timeline...
                   </div>
                 }
@@ -98,11 +106,11 @@ export default function LandingPage(): JSX.Element {
                 />
               </Suspense>
             ) : (
-              <div className="relative h-[560px]">
+              <div className="relative h-[calc(100dvh-var(--gh-topbar-height,52px)-12px)] min-h-[560px]">
                 <button
                   type="button"
                   onClick={() => setMobilePanel("timeline")}
-                  className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-full border border-neutral-200/90 bg-white/92 px-3 py-2 text-xs font-semibold text-[#163f63] shadow-[0_14px_32px_-24px_rgba(16,32,51,0.45)] backdrop-blur-md"
+                  className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_32px_-24px_rgba(0,0,0,0.6)] backdrop-blur-md"
                 >
                   <svg
                     viewBox="0 0 24 24"

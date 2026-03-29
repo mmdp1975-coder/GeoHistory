@@ -537,24 +537,14 @@ function QuizOverlay({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[5200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <div className="relative h-[82vh] w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/10">
-        <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+    <div className="fixed inset-0 z-[5200] flex items-center justify-center bg-black/72 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true">
+      <div className="relative h-[100svh] w-full overflow-hidden bg-[#090b12] shadow-2xl sm:h-[82vh] sm:max-w-6xl sm:rounded-2xl sm:bg-white sm:ring-1 sm:ring-black/10">
+        <div className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-10 flex items-center gap-2 sm:top-3">
           {!loaded ? (
-            <div className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900 shadow-sm ring-1 ring-amber-200">
+            <div className="rounded-full border border-[#f6c86a]/25 bg-[#f6c86a]/14 px-3 py-1 text-xs font-medium text-[#f4dca0] shadow-sm sm:border-amber-200 sm:bg-amber-100 sm:text-amber-900">
               Caricamento...
             </div>
           ) : null}
-          <button
-            onClick={onClose}
-            className="inline-flex h-9 items-center gap-2 rounded-full bg-white/95 px-3 text-sm font-semibold text-slate-700 shadow-lg ring-1 ring-black/10 transition hover:bg-white hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            aria-label="Chiudi quiz"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Chiudi
-          </button>
         </div>
         <iframe
           src={src}
@@ -899,6 +889,20 @@ const mobileMapHostRef = useRef<HTMLDivElement | null>(null);
 const desktopMapHostRef = useRef<HTMLDivElement | null>(null);
 const [mobileOverlayHeights, setMobileOverlayHeights] = useState({ top: 0, band: 0, sheet: 0 });
 const [mobileConcurrentHeight, setMobileConcurrentHeight] = useState(0);
+
+useEffect(() => {
+  if (isLg || !mobilePlayerOpen) return;
+  const prev = document.body.style.overflow;
+  document.body.style.overflow = "hidden";
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") setMobilePlayerOpen(false);
+  };
+  window.addEventListener("keydown", onKey);
+  return () => {
+    document.body.style.overflow = prev;
+    window.removeEventListener("keydown", onKey);
+  };
+}, [isLg, mobilePlayerOpen]);
 const BRAND_BLUE = "#0f3c8c";
 
 const toggleMapModeView = useCallback(() => {
@@ -2194,6 +2198,16 @@ const renderAudioMeta = useCallback(() => {
     </div>
   );
 }, [audioCurrentTime, audioDuration, debugPlayer, firstEventStart, selectedIndex]);
+
+const handleMobilePlayerSeek = useCallback((nextValue: number) => {
+  const audio = audioRef.current;
+  if (!audio) return;
+  const target = Math.max(0, Math.min(nextValue, audioDuration || nextValue));
+  try {
+    audio.currentTime = target;
+    setAudioCurrentTime(target);
+  } catch {}
+}, [audioDuration]);
 
 const seekToIntro = useCallback(
   (opts?: { autoplay?: boolean }) => {
@@ -3695,6 +3709,13 @@ const selectedTimelineItem = timelineData?.items?.find((it) => it.index === acti
 const selectedTimelineLeftPct = selectedTimelineItem ? Math.max(6, Math.min(94, selectedTimelineItem.progress * 100)) : null;
 const selectedTimelineRangeLabel = selectedEvent ? formatEventRange(selectedEvent) : null;
 const panelDescription = selectedEvent?.description ?? "";
+const mobilePlayerArtwork =
+  normalizeMediaUrl(selectedEvent?.event_media_first || null) ||
+  normalizeMediaUrl(journeyMediaFirst || null) ||
+  null;
+const mobilePlayerProgress = audioDuration > 0 ? Math.max(0, Math.min(100, (audioCurrentTime / audioDuration) * 100)) : 0;
+const mobilePlayerSeekDisabled = !audioDuration || hasSegmentedMp3;
+const mobilePlayerNarrationText = (panelDescription || journeyDescription || "").trim();
 const concurrentDisplay = useMemo(() => {
  return concurrentOther || [];
 }, [concurrentOther]);
@@ -3822,13 +3843,13 @@ const journeyAndEventMedia = useMemo(() => {
       </div>
     )}
     <div ref={mobileTopOverlayRef} className="pointer-events-none absolute inset-x-0 top-0 z-20">
-      <div className="pointer-events-auto w-full border-b border-black/5 bg-white/96 px-3 py-2.5 backdrop-blur">
+      <div className="pointer-events-auto w-full border-b border-white/10 bg-[linear-gradient(180deg,rgba(8,10,17,0.94)_0%,rgba(8,10,17,0.82)_100%)] px-3 py-2.5 text-white backdrop-blur-xl shadow-[0_24px_50px_-32px_rgba(0,0,0,0.78)]">
         <div className="flex items-center gap-1.5">
           <button
             onClick={toggleFavourite}
             disabled={!group_event_id || savingFav}
             aria-pressed={isFav}
-            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition ${isFav ? "text-rose-600" : "text-slate-400"}`}
+            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 transition ${isFav ? "text-rose-400" : "text-white/58"}`}
             aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
           >
             <span aria-hidden className="inline-flex h-6 w-6 items-center justify-center">
@@ -3838,11 +3859,11 @@ const journeyAndEventMedia = useMemo(() => {
             </span>
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[18px] font-semibold leading-tight text-slate-900">
+            <h1 className="truncate text-[18px] font-semibold leading-tight tracking-[-0.02em] text-white">
               {(journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey").toString()}
             </h1>
             {mobileJourneyDescOpen ? (
-              <div className="mt-1 max-h-[18svh] overflow-y-auto pr-1 whitespace-pre-wrap text-[12px] leading-5 text-slate-700" style={{ scrollbarWidth: "thin" }}>
+              <div className="mt-1 max-h-[18svh] overflow-y-auto pr-1 whitespace-pre-wrap text-[12px] leading-5 text-white/72" style={{ scrollbarWidth: "thin" }}>
                 {journeyDescription || tUI(uiLang, "journey.description.none")}
               </div>
             ) : null}
@@ -3851,8 +3872,7 @@ const journeyAndEventMedia = useMemo(() => {
         <div className="mt-2 flex flex-wrap items-center gap-1">
           <button
             onClick={() => setMobileJourneyDescOpen((v) => !v)}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobileJourneyDescOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
-            style={{ backgroundColor: "#0f3c8c" }}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobileJourneyDescOpen ? "border-[#f6c86a]/60 bg-[#f6c86a]/20 ring-2 ring-[#f6c86a]/20" : "border-white/12 bg-white/8"}`}
             title={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
             aria-label={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
           >
@@ -3863,8 +3883,7 @@ const journeyAndEventMedia = useMemo(() => {
           {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact allowTextFeedback /> : null}
           <button
             onClick={openQuiz}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[16px] font-semibold text-white shadow"
-            style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/8 text-[16px] font-semibold text-white shadow-[0_12px_28px_-20px_rgba(0,0,0,0.6)]"
             title={tUI(uiLang, "journey.quiz.open")}
             aria-label={tUI(uiLang, "journey.quiz.open")}
           >
@@ -3882,8 +3901,7 @@ const journeyAndEventMedia = useMemo(() => {
                 }, 0);
               }
             }}
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobileTopMediaOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
-            style={{ backgroundColor: "#0f3c8c" }}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobileTopMediaOpen ? "border-[#f6c86a]/60 bg-[#f6c86a]/20 ring-2 ring-[#f6c86a]/20" : "border-white/12 bg-white/8"}`}
             title={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
             aria-label={mobileTopMediaOpen ? tUI(uiLang, "journey.media.hide") : tUI(uiLang, "journey.media.show")}
           >
@@ -3893,11 +3911,10 @@ const journeyAndEventMedia = useMemo(() => {
             </svg>
           </button>
           <div className="ml-auto flex items-center gap-1 pl-1">
-            <span aria-hidden className="mr-1 h-6 w-px shrink-0 bg-black/10" />
+            <span aria-hidden className="mr-1 h-6 w-px shrink-0 bg-white/10" />
             <button
               onClick={() => setMobilePlayerOpen((v) => !v)}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white ${mobilePlayerOpen ? "border-[#0f3c8c] ring-2 ring-[#1a64d6]/35" : "border-[#0f3c8c]/80"}`}
-              style={{ backgroundColor: "#0f3c8c" }}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobilePlayerOpen ? "border-[#f6c86a]/60 bg-[#f6c86a]/20 ring-2 ring-[#f6c86a]/20" : "border-white/12 bg-white/8"}`}
               title={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
               aria-label={mobilePlayerOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
             >
@@ -3921,7 +3938,7 @@ const journeyAndEventMedia = useMemo(() => {
                   }, 0);
                 }
               }}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white ${mobileTab === "event" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobileTab === "event" ? "border-[#f6c86a]/60 bg-[#f6c86a]/18" : "border-white/12 bg-white/8"}`}
               title={tUI(uiLang, "journey.tab.description")}
               aria-label={tUI(uiLang, "journey.tab.description")}
             >
@@ -3941,7 +3958,7 @@ const journeyAndEventMedia = useMemo(() => {
                   }, 0);
                 }
               }}
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-white ${mobileTab === "related" ? "bg-[#0f3c8c]" : "bg-[#1a64d6]"}`}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobileTab === "related" ? "border-[#f6c86a]/60 bg-[#f6c86a]/18" : "border-white/12 bg-white/8"}`}
               title={tUI(uiLang, "journey.related.title")}
               aria-label={tUI(uiLang, "journey.related.title")}
             >
@@ -3957,7 +3974,7 @@ const journeyAndEventMedia = useMemo(() => {
                 href={selectedEvent.wiki_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-800"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white"
                 title={tUI(uiLang, "journey.tab.wiki")}
                 aria-label={tUI(uiLang, "journey.tab.wiki")}
               >
@@ -3966,13 +3983,13 @@ const journeyAndEventMedia = useMemo(() => {
                   src="/icons/Wiki.png"
                   alt=""
                   aria-hidden="true"
-                  className="h-7.5 w-7.5 object-contain mix-blend-multiply"
+                  className="h-7.5 w-7.5 object-contain opacity-90 brightness-125"
                   loading="lazy"
                 />
               </a>
             ) : (
               <span
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/6 text-white/42"
                 title={tUI(uiLang, "journey.tab.wiki")}
                 aria-label={tUI(uiLang, "journey.tab.wiki")}
               >
@@ -3981,70 +3998,15 @@ const journeyAndEventMedia = useMemo(() => {
                   src="/icons/Wiki.png"
                   alt=""
                   aria-hidden="true"
-                  className="h-7.5 w-7.5 object-contain opacity-60 grayscale mix-blend-multiply"
+                  className="h-7.5 w-7.5 object-contain opacity-45 grayscale"
                   loading="lazy"
                 />
               </span>
             )}
           </div>
         </div>
-        {mobilePlayerOpen ? (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-black/10 bg-white/85 px-2 py-1.5">
-            <button
-              onClick={handlePrevEvent}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label="Evento precedente"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            <button
-              onClick={togglePlay}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
-            >
-              {isPlaying ? (
-                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={handleNextEvent}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white shadow-sm transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[rgba(15,60,140,0.45)]"
-              style={{ background: "linear-gradient(120deg, #0f3c8c 0%, #1a64d6 100%)" }}
-              aria-label="Evento successivo"
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {audioSourceOptions.length ? (
-              <select
-                value={audioSource}
-                onChange={(e) => setAudioSource(e.target.value)}
-                className="h-8 rounded-full border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-300/40"
-                title="Audio"
-              >
-                {audioSourceOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-          </div>
-        ) : null}
         {mobileTopMediaOpen ? (
-          <div ref={mobileMediaRef} className="mt-2 rounded-xl border border-black/10 bg-white/85 p-2">
+          <div ref={mobileMediaRef} className="mt-2 rounded-2xl border border-white/10 bg-white/8 p-2 shadow-[0_18px_42px_-26px_rgba(0,0,0,0.72)] backdrop-blur-md">
             <MediaBox
               items={journeyMedia ?? []}
               firstPreview={journeyMediaFirst || undefined}
@@ -4058,10 +4020,10 @@ const journeyAndEventMedia = useMemo(() => {
           </div>
         ) : null}
         {mobileTopTabOpen ? (
-          <div ref={mobileTopTabRef} className="mt-2 rounded-xl border border-black/10 bg-white/85 p-2.5">
+          <div ref={mobileTopTabRef} className="mt-2 rounded-2xl border border-white/10 bg-white/8 p-2.5 text-white shadow-[0_18px_42px_-26px_rgba(0,0,0,0.72)] backdrop-blur-md">
             {mobileTab === "event" ? (
               <div className="space-y-2">
-                <div className="max-h-[16svh] overflow-y-auto whitespace-pre-wrap text-[12px] leading-5 text-slate-700" style={{ scrollbarWidth: "thin" }}>
+                <div className="max-h-[16svh] overflow-y-auto whitespace-pre-wrap text-[12px] leading-5 text-white/76" style={{ scrollbarWidth: "thin" }}>
                   {panelDescription}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -4070,7 +4032,7 @@ const journeyAndEventMedia = useMemo(() => {
                       href={selectedEvent.video_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-[12px] font-semibold text-slate-700"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[12px] font-semibold text-white"
                       title="Guarda il video dell'evento"
                     >
                       {tUI(uiLang, "journey.video.open")}
@@ -4106,7 +4068,7 @@ const journeyAndEventMedia = useMemo(() => {
                   ))}
                 </ul>
               ) : (
-                <div className="text-[12.5px] text-gray-600">
+                <div className="text-[12.5px] text-white/60">
                   {tUI(uiLang, "journey.related.none")}
                 </div>
               )
@@ -4114,16 +4076,16 @@ const journeyAndEventMedia = useMemo(() => {
           </div>
         ) : null}
         {timelineData?.items?.length ? (
-          <div className="mt-2 border-t border-black/10 pt-2">
-            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/85">
+          <div className="mt-2 border-t border-white/10 pt-2">
+            <div className="mb-1 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wide text-white/55">
               <span>{formatTimelineYearLabel(timelineData.min)}</span>
               <span>{formatTimelineYearLabel(timelineData.max)}</span>
             </div>
             <div className="relative h-6 overflow-visible">
-              <div className="absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[#1a64d6]/35" />
+              <div className="absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-white/14" />
               {selectedTimelineItem && selectedTimelineLeftPct != null ? (
                 <div
-                  className="pointer-events-none absolute top-[calc(50%+8px)] -translate-x-1/2 rounded-full border border-[#0f3c8c]/25 bg-white/95 px-2 py-[1px] text-[10px] font-semibold whitespace-nowrap text-[#0f3c8c] shadow-sm"
+                  className="pointer-events-none absolute top-[calc(50%+8px)] -translate-x-1/2 rounded-full border border-white/10 bg-[#10131d]/92 px-2 py-[1px] text-[10px] font-semibold whitespace-nowrap text-white/72 shadow-sm"
                   style={{ left: `${selectedTimelineLeftPct}%` }}
                 >
                   {selectedTimelineRangeLabel ?? formatTimelineYearLabel(selectedTimelineItem.start)}
@@ -4131,7 +4093,7 @@ const journeyAndEventMedia = useMemo(() => {
               ) : null}
               {selectedTimelineItem ? (
                 <div
-                  className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#0f3c8c] shadow-[0_0_0_3px_rgba(15,60,140,0.22)]"
+                  className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#f6c86a] shadow-[0_0_0_3px_rgba(246,200,106,0.18)]"
                   style={{ left: `${Math.max(0, Math.min(100, selectedTimelineItem.progress * 100))}%` }}
                   aria-hidden
                 />
@@ -4144,7 +4106,7 @@ const journeyAndEventMedia = useMemo(() => {
                     key={`mtl-top-${it.ev.id}-${it.index}`}
                     onClick={() => handleSelectEvent(it.index)}
                     className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${
-                      active ? "border-white bg-[#0f3c8c] shadow-[0_0_0_2px_rgba(15,60,140,0.28)]" : "border-[#0f3c8c] bg-white/95"
+                      active ? "border-white bg-[#f6c86a] shadow-[0_0_0_2px_rgba(246,200,106,0.18)]" : "border-white/28 bg-[#121724]"
                     }`}
                     style={{ left }}
                     aria-label={`Evento ${it.index + 1}`}
@@ -4161,7 +4123,7 @@ const journeyAndEventMedia = useMemo(() => {
           mobileBandOverlayRef.current = node;
           bandRef.current = node;
         }}
-        className="pointer-events-auto overflow-x-auto bg-white/96 px-3 pt-1 pb-0 backdrop-blur"
+        className="pointer-events-auto overflow-x-auto border-t border-white/10 bg-[linear-gradient(180deg,rgba(8,10,17,0.9)_0%,rgba(8,10,17,0.78)_100%)] px-3 pt-1 pb-0 backdrop-blur-xl"
         style={{ scrollbarWidth: "thin" }}
       >
         <div className="flex min-w-max items-stretch gap-2 snap-x snap-mandatory">
@@ -4178,9 +4140,8 @@ const journeyAndEventMedia = useMemo(() => {
                 ref={(el) => { if (el) bandItemRefs.current.set(ev.id, el); }}
                 onClick={() => handleSelectEvent(idx)}
                 className={`snap-center h-[56px] w-[74vw] max-w-[320px] shrink-0 rounded-2xl border px-2.5 py-1.5 text-left transition ${
-                  active ? "text-white shadow-lg" : "border-black/15 bg-white text-gray-800 shadow-md"
+                  active ? "border-[#f6c86a]/45 bg-[linear-gradient(135deg,rgba(246,200,106,0.18),rgba(255,255,255,0.06))] text-white shadow-[0_18px_38px_-22px_rgba(0,0,0,0.82)]" : "border-white/10 bg-white/6 text-white/88 shadow-[0_18px_38px_-24px_rgba(0,0,0,0.72)]"
                 }`}
-                style={active ? { borderColor: BRAND_BLUE, backgroundColor: BRAND_BLUE } : undefined}
                 title={ev.title}
               >
                 <div className="flex items-start gap-2">
@@ -4188,18 +4149,18 @@ const journeyAndEventMedia = useMemo(() => {
                     className="mt-0.5 inline-flex h-9 w-7 shrink-0 flex-col items-center justify-center rounded-md text-[10px] leading-tight"
                     style={
                       active
-                        ? { backgroundColor: "#ffffff", color: BRAND_BLUE }
-                        : { backgroundColor: BRAND_BLUE, color: "#ffffff" }
+                        ? { backgroundColor: "#f6c86a", color: "#0b1020" }
+                        : { backgroundColor: "#182033", color: "#ffffff" }
                     }
                   >
                     <span>{idx + 1}</span>
                     <span className="text-[9px]">/{rows.length}</span>
                   </div>
                   <div className="min-w-0 leading-tight">
-                    <div className={`truncate text-[12px] font-semibold ${active ? "text-white" : "text-gray-900"}`}>
+                    <div className={`truncate text-[12px] font-semibold ${active ? "text-white" : "text-white/90"}`}>
                       {ev.title}
                     </div>
-                    <div className={`truncate text-[10.5px] ${active ? "text-white/85" : "text-gray-600"}`}>
+                    <div className={`truncate text-[10.5px] ${active ? "text-white/74" : "text-white/56"}`}>
                       {info}
                     </div>
                   </div>
@@ -4214,10 +4175,10 @@ const journeyAndEventMedia = useMemo(() => {
 
   <div
     ref={mobileConcurrentRef}
-    className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 -mx-2 w-[calc(100%+1rem)] bg-white/96 backdrop-blur-xl"
+    className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 -mx-2 w-[calc(100%+1rem)] bg-[linear-gradient(180deg,rgba(8,10,17,0.92)_0%,rgba(8,10,17,0.98)_100%)] text-white backdrop-blur-xl"
   >
-      <div className="border-t border-black/5 border-b border-black/5 px-3 py-2.5">
-        <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-[#0f3c8c]/80">
+      <div className="border-t border-white/10 border-b border-white/10 px-3 py-2.5">
+        <div className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wide text-white/52">
           {tUI(uiLang, "journey.concurrent.title")}
         </div>
         {concurrentOther && concurrentOther.length ? (
@@ -4228,11 +4189,11 @@ const journeyAndEventMedia = useMemo(() => {
                   key={`${c.geId}:${c.evId}`}
                   type="button"
                   onClick={() => router.push(geUrl(c.geId, c.evId))}
-                  className="w-[84vw] max-w-none shrink-0 overflow-hidden rounded-2xl border border-[rgba(18,49,78,0.08)] bg-white text-left shadow-[0_12px_28px_-24px_rgba(16,32,51,0.35)]"
+                  className="w-[84vw] max-w-none shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/6 text-left shadow-[0_18px_38px_-24px_rgba(0,0,0,0.76)]"
                   title={c.geTitle ?? c.evTitle}
                 >
                   <div className="flex items-stretch gap-3 p-3">
-                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-[#111827]">
                       {c.coverUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -4243,20 +4204,20 @@ const journeyAndEventMedia = useMemo(() => {
                           loading="lazy"
                         />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#dbeafe,#eff6ff)] text-[9px] font-semibold uppercase tracking-wide text-[#0f3c8c]/70">
+                        <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#182033,#0b1020)] text-[9px] font-semibold uppercase tracking-wide text-white/55">
                           GH
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <div className="line-clamp-1 text-[11px] font-semibold text-[#0f3c8c]">
+                      <div className="line-clamp-1 text-[11px] font-semibold text-white/62">
                         {c.geTitle ?? c.evTitle}
                       </div>
-                      <div className="line-clamp-2 text-[13px] font-medium leading-5 text-slate-800">
+                      <div className="line-clamp-2 text-[13px] font-medium leading-5 text-white">
                         {c.evTitle}
                       </div>
                       {c.evRangeLabel ? (
-                        <div className="text-[11px] text-slate-500">
+                        <div className="text-[11px] text-white/56">
                           {c.evRangeLabel}
                         </div>
                       ) : null}
@@ -4267,7 +4228,7 @@ const journeyAndEventMedia = useMemo(() => {
             </div>
           </div>
         ) : (
-          <div className="px-1 text-[11px] text-slate-500">
+          <div className="px-1 text-[11px] text-white/56">
             {tUI(uiLang, "journey.concurrent.none")}
           </div>
         )}
@@ -4499,8 +4460,185 @@ const journeyAndEventMedia = useMemo(() => {
       </section>
     </section>
   </div>
-  </div>
  </div>
+ </div>
+
+  {!isLg && mobilePlayerOpen ? (
+    <div className="fixed inset-0 z-[5400] overflow-hidden bg-[#090b12]" role="dialog" aria-modal="true">
+      <div className="absolute inset-0">
+        {mobilePlayerArtwork ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mobilePlayerArtwork}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover opacity-40 blur-[2px] scale-105"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(72,116,255,0.22),transparent_32%),linear-gradient(180deg,rgba(3,5,10,0.22)_0%,rgba(7,10,18,0.74)_32%,rgba(8,10,17,0.96)_100%)]" />
+      </div>
+
+      <div className="relative z-10 flex h-full flex-col px-5 pb-8 pt-[max(1.25rem,env(safe-area-inset-top))] text-white">
+        <div className="flex items-center justify-between">
+          <div className="text-[13px] font-medium tracking-[0.08em] text-white/70 uppercase">
+            GeoHistory
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobilePlayerOpen(false)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur ring-1 ring-white/15"
+            aria-label={tUI(uiLang, "journey.player.close")}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-6 flex-1 flex flex-col justify-center">
+          <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/6 shadow-[0_28px_60px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md">
+            <div className="flex items-stretch gap-4 p-4">
+              <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[22px] border border-white/10 bg-white/8">
+                {mobilePlayerArtwork ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mobilePlayerArtwork}
+                    alt={selectedEvent?.title || (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey")}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-[radial-gradient(circle_at_50%_0%,rgba(95,143,255,0.4),transparent_38%),linear-gradient(180deg,#111827_0%,#050816_100%)]" />
+                )}
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(7,10,18,0.08)_0%,rgba(7,10,18,0.38)_100%)]" />
+              </div>
+              <div className="min-w-0 flex-1 overflow-hidden">
+                {selectedTimelineRangeLabel ? (
+                  <div className="mb-2 inline-flex rounded-full bg-white/12 px-3 py-1 text-[11px] font-semibold text-white/82 backdrop-blur">
+                    {selectedTimelineRangeLabel}
+                  </div>
+                ) : null}
+                <div className="line-clamp-3 min-h-[4.5rem] text-[1.28rem] font-semibold leading-[1.12] tracking-[-0.02em] text-white">
+                  {selectedEvent?.title || (journeyTitle ?? geTr?.title ?? ge?.title ?? "Journey")}
+                </div>
+                {selectedEvent?.location ? (
+                  <div className="mt-2 line-clamp-2 text-sm text-white/72">
+                    {selectedEvent.location}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="border-t border-white/10 px-4 pb-4 pt-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/48">
+                Testo audio
+              </div>
+              <div className="max-h-[28vh] overflow-y-auto pr-1 text-[14px] leading-6 text-white/84" style={{ scrollbarWidth: "thin" }}>
+                {mobilePlayerNarrationText || "Nessun testo disponibile per questo segmento audio."}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-7">
+            <div className="mb-2 flex items-center justify-between text-[12px] font-medium text-white/72">
+              <span>{formatClockTime(audioCurrentTime)}</span>
+              <span>{audioDuration ? formatClockTime(audioDuration) : "--:--"}</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={audioDuration || 1}
+              step="0.1"
+              value={Math.min(audioCurrentTime, audioDuration || 1)}
+              onChange={(e) => handleMobilePlayerSeek(Number(e.target.value))}
+              disabled={mobilePlayerSeekDisabled}
+              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/15 accent-[#f6c86a] disabled:cursor-default disabled:opacity-60"
+              aria-label="Audio progress"
+            />
+            <div className="mt-2 text-right text-[11px] text-white/60">
+              {mobilePlayerSeekDisabled ? "Seek non disponibile per questa traccia" : `${mobilePlayerProgress.toFixed(0)}%`}
+            </div>
+          </div>
+
+          <div className="mt-7 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={handlePrevEvent}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/15 backdrop-blur transition hover:bg-white/15"
+              aria-label="Evento precedente"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-white/18 text-white shadow-[0_18px_40px_-20px_rgba(0,0,0,0.85)] ring-1 ring-white/20 backdrop-blur transition hover:bg-white/24"
+              aria-label={isPlaying ? "Ferma autoplay" : "Avvia autoplay"}
+            >
+              {isPlaying ? (
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                  <rect x="6" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" fill="currentColor" rx="1" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+                  <path d="M8 5l10 7-10 7V5Z" fill="currentColor" />
+                </svg>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleNextEvent}
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/15 backdrop-blur transition hover:bg-white/15"
+              aria-label="Evento successivo"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (!selectedEvent || selectedEvent.latitude == null || selectedEvent.longitude == null) return;
+                setMobilePlayerOpen(false);
+                setMapViewportMode("focus-selected");
+                moveMapToVisibleCenter(selectedEvent.longitude, selectedEvent.latitude);
+              }}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/15 backdrop-blur"
+              aria-label="Centra evento selezionato"
+              title="Centra evento selezionato"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+            {audioSourceOptions.length ? (
+              <select
+                value={audioSource}
+                onChange={(e) => setAudioSource(e.target.value)}
+                className="h-11 min-w-0 flex-1 rounded-full border border-white/15 bg-white/10 px-4 text-[12px] font-semibold text-white backdrop-blur outline-none"
+                title="Audio"
+              >
+                {audioSourceOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex-1 rounded-full border border-white/10 bg-white/6 px-4 py-3 text-[12px] text-white/60">
+                Nessuna traccia audio disponibile
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null}
 
   <audio ref={audioRef} preload="none" className="hidden" />
   <audio ref={jingleAudioRef} preload="auto" className="hidden" />

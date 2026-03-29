@@ -900,7 +900,7 @@ export default function TimelinePage({
     <div
       className={
         embedded
-          ? "flex h-full min-h-0 w-full flex-col text-neutral-900"
+          ? "flex h-full min-h-0 w-full flex-col text-white"
           : "min-h-screen w-full bg-gradient-to-b from-neutral-50 to-white text-neutral-900"
       }
     >
@@ -916,17 +916,17 @@ export default function TimelinePage({
         <div
           className={
             embedded
-              ? "px-0 pb-0 text-neutral-700"
+              ? "px-0 pb-0 text-white"
               : "mx-auto max-w-7xl px-4 py-3 text-white"
           }
         >
           <div className="flex min-h-0 items-center justify-end">
             {checking ? (
-              <span className={embedded ? "text-xs text-neutral-500" : "text-xs text-white/70"}>
+              <span className={embedded ? "px-3 pt-2 text-[10px] uppercase tracking-[0.12em] text-white/38" : "text-xs text-white/70"}>
                 {tUI(langCode, "timeline.header.checking")}
               </span>
             ) : authError ? (
-              <span className={embedded ? "text-xs text-neutral-500" : "text-xs text-white/70"}>
+              <span className={embedded ? "px-3 pt-2 text-[10px] uppercase tracking-[0.12em] text-white/38" : "text-xs text-white/70"}>
                 {tUI(langCode, "timeline.header.guest")}
               </span>
             ) : null}
@@ -937,7 +937,7 @@ export default function TimelinePage({
             <div
               className={
                 embedded
-                  ? "mt-1.5 flex items-center justify-between rounded-2xl border border-[rgba(18,49,78,0.08)] bg-[rgba(255,252,246,0.72)] px-3 py-2 text-[11px] text-[var(--geo-navy)] shadow-[0_14px_30px_-22px_rgba(16,32,51,0.45)]"
+                  ? "mx-3 mt-1.5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-[11px] text-white/78 shadow-[0_18px_36px_-24px_rgba(0,0,0,0.68)] backdrop-blur-md"
                   : "mt-2 flex items-center justify-between rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-[11px]"
               }
             >
@@ -969,7 +969,7 @@ export default function TimelinePage({
                 }}
                 className={
                   embedded
-                    ? "rounded-full border border-[rgba(18,49,78,0.08)] bg-white/82 px-2.5 py-1 text-[11px] font-medium hover:bg-white"
+                    ? "rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/88 hover:bg-white/14"
                     : "rounded-lg border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
                 }
                 title={tUI(
@@ -986,11 +986,11 @@ export default function TimelinePage({
           <div
             className={
               embedded
-                ? "mt-0 rounded-t-[28px] border border-[rgba(18,49,78,0.08)] bg-[linear-gradient(180deg,#214f75_0%,#14344f_100%)] shadow-[0_24px_54px_-38px_rgba(16,32,51,0.8)]"
+                ? "mt-0 bg-[linear-gradient(180deg,rgba(18,27,45,0.96)_0%,rgba(14,22,37,0.94)_100%)]"
                 : "mt-2 rounded-2xl border border-white/15 bg-gradient-to-b from-white/8 to-white/4 shadow-sm"
             }
           >
-            <div className="px-2.5 py-2">
+            <div className={embedded ? "px-3 py-3" : "px-2.5 py-2"}>
               {!domainReady ? (
                 <div className="py-4 text-sm text-white/80">
                   {tUI(langCode, "timeline.timeline.loading")}
@@ -1033,7 +1033,7 @@ export default function TimelinePage({
                         ) {
                           onClearExternalGeoFilter();
                         }
-                        setFromYear(minDomain);
+                        setFromYear(DEFAULT_FROM);
                         setToYear(maxDomain);
                         setQ("");
                         setQDebounced("");
@@ -1204,14 +1204,14 @@ export default function TimelinePage({
       <main
         className={
           embedded
-            ? "min-h-0 flex-1 overflow-y-auto px-4 pb-3 pt-2 sm:px-5 sm:pb-5"
+            ? "min-h-0 flex-1 overflow-y-auto px-0 pb-3 pt-0"
             : "mx-auto max-w-7xl px-4 py-5"
         }
       >
         <div
           className={
             embedded
-              ? "sticky top-0 z-20 -mx-5 mb-3 flex flex-col gap-2 border-x border-b border-[rgba(255,255,255,0.08)] bg-[linear-gradient(180deg,#1c486d_0%,#112f48_100%)] px-4 py-3 text-white backdrop-blur"
+              ? "sticky top-0 z-20 mb-2 flex flex-col gap-2 bg-[linear-gradient(180deg,rgba(15,24,39,0.98)_0%,rgba(12,20,34,0.94)_100%)] px-3 py-3 text-white shadow-[0_22px_42px_-30px_rgba(0,0,0,0.82)] backdrop-blur-xl"
               : "sticky top-[240px] z-20 -mx-4 flex flex-col gap-2 border-b border-neutral-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:justify-between"
           }
         >
@@ -1224,7 +1224,7 @@ export default function TimelinePage({
                 }
               >
                 <div className="flex min-w-0 flex-1 items-center gap-2">
-                <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/60 sm:block">
+                <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/48 sm:block">
                   {tUI(langCode, "timeline.search.label")}
                 </label>
                 <input
@@ -1237,7 +1237,7 @@ export default function TimelinePage({
                   )}
                   className={
                     embedded
-                      ? "w-full min-w-0 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-[11px] text-white placeholder-white/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] focus:border-white/30 focus:bg-white/15 focus:outline-none"
+                      ? "w-full min-w-0 rounded-[20px] border border-white/10 bg-white/8 px-4 py-3 text-[12px] text-white placeholder-white/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-[#f6c86a]/28 focus:bg-white/10 focus:outline-none"
                       : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
                   }
                 />
@@ -1249,7 +1249,7 @@ export default function TimelinePage({
                     <button
                       type="button"
                       onClick={onOpenEmbeddedMap}
-                      className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm transition hover:bg-white/90"
+                      className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
                       title="Apri mappa"
                       aria-label="Apri mappa"
                     >
@@ -1268,7 +1268,7 @@ export default function TimelinePage({
                   <button
                     type="button"
                     onClick={() => router.push("/module/build-journey")}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-white/18 bg-white px-3 py-2.5 text-[11px] font-semibold text-[#153a5b] shadow-sm transition hover:bg-white/90 sm:px-4"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-3 py-2.5 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105 sm:px-4"
                     title={tUI(langCode, "timeline.new_button_long")}
                   >
                     <svg
@@ -1303,7 +1303,7 @@ export default function TimelinePage({
                     : "flex w-full flex-wrap items-end gap-2"
                 }
               >
-              <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+              <div className="flex shrink-0 items-center gap-2 rounded-[20px] border border-white/10 bg-white/6 px-2 py-1.5">
                 <span
                   className="flex items-center text-white/60"
                   title={tUI(langCode, "timeline.sort.label")}
@@ -1364,8 +1364,8 @@ export default function TimelinePage({
                         }}
                         className={
                           active
-                            ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm"
-                            : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
+                            ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#f6c86a]/30 bg-[#f6c86a] text-[#0b1020] shadow-sm"
+                            : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white hover:bg-white/12"
                         }
                         title={tUI(langCode, `timeline.sort.title.${mode}`)}
                         aria-label={tUI(langCode, `timeline.sort.${mode}`)}
@@ -1377,7 +1377,7 @@ export default function TimelinePage({
                 </div>
               </div>
 
-              <div className="flex shrink-0 items-center gap-2 rounded-[18px] border border-white/12 bg-white/8 px-2 py-1.5">
+              <div className="flex shrink-0 items-center gap-2 rounded-[20px] border border-white/10 bg-white/6 px-2 py-1.5">
                 <span
                   className="flex items-center text-white/60"
                   title={tUI(langCode, "timeline.visibility.label")}
@@ -1428,8 +1428,8 @@ export default function TimelinePage({
                       }
                     className={
                       active
-                        ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/18 bg-white text-[#153a5b] shadow-sm"
-                        : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
+                        ? "inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#f6c86a]/30 bg-[#f6c86a] text-[#0b1020] shadow-sm"
+                        : "inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white hover:bg-white/12"
                       }
                       title={tUI(
                         langCode,
@@ -1449,7 +1449,7 @@ export default function TimelinePage({
               <div
                 className={
                   embedded
-                    ? "w-full text-right text-[10px] leading-3 text-white/70"
+                    ? "w-full text-right text-[10px] leading-3 text-white/60"
                     : "ml-auto min-w-[140px] text-right text-[10px] leading-3 text-white/70"
                 }
               >

@@ -24,9 +24,9 @@ type ApiResponse = {
 function LoadingSkeleton({ lang }: { lang: string }) {
   const loadingLabel = tUI(lang, "quiz.loading.message");
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-50">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(72,116,255,0.18),transparent_28%),linear-gradient(180deg,#090b12_0%,#0b1020_100%)] text-slate-50">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:px-8">
-        <div className="rounded-3xl bg-gradient-to-br from-slate-800/70 to-slate-900/70 p-6 shadow-2xl ring-1 ring-white/10 backdrop-blur">
+        <div className="rounded-[28px] border border-white/10 bg-white/6 p-6 shadow-[0_28px_60px_-30px_rgba(0,0,0,0.82)] backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 animate-pulse rounded-2xl bg-emerald-400/30" />
             <div>
@@ -38,8 +38,8 @@ function LoadingSkeleton({ lang }: { lang: string }) {
             <div className="h-4 w-full animate-pulse rounded-full bg-white/10" />
             <div className="h-4 w-3/4 animate-pulse rounded-full bg-white/10" />
           </div>
-          <div className="mt-4 flex items-center gap-2 text-sm text-emerald-100">
-            <svg viewBox="0 0 24 24" width="18" height="18" className="animate-spin text-emerald-300" fill="none" stroke="currentColor" strokeWidth="2">
+          <div className="mt-4 flex items-center gap-2 text-sm text-[#f4dca0]">
+            <svg viewBox="0 0 24 24" width="18" height="18" className="animate-spin text-[#f6c86a]" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="9" strokeOpacity="0.2" />
               <path d="M21 12a9 9 0 0 1-9 9" strokeLinecap="round" />
             </svg>
@@ -47,15 +47,15 @@ function LoadingSkeleton({ lang }: { lang: string }) {
           </div>
         </div>
 
-        <div className="rounded-3xl bg-white/95 p-6 shadow-2xl ring-1 ring-slate-200">
+        <div className="rounded-[28px] border border-white/10 bg-white/6 p-6 shadow-[0_28px_60px_-30px_rgba(0,0,0,0.82)] backdrop-blur-xl">
           <div className="grid gap-4 sm:grid-cols-2">
             {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
+              <div key={idx} className="h-24 animate-pulse rounded-2xl bg-white/8" />
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-end gap-3 text-sm text-slate-500">
-            <div className="h-3 w-20 animate-pulse rounded-full bg-slate-200" />
-            <div className="h-3 w-14 animate-pulse rounded-full bg-slate-200" />
+          <div className="mt-4 flex items-center justify-end gap-3 text-sm text-white/35">
+            <div className="h-3 w-20 animate-pulse rounded-full bg-white/10" />
+            <div className="h-3 w-14 animate-pulse rounded-full bg-white/10" />
           </div>
         </div>
       </div>
@@ -239,10 +239,10 @@ function QuizInner() {
 
   if (!gid) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-        <div className="max-w-xl rounded-2xl bg-white p-6 text-slate-900 shadow-xl ring-1 ring-slate-200">
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#090b12_0%,#0b1020_100%)] px-4">
+        <div className="max-w-xl rounded-[28px] border border-white/10 bg-white/6 p-6 text-white shadow-[0_28px_60px_-30px_rgba(0,0,0,0.82)] backdrop-blur-xl">
           <div className="text-lg font-semibold">Parametro mancante</div>
-          <p className="mt-2 text-sm text-slate-600">Aggiungi ?gid=&lt;group_event_id&gt; all'URL per generare il quiz.</p>
+          <p className="mt-2 text-sm text-white/65">Aggiungi ?gid=&lt;group_event_id&gt; all'URL per generare il quiz.</p>
         </div>
       </div>
     );
@@ -250,19 +250,19 @@ function QuizInner() {
 
   if (error || !questions.length) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-900 px-4">
-        <div className="max-w-xl rounded-2xl bg-white p-6 text-slate-900 shadow-xl ring-1 ring-slate-200">
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#090b12_0%,#0b1020_100%)] px-4">
+        <div className="max-w-xl rounded-[28px] border border-white/10 bg-white/6 p-6 text-white shadow-[0_28px_60px_-30px_rgba(0,0,0,0.82)] backdrop-blur-xl">
           <div className="text-lg font-semibold">Impossibile generare il quiz</div>
-          <p className="mt-2 text-sm text-slate-600">{error || "Nessuna domanda disponibile."}</p>
+          <p className="mt-2 text-sm text-white/65">{error || "Nessuna domanda disponibile."}</p>
           {aiErrorInfo ? (
-            <p className="mt-2 text-xs text-rose-600">
+            <p className="mt-2 text-xs text-rose-300">
               Dettaglio AI: {aiErrorInfo}
             </p>
           ) : null}
           <div className="mt-4 flex gap-2">
             <button
               onClick={loadQuiz}
-              className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              className="inline-flex items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-4 py-2 text-sm font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-[#f6c86a]/40"
             >
               Riprova
             </button>
@@ -273,116 +273,99 @@ function QuizInner() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8 sm:px-8">
-        <header className="rounded-3xl bg-white/5 p-5 shadow-lg ring-1 ring-white/10 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm uppercase tracking-[0.12em] text-emerald-200">Quiz</p>
-              <h1 className="text-2xl font-bold leading-7 text-white sm:text-3xl">{displayJourneyTitle}</h1>
-              <p className="text-sm text-slate-200">{t("quiz.subtitle")}</p>
-              {fallbackInfo ? (
-                <p className="mt-1 inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                  {fallbackInfo}
-                  {aiErrorInfo ? <span className="text-[11px] font-normal text-amber-800">({aiErrorInfo})</span> : null}
-                </p>
-              ) : null}
-            </div>
-            <div className="rounded-2xl bg-white/10 px-4 py-3 text-right shadow-inner ring-1 ring-white/15">
-              <div className="text-xs text-slate-200">{t("quiz.score")}</div>
-              <div className="text-2xl font-semibold text-emerald-200">
-                {score}
-                <span className="text-base text-slate-300"> / {total}</span>
-              </div>
-            </div>
+    <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,191,71,0.14),transparent_24%),radial-gradient(circle_at_50%_30%,rgba(111,152,255,0.16),transparent_34%),linear-gradient(180deg,#090b12_0%,#0b1020_100%)] text-slate-50">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-none flex-col px-3 pb-[calc(1.25rem,env(safe-area-inset-bottom))] pt-[calc(0.9rem,env(safe-area-inset-top))] sm:max-w-md sm:px-4 sm:pb-8 sm:pt-8">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-[42vh] bg-[radial-gradient(circle_at_50%_0%,rgba(255,196,97,0.18),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0)_100%)]" />
+        <div className="relative z-10 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="line-clamp-2 text-[12px] text-white/58">{displayJourneyTitle}</div>
           </div>
-          <div className="mt-4 h-2 rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-500 transition-all"
-              style={{ width: `${progressPercent}%` }}
-              aria-label={`Avanzamento ${progressPercent}%`}
-            />
+          <div className="rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-[12px] font-semibold text-white/78">
+            {score}/{total}
           </div>
-        </header>
+        </div>
 
-        <main className="rounded-3xl bg-white text-slate-900 shadow-2xl ring-1 ring-slate-200">
+        {fallbackInfo ? (
+          <div className="relative z-10 mt-3 rounded-full border border-[#f6c86a]/25 bg-[#f6c86a]/14 px-3 py-1.5 text-[11px] font-semibold text-[#f4dca0]">
+            {fallbackInfo}
+            {aiErrorInfo ? <span className="ml-1 font-normal text-[#f1d18a]">({aiErrorInfo})</span> : null}
+          </div>
+        ) : null}
+
+        <div className="relative z-10 mt-5 flex-1 rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.04)_100%)] p-4 shadow-[0_32px_80px_-36px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:mx-0">
           {finished ? (
-            <div className="flex flex-col gap-4 p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-600">{t("quiz.result.title")}</p>
-                  <h2 className="text-3xl font-bold text-slate-900">
-                    {score} / {total}
-                  </h2>
-                  <p className="text-sm text-slate-600">{t("quiz.result.subtitle")}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={restart}
-                    className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  >
-                    {t("quiz.restart")}
-                  </button>
-                  <button
-                    onClick={loadQuiz}
-                    className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                  >
-                    {t("quiz.regenerate")}
-                  </button>
-                </div>
+            <div className="flex h-full flex-col">
+              <div className="rounded-[24px] border border-white/10 bg-white/6 px-4 py-4">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#f6c86a]">{t("quiz.result.title")}</div>
+                <div className="mt-2 text-4xl font-bold tracking-[-0.04em] text-white">{score} / {total}</div>
+                <div className="mt-2 text-sm text-white/62">{t("quiz.result.subtitle")}</div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
                 {questions.map((q) => {
                   const chosen = answers[q.id];
                   const correct = chosen === q.answer;
                   return (
                     <div
                       key={q.id}
-                      className={`rounded-2xl border p-4 ${correct ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"}`}
+                      className={`rounded-[22px] border px-4 py-3 ${correct ? "border-emerald-300/30 bg-emerald-400/10" : "border-rose-300/25 bg-rose-400/10"}`}
                     >
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/46">
                         {t("quiz.question.progress").replace("{n}", String(q.id)).replace("{total}", String(total))}
                       </div>
-                      <div className="mt-1 text-sm font-medium text-slate-900">{q.question}</div>
-                      <div className="mt-2 text-sm">
+                      <div className="mt-2 text-[15px] font-medium leading-6 text-white">{q.question}</div>
+                      <div className="mt-2 text-sm text-white/78">
                         <span className="font-semibold">{t("quiz.review.your_answer")}</span> {chosen ?? t("quiz.review.not_answered")}
                       </div>
                       {!correct ? (
-                        <div className="text-sm text-rose-700">
+                        <div className="mt-1 text-sm text-rose-200">
                           <span className="font-semibold">{t("quiz.review.correct")}</span> {q.answer}
                         </div>
                       ) : null}
-                      {q.explanation ? (
-                        <div className="mt-1 text-xs text-slate-600">
-                          {t("quiz.review.note")} {q.explanation}
-                        </div>
-                      ) : null}
+                      {q.explanation ? <div className="mt-1 text-xs text-white/54">{t("quiz.review.note")} {q.explanation}</div> : null}
                     </div>
                   );
                 })}
               </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  onClick={restart}
+                  className="inline-flex items-center justify-center rounded-full border border-white/12 bg-white/8 px-4 py-3 text-sm font-semibold text-white hover:bg-white/12 focus:outline-none focus:ring-2 focus:ring-white/20"
+                >
+                  {t("quiz.restart")}
+                </button>
+                <button
+                  onClick={loadQuiz}
+                  className="inline-flex items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-4 py-3 text-sm font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-[#f6c86a]/40"
+                >
+                  {t("quiz.regenerate")}
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-6 p-6 sm:p-8">
+            <div className="flex h-full flex-col">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-indigo-600">
-                    {t("quiz.question.progress")
-                      .replace("{n}", String(index + 1))
-                      .replace("{total}", String(total))}
-                  </div>
-                  <h2 className="text-2xl font-semibold text-slate-900">{current?.question}</h2>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-[12px] font-semibold text-white/76">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/10 text-[10px]">•</span>
+                  {t("quiz.question.progress").replace("{n}", String(index + 1)).replace("{total}", String(total))}
                 </div>
-                <div className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100">
-                  {checked
-                    ? lastCorrect
-                      ? t("quiz.status.correct")
-                      : t("quiz.status.wrong")
-                    : t("quiz.status.select")}
+                <div className="text-[13px] font-semibold text-white/72">
+                  {checked ? (lastCorrect ? "✓" : "✕") : ""}
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="mt-4 h-[3px] rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#f6c86a] to-[#e5a93b] transition-all"
+                  style={{ width: `${progressPercent}%` }}
+                  aria-label={`Avanzamento ${progressPercent}%`}
+                />
+              </div>
+
+              <div className="mt-5 text-[2rem] font-semibold leading-[1.08] tracking-[-0.04em] text-white">
+                {current?.question}
+              </div>
+
+              <div className="mt-6 space-y-3">
                 {current?.options.map((option) => {
                   const isSelected = selected === option;
                   const isCorrect = checked && option === current.answer;
@@ -391,55 +374,63 @@ function QuizInner() {
                     <button
                       key={option}
                       onClick={() => setSelected(option)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-indigo-300 ${
+                      className={`w-full rounded-[18px] border px-4 py-3 text-left text-[1.05rem] font-medium transition focus:outline-none focus:ring-2 focus:ring-[#f6c86a]/30 ${
                         isCorrect
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800 shadow"
+                          ? "border-[#d9c56b] bg-[linear-gradient(180deg,rgba(132,126,46,0.45),rgba(88,88,30,0.42))] text-[#f7e89f] shadow-[inset_0_0_0_1px_rgba(255,235,140,0.12)]"
                           : isWrongSelection
-                          ? "border-rose-300 bg-rose-50 text-rose-800 shadow"
+                          ? "border-rose-300/30 bg-rose-400/10 text-rose-100"
                           : isSelected
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-800 shadow"
-                          : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/40"
+                          ? "border-[#f6c86a]/40 bg-white/12 text-white"
+                          : "border-white/12 bg-white/6 text-white/88 hover:bg-white/10"
                       }`}
                       aria-pressed={isSelected}
                       disabled={checked}
                     >
-                      {option}
+                      <span className="flex items-center justify-between gap-3">
+                        <span>{option}</span>
+                        {isCorrect ? (
+                          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" className="shrink-0 text-[#f7e89f]">
+                            <path d="m5 12 4.5 4.5L19 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
+                      </span>
                     </button>
                   );
                 })}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-slate-600">
-                  {checked ? (
-                    <span className={`inline-flex items-center gap-2 text-sm font-semibold ${lastCorrect ? "text-emerald-600" : "text-rose-600"}`}>
-                      {lastCorrect ? "Corretto!" : "Risposta errata"}
-                    </span>
-                  ) : null}
-                  {current?.explanation && checked ? (
-                    <span className="ml-2 text-xs text-slate-500">Spiegazione: {current.explanation}</span>
-                  ) : null}
-                </div>
-                <div className="flex items-center gap-2">
+              <div className="mt-4 min-h-[2.25rem] text-sm text-white/62">
+                {checked ? (
+                  <span className={`font-semibold ${lastCorrect ? "text-[#f7e89f]" : "text-rose-200"}`}>
+                    {lastCorrect ? "Corretto!" : "Risposta errata"}
+                  </span>
+                ) : (
+                  <span>{t("quiz.status.select")}</span>
+                )}
+                {current?.explanation && checked ? <span className="ml-2 text-xs text-white/52">Spiegazione: {current.explanation}</span> : null}
+              </div>
+
+              <div className="mt-auto pt-3">
+                {!checked ? (
                   <button
                     onClick={confirmAnswer}
-                    disabled={!selected || checked}
-                    className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                    disabled={!selected}
+                    className="inline-flex w-full items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-5 py-3.5 text-[1.15rem] font-semibold text-[#0b1020] shadow-[0_16px_34px_-18px_rgba(246,200,106,0.7)] hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-[#f6c86a]/40 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/12 disabled:text-white/38"
                   >
                     {t("quiz.actions.confirm")}
                   </button>
+                ) : (
                   <button
                     onClick={goNext}
-                    disabled={!checked}
-                    className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-300 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                    className="inline-flex w-full items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-5 py-3.5 text-[1.15rem] font-semibold text-[#0b1020] shadow-[0_16px_34px_-18px_rgba(246,200,106,0.7)] hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-[#f6c86a]/40"
                   >
                     {index >= total - 1 ? t("quiz.actions.show_results") : t("quiz.actions.next")}
                   </button>
-                </div>
+                )}
               </div>
             </div>
           )}
-        </main>
+        </div>
       </div>
     </div>
   );
