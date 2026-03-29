@@ -1,386 +1,446 @@
 {
-  "journey_title_it": "Ernesto 'Che' Guevara: vita e rivoluzione (1928–1967)",
-  "journey_title_en": "Ernesto 'Che' Guevara: Life and Revolution (1928–1967)",
+  "journey_title_it": "La storia della Jugoslavia: dalla nascita allo scioglimento e le sue conseguenze",
+  "journey_title_en": "The History of Yugoslavia: From Birth to Dissolution and Its Consequences",
   "events": [
     {
-      "titolo_evento_it": "Nascita a Rosario",
-      "title_event_en": "Birth in Rosario",
+      "titolo_evento_it": "Proclamazione del Regno dei Serbi, Croati e Sloveni",
+      "title_event_en": "Proclamation of the Kingdom of Serbs, Croats and Slovenes",
       "era": "AD",
-      "from": 1928,
-      "to": 1928,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Rosario"
+      "from": 1918,
+      "to": 1918,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Trasferimento ad Alta Gracia per curare l'asma",
-      "title_event_en": "Move to Alta Gracia to treat asthma",
+      "titolo_evento_it": "Adozione della Costituzione di Vidovdan",
+      "title_event_en": "Adoption of the Vidovdan Constitution",
       "era": "AD",
-      "from": 1932,
-      "to": 1932,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Alta Gracia"
+      "from": 1921,
+      "to": 1921,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Liceo al Colegio Nacional Deán Funes di Córdoba",
-      "title_event_en": "High school at Colegio Nacional Deán Funes, Córdoba",
+      "titolo_evento_it": "Dittatura reale e rinomina a Regno di Jugoslavia",
+      "title_event_en": "Royal Dictatorship and Renaming to Kingdom of Yugoslavia",
+      "era": "AD",
+      "from": 1929,
+      "to": 1929,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Assassinio del re Alessandro I a Marsiglia",
+      "title_event_en": "Assassination of King Alexander I in Marseille",
+      "era": "AD",
+      "from": 1934,
+      "to": 1934,
+      "continent": "Europe",
+      "country": "France",
+      "location": "Marseille"
+    },
+    {
+      "titolo_evento_it": "Colpo di Stato del 27 marzo e invasione dell'Asse",
+      "title_event_en": "27 March Coup and Axis Invasion",
       "era": "AD",
       "from": 1941,
-      "to": 1946,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Córdoba"
+      "to": 1941,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Iscrizione a Medicina all'Università di Buenos Aires",
-      "title_event_en": "Enrollment in Medicine at the University of Buenos Aires",
+      "titolo_evento_it": "Formazione della Prima Brigata Proletaria a Rudo",
+      "title_event_en": "Formation of the First Proletarian Brigade at Rudo",
+      "era": "AD",
+      "from": 1941,
+      "to": 1941,
+      "continent": "Europe",
+      "country": "Bosnia and Herzegovina",
+      "location": "Rudo"
+    },
+    {
+      "titolo_evento_it": "AVNOJ a Jajce definisce la federazione socialista",
+      "title_event_en": "AVNOJ in Jajce Shapes the Socialist Federation",
+      "era": "AD",
+      "from": 1943,
+      "to": 1943,
+      "continent": "Europe",
+      "country": "Bosnia and Herzegovina",
+      "location": "Jajce"
+    },
+    {
+      "titolo_evento_it": "Proclamazione della Repubblica Federativa Popolare di Jugoslavia",
+      "title_event_en": "Proclamation of the Federal People’s Republic of Yugoslavia",
+      "era": "AD",
+      "from": 1945,
+      "to": 1945,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Rottura Tito–Stalin ed espulsione dal Cominform",
+      "title_event_en": "Tito–Stalin Split and Expulsion from Cominform",
       "era": "AD",
       "from": 1948,
       "to": 1948,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Buenos Aires"
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Primo viaggio in Argentina in motocicletta ausiliata",
-      "title_event_en": "First long trip across Argentina on a motorized bicycle",
+      "titolo_evento_it": "Introduzione dell’autogestione operaia jugoslava",
+      "title_event_en": "Introduction of Yugoslav Workers’ Self-Management",
       "era": "AD",
       "from": 1950,
       "to": 1950,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Buenos Aires"
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Partenza del viaggio latinoamericano con Alberto Granado",
-      "title_event_en": "Departure of the Latin American journey with Alberto Granado",
-      "era": "AD",
-      "from": 1952,
-      "to": 1952,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Córdoba"
-    },
-    {
-      "titolo_evento_it": "Esperienza al lebbrosario di San Pablo sul Rio delle Amazzoni",
-      "title_event_en": "Experience at the San Pablo leprosy clinic on the Amazon",
-      "era": "AD",
-      "from": 1952,
-      "to": 1952,
-      "continent": "South America",
-      "country": "Peru",
-      "location": "San Pablo (Loreto)"
-    },
-    {
-      "titolo_evento_it": "Rientro a Buenos Aires e ripresa degli studi medici",
-      "title_event_en": "Return to Buenos Aires and resumption of medical studies",
-      "era": "AD",
-      "from": 1952,
-      "to": 1953,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Buenos Aires"
-    },
-    {
-      "titolo_evento_it": "Laurea in Medicina all'Università di Buenos Aires",
-      "title_event_en": "Medical degree from the University of Buenos Aires",
-      "era": "AD",
-      "from": 1953,
-      "to": 1953,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Buenos Aires"
-    },
-    {
-      "titolo_evento_it": "Secondo viaggio latinoamericano post-laurea verso il Centro America",
-      "title_event_en": "Post-graduation Latin American journey toward Central America",
-      "era": "AD",
-      "from": 1953,
-      "to": 1954,
-      "continent": "South America",
-      "country": "Argentina",
-      "location": "Buenos Aires"
-    },
-    {
-      "titolo_evento_it": "Testimone del colpo di stato in Guatemala e radicalizzazione",
-      "title_event_en": "Witness to the Guatemalan coup and radicalization",
-      "era": "AD",
-      "from": 1954,
-      "to": 1954,
-      "continent": "North America",
-      "country": "Guatemala",
-      "location": "Guatemala City"
-    },
-    {
-      "titolo_evento_it": "Esilio a Città del Messico e lavoro come medico",
-      "title_event_en": "Exile to Mexico City and work as a physician",
-      "era": "AD",
-      "from": 1954,
-      "to": 1955,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Mexico City"
-    },
-    {
-      "titolo_evento_it": "Incontro con Fidel Castro e adesione al Movimento 26 Luglio",
-      "title_event_en": "Meeting Fidel Castro and joining the 26th of July Movement",
-      "era": "AD",
-      "from": 1955,
-      "to": 1955,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Mexico City"
-    },
-    {
-      "titolo_evento_it": "Matrimonio con Hilda Gadea a Città del Messico",
-      "title_event_en": "Marriage to Hilda Gadea in Mexico City",
-      "era": "AD",
-      "from": 1955,
-      "to": 1955,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Mexico City"
-    },
-    {
-      "titolo_evento_it": "Arresto e rilascio durante l'addestramento clandestino in Messico",
-      "title_event_en": "Arrest and release during clandestine training in Mexico",
-      "era": "AD",
-      "from": 1956,
-      "to": 1956,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Mexico City"
-    },
-    {
-      "titolo_evento_it": "Partenza del Granma da Tuxpan verso Cuba",
-      "title_event_en": "Granma sets sail from Tuxpan for Cuba",
-      "era": "AD",
-      "from": 1956,
-      "to": 1956,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Tuxpan"
-    },
-    {
-      "titolo_evento_it": "Sbarco a Niquero e ripiegamento sulla Sierra Maestra",
-      "title_event_en": "Landing at Niquero and retreat to the Sierra Maestra",
-      "era": "AD",
-      "from": 1956,
-      "to": 1956,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Niquero"
-    },
-    {
-      "titolo_evento_it": "Ascesa a comandante nella guerriglia della Sierra Maestra",
-      "title_event_en": "Rise to comandante in the Sierra Maestra guerrilla",
-      "era": "AD",
-      "from": 1957,
-      "to": 1958,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Sierra Maestra"
-    },
-    {
-      "titolo_evento_it": "Battaglia di Santa Clara e caduta del regime di Batista",
-      "title_event_en": "Battle of Santa Clara and the fall of Batista’s regime",
-      "era": "AD",
-      "from": 1958,
-      "to": 1958,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Santa Clara"
-    },
-    {
-      "titolo_evento_it": "Entrata a L'Avana e avvio del nuovo governo rivoluzionario",
-      "title_event_en": "Entry into Havana and launch of the revolutionary government",
-      "era": "AD",
-      "from": 1959,
-      "to": 1959,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Direzione dei tribunali rivoluzionari a La Cabaña",
-      "title_event_en": "Direction of revolutionary tribunals at La Cabaña",
-      "era": "AD",
-      "from": 1959,
-      "to": 1959,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Concessione della cittadinanza cubana",
-      "title_event_en": "Cuban citizenship conferred",
-      "era": "AD",
-      "from": 1959,
-      "to": 1959,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Prima missione economico-diplomatica in Africa e Asia",
-      "title_event_en": "First economic-diplomatic mission to Africa and Asia",
-      "era": "AD",
-      "from": 1959,
-      "to": 1959,
-      "continent": "Africa",
-      "country": "Egypt",
-      "location": "Cairo"
-    },
-    {
-      "titolo_evento_it": "Nomina a Presidente della Banca Nazionale di Cuba",
-      "title_event_en": "Appointed President of the National Bank of Cuba",
-      "era": "AD",
-      "from": 1959,
-      "to": 1959,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Scatto di Korda: il 'Guerrillero Heroico' all'Avana",
-      "title_event_en": "Korda’s photograph 'Guerrillero Heroico' in Havana",
-      "era": "AD",
-      "from": 1960,
-      "to": 1960,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Nomina a Ministro dell'Industria a Cuba",
-      "title_event_en": "Appointed Minister of Industries in Cuba",
+      "titolo_evento_it": "Conferenza di Belgrado e nascita dei Non Allineati",
+      "title_event_en": "Belgrade Conference and Birth of the Non-Aligned Movement",
       "era": "AD",
       "from": 1961,
       "to": 1961,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Crisi di Playa Girón e consolidamento della rivoluzione",
-      "title_event_en": "Bay of Pigs crisis and consolidation of the revolution",
-      "era": "AD",
-      "from": 1961,
-      "to": 1961,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Playa Girón"
-    },
-    {
-      "titolo_evento_it": "Crisi dei missili a Cuba e posizione intransigente",
-      "title_event_en": "Cuban Missile Crisis and uncompromising stance",
-      "era": "AD",
-      "from": 1962,
-      "to": 1962,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "Il 'Grande dibattito' sull'economia socialista a Cuba",
-      "title_event_en": "The 'Great Debate' on socialist economics in Cuba",
+      "titolo_evento_it": "Nuova Costituzione e nascita della SFR Jugoslavia",
+      "title_event_en": "New Constitution and Birth of the SFR Yugoslavia",
       "era": "AD",
       "from": 1963,
-      "to": 1964,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
+      "to": 1963,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Intervento all'Assemblea Generale delle Nazioni Unite",
-      "title_event_en": "Address to the United Nations General Assembly",
+      "titolo_evento_it": "Proteste in Kosovo e prime tensioni etniche moderne",
+      "title_event_en": "Kosovo Protests and Early Modern Ethnic Tensions",
       "era": "AD",
-      "from": 1964,
-      "to": 1964,
+      "from": 1968,
+      "to": 1968,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Pristina"
+    },
+    {
+      "titolo_evento_it": "Primavera croata e repressione",
+      "title_event_en": "Croatian Spring and Repression",
+      "era": "AD",
+      "from": 1971,
+      "to": 1971,
+      "continent": "Europe",
+      "country": "Croatia",
+      "location": "Zagreb"
+    },
+    {
+      "titolo_evento_it": "Costituzione del 1974 amplia autonomie repubblicane e provinciali",
+      "title_event_en": "1974 Constitution Expands Republican and Provincial Autonomies",
+      "era": "AD",
+      "from": 1974,
+      "to": 1974,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Morte di Tito e avvio della presidenza collettiva",
+      "title_event_en": "Death of Tito and Start of Collective Presidency",
+      "era": "AD",
+      "from": 1980,
+      "to": 1980,
+      "continent": "Europe",
+      "country": "Slovenia",
+      "location": "Ljubljana"
+    },
+    {
+      "titolo_evento_it": "Proteste albanesi in Kosovo e risposta federale",
+      "title_event_en": "Albanian Protests in Kosovo and Federal Response",
+      "era": "AD",
+      "from": 1981,
+      "to": 1981,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Pristina"
+    },
+    {
+      "titolo_evento_it": "Diffusione del Memorandum della SANU",
+      "title_event_en": "Publication of the SANU Memorandum",
+      "era": "AD",
+      "from": 1986,
+      "to": 1986,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Discorsi di Milošević a Kosovo Polje e ascesa politica",
+      "title_event_en": "Milošević’s Kosovo Polje Speech and Political Rise",
+      "era": "AD",
+      "from": 1987,
+      "to": 1987,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Kosovo Polje"
+    },
+    {
+      "titolo_evento_it": "Rivoluzione antiburocratica e revoca delle autonomie",
+      "title_event_en": "Anti-Bureaucratic Revolution and Revocation of Autonomies",
+      "era": "AD",
+      "from": 1988,
+      "to": 1989,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Elezioni multipartitiche nelle repubbliche jugoslave",
+      "title_event_en": "Multi-Party Elections in the Yugoslav Republics",
+      "era": "AD",
+      "from": 1990,
+      "to": 1990,
+      "continent": "Europe",
+      "country": "Croatia",
+      "location": "Zagreb"
+    },
+    {
+      "titolo_evento_it": "Dichiarazioni d’indipendenza di Slovenia e Croazia",
+      "title_event_en": "Declarations of Independence of Slovenia and Croatia",
+      "era": "AD",
+      "from": 1991,
+      "to": 1991,
+      "continent": "Europe",
+      "country": "Slovenia",
+      "location": "Ljubljana"
+    },
+    {
+      "titolo_evento_it": "Guerra dei dieci giorni in Slovenia",
+      "title_event_en": "Ten-Day War in Slovenia",
+      "era": "AD",
+      "from": 1991,
+      "to": 1991,
+      "continent": "Europe",
+      "country": "Slovenia",
+      "location": "Ljubljana"
+    },
+    {
+      "titolo_evento_it": "Assedio e caduta di Vukovar",
+      "title_event_en": "Siege and Fall of Vukovar",
+      "era": "AD",
+      "from": 1991,
+      "to": 1991,
+      "continent": "Europe",
+      "country": "Croatia",
+      "location": "Vukovar"
+    },
+    {
+      "titolo_evento_it": "Proclamazione della Repubblica Federale di Jugoslavia",
+      "title_event_en": "Proclamation of the Federal Republic of Yugoslavia",
+      "era": "AD",
+      "from": 1992,
+      "to": 1992,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
+    },
+    {
+      "titolo_evento_it": "Assedio di Sarajevo nella guerra di Bosnia",
+      "title_event_en": "Siege of Sarajevo in the Bosnian War",
+      "era": "AD",
+      "from": 1992,
+      "to": 1996,
+      "continent": "Europe",
+      "country": "Bosnia and Herzegovina",
+      "location": "Sarajevo"
+    },
+    {
+      "titolo_evento_it": "Istituzione dell’ICTY all’Aia",
+      "title_event_en": "Establishment of the ICTY in The Hague",
+      "era": "AD",
+      "from": 1993,
+      "to": 1993,
+      "continent": "Europe",
+      "country": "Netherlands",
+      "location": "The Hague"
+    },
+    {
+      "titolo_evento_it": "Genocidio di Srebrenica",
+      "title_event_en": "Srebrenica Genocide",
+      "era": "AD",
+      "from": 1995,
+      "to": 1995,
+      "continent": "Europe",
+      "country": "Bosnia and Herzegovina",
+      "location": "Srebrenica"
+    },
+    {
+      "titolo_evento_it": "Accordi di Dayton mettono fine alla guerra di Bosnia",
+      "title_event_en": "Dayton Accords End the Bosnian War",
+      "era": "AD",
+      "from": 1995,
+      "to": 1995,
       "continent": "North America",
       "country": "United States",
-      "location": "New York City"
+      "location": "Dayton"
     },
     {
-      "titolo_evento_it": "Discorso di Algeri contro lo 'scambio ineguale'",
-      "title_event_en": "Algiers speech against 'unequal exchange'",
+      "titolo_evento_it": "Conflitto in Kosovo e crisi umanitaria",
+      "title_event_en": "Kosovo Conflict and Humanitarian Crisis",
       "era": "AD",
-      "from": 1965,
-      "to": 1965,
-      "continent": "Africa",
-      "country": "Algeria",
-      "location": "Algiers"
+      "from": 1998,
+      "to": 1999,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Pristina"
     },
     {
-      "titolo_evento_it": "Missione guerrigliera nel Congo",
-      "title_event_en": "Guerrilla mission in the Congo",
+      "titolo_evento_it": "Bombardamenti NATO sulla Serbia e sul Montenegro",
+      "title_event_en": "NATO Bombing of Serbia and Montenegro",
       "era": "AD",
-      "from": 1965,
-      "to": 1965,
-      "continent": "Africa",
-      "country": "Democratic Republic of the Congo",
-      "location": "Kivu"
+      "from": 1999,
+      "to": 1999,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Ritiro dal Congo e transito clandestino via Dar es Salaam",
-      "title_event_en": "Withdrawal from the Congo and clandestine transit via Dar es Salaam",
+      "titolo_evento_it": "Rivoluzione delle Bulldozer e caduta di Milošević",
+      "title_event_en": "Bulldozer Revolution and Fall of Milošević",
       "era": "AD",
-      "from": 1965,
-      "to": 1966,
-      "continent": "Africa",
-      "country": "Tanzania",
-      "location": "Dar es Salaam"
+      "from": 2000,
+      "to": 2000,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Rientro segreto a Cuba e preparazione della campagna in Bolivia",
-      "title_event_en": "Secret return to Cuba and preparation for the Bolivian campaign",
+      "titolo_evento_it": "Estradizione di Milošević al Tribunale dell’Aia",
+      "title_event_en": "Extradition of Milošević to The Hague Tribunal",
       "era": "AD",
-      "from": 1966,
-      "to": 1966,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
+      "from": 2001,
+      "to": 2001,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Ingresso clandestino in Bolivia e base di Ñancahuazú",
-      "title_event_en": "Clandestine entry into Bolivia and the Ñancahuazú base",
+      "titolo_evento_it": "Conflitto in Macedonia e Accordo di Ocrida",
+      "title_event_en": "Conflict in Macedonia and Ohrid Agreement",
       "era": "AD",
-      "from": 1966,
-      "to": 1966,
-      "continent": "South America",
-      "country": "Bolivia",
-      "location": "Ñancahuazú"
+      "from": 2001,
+      "to": 2001,
+      "continent": "Europe",
+      "country": "North Macedonia",
+      "location": "Ohrid"
     },
     {
-      "titolo_evento_it": "Campagna guerrigliera in Bolivia e logoramento del gruppo",
-      "title_event_en": "Guerrilla campaign in Bolivia and erosion of the group",
+      "titolo_evento_it": "Trasformazione in Unione di Serbia e Montenegro",
+      "title_event_en": "Transformation into the State Union of Serbia and Montenegro",
       "era": "AD",
-      "from": 1967,
-      "to": 1967,
-      "continent": "South America",
-      "country": "Bolivia",
-      "location": "Ñancahuazú"
+      "from": 2003,
+      "to": 2003,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Cattura alla Quebrada del Yuro",
-      "title_event_en": "Capture at Quebrada del Yuro",
+      "titolo_evento_it": "Assassinio del primo ministro serbo Zoran Đinđić",
+      "title_event_en": "Assassination of Serbian PM Zoran Đinđić",
       "era": "AD",
-      "from": 1967,
-      "to": 1967,
-      "continent": "South America",
-      "country": "Bolivia",
-      "location": "Quebrada del Yuro"
+      "from": 2003,
+      "to": 2003,
+      "continent": "Europe",
+      "country": "Serbia",
+      "location": "Belgrade"
     },
     {
-      "titolo_evento_it": "Esecuzione a La Higuera",
-      "title_event_en": "Execution at La Higuera",
+      "titolo_evento_it": "Adesione della Slovenia a UE e NATO",
+      "title_event_en": "Slovenia’s Accession to the EU and NATO",
       "era": "AD",
-      "from": 1967,
-      "to": 1967,
-      "continent": "South America",
-      "country": "Bolivia",
-      "location": "La Higuera"
+      "from": 2004,
+      "to": 2004,
+      "continent": "Europe",
+      "country": "Slovenia",
+      "location": "Ljubljana"
+    },
+    {
+      "titolo_evento_it": "Indipendenza del Montenegro e fine de facto della Jugoslavia",
+      "title_event_en": "Montenegro’s Independence and De Facto End of Yugoslavia",
+      "era": "AD",
+      "from": 2006,
+      "to": 2006,
+      "continent": "Europe",
+      "country": "Montenegro",
+      "location": "Podgorica"
+    },
+    {
+      "titolo_evento_it": "Dichiarazione d’indipendenza del Kosovo",
+      "title_event_en": "Kosovo’s Declaration of Independence",
+      "era": "AD",
+      "from": 2008,
+      "to": 2008,
+      "continent": "Europe",
+      "country": "Kosovo",
+      "location": "Pristina"
+    },
+    {
+      "titolo_evento_it": "Accordo di Bruxelles tra Serbia e Kosovo",
+      "title_event_en": "Brussels Agreement between Serbia and Kosovo",
+      "era": "AD",
+      "from": 2013,
+      "to": 2013,
+      "continent": "Europe",
+      "country": "Belgium",
+      "location": "Brussels"
+    },
+    {
+      "titolo_evento_it": "Adesione della Croazia all’Unione Europea",
+      "title_event_en": "Croatia’s Accession to the European Union",
+      "era": "AD",
+      "from": 2013,
+      "to": 2013,
+      "continent": "Europe",
+      "country": "Croatia",
+      "location": "Zagreb"
+    },
+    {
+      "titolo_evento_it": "Condanna di Radovan Karadžić all’ICTY",
+      "title_event_en": "Conviction of Radovan Karadžić at the ICTY",
+      "era": "AD",
+      "from": 2016,
+      "to": 2016,
+      "continent": "Europe",
+      "country": "Netherlands",
+      "location": "The Hague"
+    },
+    {
+      "titolo_evento_it": "Condanna di Ratko Mladić all’ICTY",
+      "title_event_en": "Conviction of Ratko Mladić at the ICTY",
+      "era": "AD",
+      "from": 2017,
+      "to": 2017,
+      "continent": "Europe",
+      "country": "Netherlands",
+      "location": "The Hague"
+    },
+    {
+      "titolo_evento_it": "Accordo di Prespa e rinomina a Macedonia del Nord",
+      "title_event_en": "Prespa Agreement and Renaming to North Macedonia",
+      "era": "AD",
+      "from": 2018,
+      "to": 2018,
+      "continent": "Europe",
+      "country": "Greece",
+      "location": "Psarades"
     }
   ]
 }

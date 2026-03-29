@@ -118,16 +118,30 @@ function normEra(era?: string | null): "BC" | "AD" {
  if (e === "BC" || e === "BCE") return "BC";
  return "AD";
 }
-function chronoOrderKey(e: { era?: string | null; year_from?: number | null; year_to?: number | null }) {
+function chronoOrderKey(e: {
+ era?: string | null;
+ year_from?: number | null;
+ year_to?: number | null;
+ exact_date?: string | null;
+}) {
  const era = normEra(e.era);
  const from = typeof e.year_from === "number" ? e.year_from : null;
  const to = typeof e.year_to === "number" ? e.year_to : null;
- let y = from ?? to ?? Number.POSITIVE_INFINITY;
- if (era === "BC" && isFinite(y)) y = -Math.abs(y);
- if (era === "AD" && isFinite(y)) y = Math.abs(y);
- const bias = from != null ? 0 : 0.5;
- if (!isFinite(y)) return 9_999_999_999;
- return y * 100 + bias;
+ if (from != null) {
+  const signed = era === "BC" ? -Math.abs(from) : Math.abs(from);
+  return signed * 100;
+ }
+ if (e.exact_date) {
+  try {
+   const exactMs = new Date(e.exact_date).getTime();
+   if (Number.isFinite(exactMs)) return exactMs;
+  } catch {}
+ }
+ if (to != null) {
+  const signed = era === "BC" ? -Math.abs(to) : Math.abs(to);
+  return signed * 100 + 0.5;
+ }
+ return 9_999_999_999;
 }
 function parseExactDateYear(date?: string | null): number | null {
  if (!date) return null;
@@ -1060,6 +1074,7 @@ const [autoScrollActive, setAutoScrollActive] = useState(false);
 const autoScrollTimerRef = useRef<number | null>(null);
 const audioCacheBustRef = useRef<number>(Date.now());
 const segmentGapTimerRef = useRef<number | null>(null);
+const playSegmentRef = useRef<((pos: number) => Promise<void>) | null>(null);
 
 useEffect(() => {
   if (typeof window === "undefined") return;
@@ -1493,6 +1508,7 @@ useEffect(() => {
   if (!isMp3Mode) return;
   const audio = audioRef.current;
   if (!audio) return;
+  stopAllPlayback();
   audio.playbackRate = 1;
   audio.defaultPlaybackRate = 1;
   audio.pause();
@@ -1507,13 +1523,28 @@ useEffect(() => {
   setAutoScrollActive(false);
   if (playAfterSelectRef.current && selectedAudioUrl) {
     playAfterSelectRef.current = false;
-    window.setTimeout(() => {
-      audio.currentTime = 0;
-      void audio.play().then(() => setIsPlaying(true)).catch(() => {});
-    }, 0);
+    if (hasSegmentedMp3) {
+      const queue = buildMp3QueueFrom(selectedIndexRef.current, false);
+      if (queue.length) {
+        queueRef.current = queue;
+        currentQueuePosRef.current = 0;
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        window.setTimeout(() => {
+          void playSegmentRef.current?.(0);
+        }, 0);
+      }
+    } else {
+      window.setTimeout(() => {
+        audio.currentTime = 0;
+        isPlayingRef.current = true;
+        void audio.play().then(() => setIsPlaying(true)).catch(() => {
+          isPlayingRef.current = false;
+        });
+      }, 0);
+    }
   }
-  stopAllPlayback();
-}, [audioSource, selectedAudioUrl, isMp3Mode, stopAllPlayback, hasSegmentedMp3, appendCacheBuster]);
+}, [audioSource, selectedAudioUrl, isMp3Mode, stopAllPlayback, hasSegmentedMp3, appendCacheBuster, buildMp3QueueFrom]);
 
 useEffect(() => {
   if (!hasIntroSegment || firstEventStart == null) return;
@@ -1803,20 +1834,9 @@ const playSegment = useCallback(
     try {
       if (item.src) {
         setIsBuffering(false);
-        if (!isPlayingRef.current) return;
         audio.src = appendCacheBuster(item.src);
         audio.currentTime = 0;
-        await new Promise<void>((resolve) => {
-          const onReady = () => {
-            audio.removeEventListener("canplay", onReady);
-            audio.removeEventListener("canplaythrough", onReady);
-            resolve();
-          };
-          audio.addEventListener("canplay", onReady);
-          audio.addEventListener("canplaythrough", onReady);
-          window.setTimeout(resolve, 800);
-        });
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 120));
+        audio.load();
         await audio.play();
         fadeOutJingle(450);
         return;
@@ -1839,23 +1859,13 @@ const playSegment = useCallback(
         ttsCacheRef.current.set(cacheKey, buf);
       }
       setIsBuffering(false);
-      if (!isPlayingRef.current) return;
       const blob = new Blob([buf], { type: "audio/mpeg" });
       const url = URL.createObjectURL(blob);
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = url;
       audio.src = url;
       audio.currentTime = 0;
-      await new Promise<void>((resolve) => {
-        const onReady = () => {
-          audio.removeEventListener("canplay", onReady);
-          audio.removeEventListener("canplaythrough", onReady);
-          resolve();
-        };
-        audio.addEventListener("canplay", onReady);
-        audio.addEventListener("canplaythrough", onReady);
-        window.setTimeout(resolve, 800);
-      });
+      audio.load();
       await audio.play();
       fadeOutJingle(450);
     } catch (err: any) {
@@ -1871,6 +1881,10 @@ const playSegment = useCallback(
   },
   [abortCurrentAudio, ttsLang, voice, tone, appendCacheBuster]
 );
+
+useEffect(() => {
+  playSegmentRef.current = playSegment;
+}, [playSegment]);
 
 const handleAudioEnded = useCallback(() => {
   const pos = currentQueuePosRef.current;
@@ -1998,6 +2012,7 @@ const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
     if (!selectedAudioUrl && audioSourceOptions.length) {
+      playAfterSelectRef.current = true;
       setAudioSource(audioSourceOptions[0].value);
       return;
     }
@@ -2018,6 +2033,7 @@ const togglePlay = useCallback(() => {
           setSelectedIndex(0);
           setAudioCurrentTime(0);
         }
+        isPlayingRef.current = true;
         setIsPlaying(true);
         void playSegment(0);
         return;
@@ -2042,9 +2058,13 @@ const togglePlay = useCallback(() => {
       if (!shouldRestartIntro) {
         audio.currentTime = resumeTime || 0;
       }
-      void audio.play().catch(() => {});
+      isPlayingRef.current = true;
+      void audio.play().catch(() => {
+        isPlayingRef.current = false;
+      });
       setIsPlaying(true);
     } else {
+      isPlayingRef.current = false;
       audio.pause();
       setIsPlaying(false);
     }
@@ -2162,18 +2182,9 @@ const renderVoiceToneControls = useCallback(
 );
 
 const renderAudioMeta = useCallback(() => {
-  const totalSteps = rows.length + (hasIntroSegment ? 1 : 0);
-  const countLabel = hasIntroSegment
-    ? isIntroPlaybackActive
-      ? `Journey 1/${Math.max(1, totalSteps)}`
-      : `Evento ${selectedIndex + 2}/${Math.max(1, totalSteps)}`
-    : rows.length
-    ? `Evento ${selectedIndex + 1}/${rows.length}`
-    : "Evento 0/0";
   const timeLabel = `${formatClockTime(audioCurrentTime)} / ${audioDuration ? formatClockTime(audioDuration) : "--:--"}`;
   return (
     <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">{countLabel}</span>
       {timeLabel ? <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">{timeLabel}</span> : null}
       {debugPlayer ? (
         <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-900">
@@ -2182,7 +2193,7 @@ const renderAudioMeta = useCallback(() => {
       ) : null}
     </div>
   );
-}, [rows.length, selectedIndex, audioCurrentTime, audioDuration, debugPlayer, firstEventStart, hasIntroSegment, isIntroPlaybackActive]);
+}, [audioCurrentTime, audioDuration, debugPlayer, firstEventStart, selectedIndex]);
 
 const seekToIntro = useCallback(
   (opts?: { autoplay?: boolean }) => {
@@ -2203,6 +2214,7 @@ const seekToIntro = useCallback(
         setSelectedIndex(0);
       }
       if (opts?.autoplay || isPlayingRef.current) {
+        isPlayingRef.current = true;
         setIsPlaying(true);
         void playSegment(0);
       }
@@ -2223,7 +2235,10 @@ const seekToIntro = useCallback(
       setSelectedIndex(0);
     }
     if (opts?.autoplay || isPlayingRef.current) {
-      void audio.play().catch(() => {});
+      isPlayingRef.current = true;
+      void audio.play().catch(() => {
+        isPlayingRef.current = false;
+      });
       setIsPlaying(true);
     }
   },
@@ -2271,6 +2286,7 @@ const seekToEventIndex = useCallback(
     manualSeekUntilRef.current = Date.now() + 1500;
     // Evita un secondo seek immediato nel listener su selectedIndex.
     ignoreNextSeekRef.current = true;
+    pendingSelectedMapFocusRef.current = nextIndex;
     setMapViewportMode("focus-selected");
     selectedIndexRef.current = nextIndex;
     setSelectedIndex(nextIndex);
@@ -2282,6 +2298,7 @@ const seekToEventIndex = useCallback(
       currentQueuePosRef.current = 0;
       setAudioCurrentTime(Number(manualSeekTargetRef.current) || 0);
       if (opts?.autoplay || isPlayingRef.current) {
+        isPlayingRef.current = true;
         setIsPlaying(true);
         void playSegment(0);
       }
@@ -2312,7 +2329,10 @@ const seekToEventIndex = useCallback(
         }
       }, 200);
       if (opts?.autoplay || isPlayingRef.current) {
-        void audio.play().catch(() => {});
+        isPlayingRef.current = true;
+        void audio.play().catch(() => {
+          isPlayingRef.current = false;
+        });
         setIsPlaying(true);
       }
     }
@@ -2322,8 +2342,8 @@ const seekToEventIndex = useCallback(
 
 const handlePrevEvent = useCallback(() => {
   if (!rows.length) return;
+  const audioTime = audioRef.current?.currentTime ?? audioCurrentTime;
   if (isMp3Mode && hasIntroSegment) {
-    const audioTime = audioRef.current?.currentTime ?? audioCurrentTime;
     if (isIntroPlaybackActive || (selectedIndex === 0 && audioTime <= (firstEventStart ?? 0) + 0.35)) {
       seekToIntro({ autoplay: true });
       return;
@@ -2333,7 +2353,7 @@ const handlePrevEvent = useCallback(() => {
       return;
     }
   }
-  const nextIndex = (selectedIndex - 1 + rows.length) % rows.length;
+  const nextIndex = Math.max(0, selectedIndex - 1);
   seekToEventIndex(nextIndex, { autoplay: true });
 }, [rows.length, selectedIndex, seekToEventIndex, isMp3Mode, hasIntroSegment, audioCurrentTime, firstEventStart, isIntroPlaybackActive, seekToIntro]);
 
@@ -2538,6 +2558,9 @@ const mobileTopStackOffset = useMemo(() => {
   return measured > 0 ? measured : 220;
 }, [isLg, mobileOverlayHeights.top]);
 
+const desktopEventFocusZoom = 8;
+const mobileEventFocusZoom = 6;
+
 const moveMapToVisibleCenter = useCallback(
   (lng: number, lat: number, zoom?: number) => {
     const map = mapRef.current as any;
@@ -2613,7 +2636,7 @@ const applyMapViewport = useCallback(
       moveMapToVisibleCenter(
         selected.longitude,
         selected.latitude,
-        Math.max((opts?.minZoom ?? map.getZoom?.() ?? 6), 6),
+        Math.max((opts?.minZoom ?? map.getZoom?.() ?? (isLg ? desktopEventFocusZoom : mobileEventFocusZoom)), isLg ? desktopEventFocusZoom : mobileEventFocusZoom),
       );
       return;
     }
@@ -2639,7 +2662,7 @@ const recenterSelectedEvent = useCallback(() => {
   const ev = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
   if (!ev || ev.latitude == null || ev.longitude == null) return;
   suppressMapRecenteringRef.current = true;
-  moveMapToVisibleCenter(ev.longitude, ev.latitude);
+  moveMapToVisibleCenter(ev.longitude, ev.latitude, isLg ? desktopEventFocusZoom : mobileEventFocusZoom);
   if (typeof window !== "undefined") {
     window.setTimeout(() => {
       suppressMapRecenteringRef.current = false;
@@ -2647,7 +2670,7 @@ const recenterSelectedEvent = useCallback(() => {
   } else {
     suppressMapRecenteringRef.current = false;
   }
-}, [activeEventIndex, rows, moveMapToVisibleCenter]);
+}, [activeEventIndex, rows, moveMapToVisibleCenter, isLg]);
 
 // Lock scroll quando la mappa è full-screen
 useEffect(() => {
@@ -2715,7 +2738,11 @@ useEffect(() => {
   const focusLat = ev.latitude;
   const applyFocus = () => {
     try { map.resize?.(); } catch {}
-    moveMapToVisibleCenter(focusLng, focusLat, Math.max(map.getZoom?.() ?? 6, 6));
+    moveMapToVisibleCenter(
+      focusLng,
+      focusLat,
+      Math.max(map.getZoom?.() ?? (isLg ? desktopEventFocusZoom : mobileEventFocusZoom), isLg ? desktopEventFocusZoom : mobileEventFocusZoom),
+    );
   };
   if (typeof window !== "undefined" && "requestAnimationFrame" in window) {
     window.requestAnimationFrame(() => {
@@ -2724,7 +2751,7 @@ useEffect(() => {
     return;
   }
   applyFocus();
-}, [activeEventIndex, rows, mapReady, mapLoaded, moveMapToVisibleCenter]);
+}, [activeEventIndex, rows, mapReady, mapLoaded, moveMapToVisibleCenter, isLg]);
 
 // Popup evento quando la mappa Š full-screen
 useEffect(() => {
@@ -4334,15 +4361,7 @@ const journeyAndEventMedia = useMemo(() => {
           <div className="text-[12px] font-semibold text-gray-800">Eventi</div>
           {rows.length ? (
             <div className="text-[11.5px] text-gray-600">
-              {isIntroPlaybackActive ? (
-                <>
-                  Journey <span className="font-medium">1</span> / <span className="font-medium">{rows.length + 1}</span>
-                </>
-              ) : (
-                <>
-                  Evento <span className="font-medium">{selectedIndex + (hasIntroSegment ? 2 : 1)}</span> / <span className="font-medium">{rows.length + (hasIntroSegment ? 1 : 0)}</span>
-                </>
-              )}
+              Evento <span className="font-medium">{Math.max(1, Math.min(rows.length, activeEventIndex + 1))}</span> / <span className="font-medium">{rows.length}</span>
             </div>
           ) : null}
         </div>

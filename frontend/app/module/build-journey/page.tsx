@@ -1098,6 +1098,14 @@ export default function BuildJourneyPage() {
       setAudioError(isItalian ? "Seleziona un journey prima di generare l'audio." : "Select a journey before generating audio.");
       return;
     }
+    if (journeyEvents.some((ev) => !ev.event_id)) {
+      setAudioError(
+        isItalian
+          ? "Salva prima il journey: l'audio richiede eventi già persistiti per restare sincronizzato."
+          : "Save the journey first: audio generation requires persisted events to stay in sync.",
+      );
+      return;
+    }
     const segmentsIt = buildJourneySpeechSegments("it", audioTone);
     const segmentsEn = buildJourneySpeechSegments("en", audioTone);
     const textIt = segmentsIt.map((s) => s.text).join("\n\n").trim();
@@ -1209,6 +1217,7 @@ export default function BuildJourneyPage() {
     bestTitleForAuto,
     buildJourneySpeechSegments,
     isItalian,
+    journeyEvents,
     selectedJourneyId,
     supabase,
     ttsLang,
