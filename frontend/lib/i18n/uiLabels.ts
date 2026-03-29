@@ -141,6 +141,12 @@ const en: UIDictionary = {
   // RATING STARS
   "rating.stars.rate_prefix": "Rate",
   "rating.stars.login_required": "Please sign in to rate",
+  "rating.stars.feedback_label": "Add feedback",
+  "rating.stars.feedback_placeholder": "Tell us what you liked or what could be improved...",
+  "rating.stars.feedback_optional": "Optional text feedback",
+  "rating.stars.submit": "Send",
+  "rating.stars.cancel": "Cancel",
+  "rating.stars.feedback_unavailable": "Text feedback is not available yet. Your rating was saved.",
 
   // RATING SUMMARY
   "rating.summary.no_ratings": "No ratings",
@@ -510,6 +516,12 @@ const it: UIDictionary = {
   // RATING STARS
   "rating.stars.rate_prefix": "Valuta",
   "rating.stars.login_required": "Accedi per votare",
+  "rating.stars.feedback_label": "Aggiungi feedback",
+  "rating.stars.feedback_placeholder": "Scrivi cosa ti è piaciuto o cosa si può migliorare...",
+  "rating.stars.feedback_optional": "Feedback testuale facoltativo",
+  "rating.stars.submit": "Invia",
+  "rating.stars.cancel": "Annulla",
+  "rating.stars.feedback_unavailable": "Il feedback testuale non è ancora disponibile. Il voto è stato salvato.",
 
   // RATING SUMMARY
   "rating.summary.no_ratings": "Nessuna valutazione",

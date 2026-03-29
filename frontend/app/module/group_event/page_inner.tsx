@@ -3860,7 +3860,7 @@ const journeyAndEventMedia = useMemo(() => {
               <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact /> : null}
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact allowTextFeedback /> : null}
           <button
             onClick={openQuiz}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[16px] font-semibold text-white shadow"
@@ -4312,7 +4312,7 @@ const journeyAndEventMedia = useMemo(() => {
               </svg>
             </span>
           </button>
-          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} /> : null}
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={18} allowTextFeedback /> : null}
           <button
             onClick={openQuiz}
             className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-[0_8px_20px_rgba(15,60,140,0.35)] ring-1 ring-white/15 transition hover:-translate-y-[1px] hover:shadow-[0_10px_22px_rgba(15,60,140,0.42)] focus:outline-none focus:ring-2 focus:ring-indigo-300"
