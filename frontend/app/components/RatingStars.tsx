@@ -20,6 +20,8 @@ type Props = {
   readOnly?: boolean;
   compact?: boolean;
   allowTextFeedback?: boolean;
+  compactStatsClassName?: string;
+  compactWrapClassName?: string;
 };
 
 export default function RatingStars(props: Props) {
@@ -29,6 +31,8 @@ export default function RatingStars(props: Props) {
   const readOnly = !!props.readOnly;
   const compact = !!props.compact;
   const allowTextFeedback = !!props.allowTextFeedback;
+  const compactStatsClassName = props.compactStatsClassName ?? "text-slate-600";
+  const compactWrapClassName = props.compactWrapClassName ?? "";
 
   const [avg, setAvg] = useState<number | null>(null);
   const [cnt, setCnt] = useState<number>(0);
@@ -317,7 +321,7 @@ export default function RatingStars(props: Props) {
       <>
         <div
           ref={compactWrapRef}
-          className="relative z-[80] inline-flex items-center gap-1"
+          className={`relative z-[80] inline-flex items-center gap-1 ${compactWrapClassName}`}
           onClick={(event) => event.stopPropagation()}
         >
           <button
@@ -342,10 +346,10 @@ export default function RatingStars(props: Props) {
               <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.62L12 2 9.19 8.62 2 9.24l5.46 4.73L5.82 21 12 17.27z" />
             </svg>
           </button>
-          <div className="text-[11px] text-slate-600 tabular-nums">
-            {avg != null ? avg.toFixed(1) : "-"}
-            {cnt > 0 ? ` (${cnt})` : ""}
-          </div>
+        <div className={`shrink-0 whitespace-nowrap text-[11px] font-semibold tabular-nums ${compactStatsClassName}`}>
+          {avg != null ? avg.toFixed(1) : "-"}
+          {cnt > 0 ? ` (${cnt})` : ""}
+        </div>
           {compactPickerOpen ? (
             <div
               className="absolute left-1/2 top-[calc(100%+6px)] z-[120] flex -translate-x-1/2 flex-col gap-1 rounded-2xl border border-amber-200/80 bg-white/95 p-1.5 shadow-[0_14px_32px_-20px_rgba(16,32,51,0.45)] backdrop-blur"

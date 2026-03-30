@@ -2493,12 +2493,20 @@ const renderMapPlayerBox = useCallback(
           href={selectedEvent?.wiki_url as string}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50/70 px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:bg-blue-50"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:bg-white"
+          title={tUI(uiLang, "journey.tab.wiki")}
+          aria-label={tUI(uiLang, "journey.tab.wiki")}
         >
-          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-            <path d="M7 17 17 7m0 0h-7m7 0v7" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {tUI(uiLang, "journey.tab.wiki")}
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200/80">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/Wiki.png"
+              alt=""
+              aria-hidden="true"
+              className="h-6 w-6 rounded-full object-cover opacity-90"
+              loading="lazy"
+            />
+          </span>
         </a>
       ) : null}
       {!opts?.compact ? renderAudioMeta() : null}
@@ -3880,7 +3888,7 @@ const journeyAndEventMedia = useMemo(() => {
               <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </button>
-          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact allowTextFeedback /> : null}
+          {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={16} compact allowTextFeedback compactStatsClassName="text-white/95" compactWrapClassName="rounded-full border border-white/10 bg-white/6 px-2 py-1" /> : null}
           <button
             onClick={openQuiz}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/12 bg-white/8 text-[16px] font-semibold text-white shadow-[0_12px_28px_-20px_rgba(0,0,0,0.6)]"
@@ -3959,9 +3967,9 @@ const journeyAndEventMedia = useMemo(() => {
                 }
               }}
               className={`inline-flex h-9 w-9 items-center justify-center rounded-full border text-white transition ${mobileTab === "related" ? "border-[#f6c86a]/60 bg-[#f6c86a]/18" : "border-white/12 bg-white/8"}`}
-              title={tUI(uiLang, "journey.related.title")}
-              aria-label={tUI(uiLang, "journey.related.title")}
-            >
+                title={tUI(uiLang, "journey.related.title")}
+                aria-label={tUI(uiLang, "journey.related.title")}
+              >
               <svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true">
                 <path d="M6 5.5h8.5A3.5 3.5 0 0 1 18 9v9.5H9.5A3.5 3.5 0 0 1 6 15V5.5Z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
                 <path d="M9 9h6M9 12h4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -3974,33 +3982,37 @@ const journeyAndEventMedia = useMemo(() => {
                 href={selectedEvent.wiki_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/12 bg-[#121724] text-white"
                 title={tUI(uiLang, "journey.tab.wiki")}
                 aria-label={tUI(uiLang, "journey.tab.wiki")}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/icons/Wiki.png"
-                  alt=""
-                  aria-hidden="true"
-                  className="h-7.5 w-7.5 object-contain opacity-90 brightness-125"
-                  loading="lazy"
-                />
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#0b1020] ring-1 ring-white/8">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/icons/Wiki.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-7 w-7 rounded-full object-cover opacity-90 brightness-110"
+                    loading="lazy"
+                  />
+                </span>
               </a>
             ) : (
               <span
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/6 text-white/42"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#101520] text-white/42"
                 title={tUI(uiLang, "journey.tab.wiki")}
                 aria-label={tUI(uiLang, "journey.tab.wiki")}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/icons/Wiki.png"
-                  alt=""
-                  aria-hidden="true"
-                  className="h-7.5 w-7.5 object-contain opacity-45 grayscale"
-                  loading="lazy"
-                />
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#0b1020] ring-1 ring-white/6">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/icons/Wiki.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-7 w-7 rounded-full object-cover opacity-38 grayscale"
+                    loading="lazy"
+                  />
+                </span>
               </span>
             )}
           </div>
@@ -4495,9 +4507,9 @@ const journeyAndEventMedia = useMemo(() => {
           </button>
         </div>
 
-        <div className="mt-6 flex-1 flex flex-col justify-center">
+        <div className="mt-5 flex-1 flex flex-col justify-center">
           <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/6 shadow-[0_28px_60px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md">
-            <div className="flex items-stretch gap-4 p-4">
+            <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-4 p-4">
               <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[22px] border border-white/10 bg-white/8">
                 {mobilePlayerArtwork ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -4537,7 +4549,7 @@ const journeyAndEventMedia = useMemo(() => {
             </div>
           </div>
 
-          <div className="mt-7">
+          <div className="mt-5">
             <div className="mb-2 flex items-center justify-between text-[12px] font-medium text-white/72">
               <span>{formatClockTime(audioCurrentTime)}</span>
               <span>{audioDuration ? formatClockTime(audioDuration) : "--:--"}</span>
@@ -4558,7 +4570,7 @@ const journeyAndEventMedia = useMemo(() => {
             </div>
           </div>
 
-          <div className="mt-7 flex items-center justify-center gap-4">
+          <div className="mt-5 flex items-center justify-center gap-4">
             <button
               type="button"
               onClick={handlePrevEvent}
@@ -4598,7 +4610,7 @@ const journeyAndEventMedia = useMemo(() => {
             </button>
           </div>
 
-          <div className="mt-6 flex items-center justify-between gap-3">
+          <div className="mt-5 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={() => {
