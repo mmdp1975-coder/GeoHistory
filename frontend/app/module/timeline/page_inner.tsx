@@ -133,6 +133,98 @@ type TimelinePageProps = {
 };
 
 type SortMode = "timeline" | "rating" | "favourites" | "published";
+type VisibilityFilter = "all" | "public" | "private";
+
+function getSortIcon(mode: SortMode, className = "h-3.5 w-3.5") {
+  if (mode === "timeline") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <path d="M4 12h16" strokeLinecap="round" />
+        <path d="M7 8v8" strokeLinecap="round" />
+        <path d="M12 6v12" strokeLinecap="round" />
+        <path d="M17 9v6" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (mode === "rating") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+      </svg>
+    );
+  }
+  if (mode === "favourites") {
+    return (
+      <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M7 3v3" strokeLinecap="round" />
+      <path d="M17 3v3" strokeLinecap="round" />
+      <path d="M4 9h16" strokeLinecap="round" />
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+    </svg>
+  );
+}
+
+function getVisibilityIcon(filter: VisibilityFilter, className = "h-3.5 w-3.5") {
+  if (filter === "all") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="M4.5 12h15" strokeLinecap="round" />
+        <path d="M12 4.5c2.3 2.1 3.5 4.6 3.5 7.5S14.3 17.4 12 19.5c-2.3-2.1-3.5-4.6-3.5-7.5S9.7 6.6 12 4.5Z" />
+      </svg>
+    );
+  }
+  if (filter === "public") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={className}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5-10-5-10-5Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8.5A4 4 0 0 1 12 4.5a4 4 0 0 1 4 4V11" />
+    </svg>
+  );
+}
 
 export default function TimelinePage({
   embedded = false,
@@ -184,11 +276,13 @@ export default function TimelinePage({
   const geoFilterFromQuery = useMemo(() => parseGeoParams(search!), [search]);
   const geoFilter = externalGeoFilter ?? geoFilterFromQuery;
   const [geoWarning, setGeoWarning] = useState<string | null>(null);
-  const [visibilityFilter, setVisibilityFilter] = useState<
-    "all" | "public" | "private"
-  >("all");
+  const [visibilityFilter, setVisibilityFilter] =
+    useState<VisibilityFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>(initialSortMode);
   const cardsListRef = useRef<HTMLUListElement | null>(null);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [mobileSortOpen, setMobileSortOpen] = useState(false);
+  const [mobileVisibilityOpen, setMobileVisibilityOpen] = useState(false);
 
   /* ===== Lingua UI: profiles.language_code (id = user.id) ===== */
   useEffect(() => {
@@ -259,6 +353,20 @@ export default function TimelinePage({
       active = false;
     };
   }, [supabase]);
+
+  useEffect(() => {
+    if (!mobileSearchOpen && !mobileSortOpen && !mobileVisibilityOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMobileSearchOpen(false);
+      setMobileSortOpen(false);
+      setMobileVisibilityOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileSearchOpen, mobileSortOpen, mobileVisibilityOpen]);
 
   /* ======= 1) INIT: dominio temporale da v_journeys ======= */
   useEffect(() => {
@@ -1216,77 +1324,357 @@ export default function TimelinePage({
           }
         >
             <div className="flex w-full flex-col gap-2">
-              <div
-                className={
-                  embedded
-                    ? "flex w-full items-center gap-2"
-                    : "flex w-full flex-wrap items-center gap-2.5"
-                }
-              >
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/48 sm:block">
-                  {tUI(langCode, "timeline.search.label")}
-                </label>
-                <input
-                  type="text"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder={tUI(
-                    langCode,
-                    "timeline.search.placeholder"
-                  )}
-                  className={
-                    embedded
-                      ? "w-full min-w-0 rounded-[20px] border border-white/10 bg-white/8 px-4 py-3 text-[12px] text-white placeholder-white/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-[#f6c86a]/28 focus:bg-white/10 focus:outline-none"
-                      : "w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
-                  }
-                />
-              </div>
-
               {embedded ? (
-                <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
-                  {onOpenEmbeddedMap ? (
+                <>
+                  <div className="flex w-full items-center gap-2 lg:hidden">
                     <button
                       type="button"
-                      onClick={onOpenEmbeddedMap}
-                      className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
-                      title="Apri mappa"
-                      aria-label="Apri mappa"
+                      onClick={() => {
+                        setMobileSearchOpen(true);
+                        setMobileSortOpen(false);
+                        setMobileVisibilityOpen(false);
+                      }}
+                      className="inline-flex h-[46px] min-w-0 max-w-[168px] flex-1 items-center gap-2 rounded-[20px] border border-white/10 bg-white/8 px-3 text-left text-[12px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-white/12"
+                      aria-label={tUI(langCode, "timeline.search.label")}
                     >
                       <svg
                         viewBox="0 0 24 24"
-                        className="h-4.5 w-4.5"
+                        className="h-4 w-4 shrink-0 text-white/72"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="1.8"
                       >
-                        <path d="M9 5 4 7.5v11L9 16l6 3 5-2.5v-11L15 8 9 5Z" strokeLinejoin="round" />
-                        <path d="M9 5v11M15 8v11" />
+                        <circle cx="11" cy="11" r="6.5" />
+                        <path d="m16 16 4 4" strokeLinecap="round" />
+                      </svg>
+                      <span
+                        className={`truncate ${q.trim() ? "text-white" : "text-white/38"}`}
+                      >
+                        {q.trim() || tUI(langCode, "timeline.search.placeholder")}
+                      </span>
+                    </button>
+
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileSortOpen((value) => !value);
+                          setMobileVisibilityOpen(false);
+                          setMobileSearchOpen(false);
+                        }}
+                        className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105"
+                        title={tUI(langCode, "timeline.sort.label")}
+                        aria-label={tUI(langCode, "timeline.sort.label")}
+                        aria-expanded={mobileSortOpen}
+                      >
+                        {getSortIcon(sortMode, "h-6 w-6")}
+                      </button>
+                      {mobileSortOpen ? (
+                        <div className="absolute right-0 top-[calc(100%+8px)] z-30 flex min-w-[220px] flex-col gap-1 rounded-2xl border border-white/12 bg-[#111827]/96 p-1.5 text-white shadow-[0_24px_40px_-28px_rgba(0,0,0,0.92)] backdrop-blur-xl">
+                          {(
+                            ["timeline", "rating", "favourites", "published"] as SortMode[]
+                          ).map((mode) => {
+                            const active = sortMode === mode;
+                            return (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => {
+                                  setSortMode(mode);
+                                  setMobileSortOpen(false);
+                                  forceEmbeddedCarouselToEdge();
+                                }}
+                                className={
+                                  active
+                                    ? "flex items-start gap-3 rounded-xl border border-[#f6c86a]/25 bg-[#f6c86a] px-3 py-2.5 text-left text-[#0b1020]"
+                                    : "flex items-start gap-3 rounded-xl border border-white/8 bg-white/6 px-3 py-2.5 text-left text-white hover:bg-white/10"
+                                }
+                              >
+                                <span className="mt-0.5 shrink-0">
+                                  {getSortIcon(mode, "h-4 w-4")}
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block text-[12px] font-semibold leading-4">
+                                    {tUI(langCode, `timeline.sort.${mode}`)}
+                                  </span>
+                                  <span
+                                    className={`block pt-0.5 text-[10px] leading-3 ${
+                                      active ? "text-[#0b1020]/70" : "text-white/58"
+                                    }`}
+                                  >
+                                    {tUI(langCode, `timeline.sort.title.${mode}`)}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileVisibilityOpen((value) => !value);
+                          setMobileSortOpen(false);
+                          setMobileSearchOpen(false);
+                        }}
+                        className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105"
+                        title={tUI(langCode, "timeline.visibility.label")}
+                        aria-label={tUI(langCode, "timeline.visibility.label")}
+                        aria-expanded={mobileVisibilityOpen}
+                      >
+                        {getVisibilityIcon(visibilityFilter, "h-6 w-6")}
+                      </button>
+                      {mobileVisibilityOpen ? (
+                        <div className="absolute right-0 top-[calc(100%+8px)] z-30 flex min-w-[220px] flex-col gap-1 rounded-2xl border border-white/12 bg-[#111827]/96 p-1.5 text-white shadow-[0_24px_40px_-28px_rgba(0,0,0,0.92)] backdrop-blur-xl">
+                          {(["all", "public", "private"] as VisibilityFilter[]).map(
+                            (value) => {
+                              const active = visibilityFilter === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => {
+                                    setVisibilityFilter(value);
+                                    setMobileVisibilityOpen(false);
+                                  }}
+                                  className={
+                                    active
+                                      ? "flex items-start gap-3 rounded-xl border border-[#f6c86a]/25 bg-[#f6c86a] px-3 py-2.5 text-left text-[#0b1020]"
+                                      : "flex items-start gap-3 rounded-xl border border-white/8 bg-white/6 px-3 py-2.5 text-left text-white hover:bg-white/10"
+                                  }
+                                >
+                                  <span className="mt-0.5 shrink-0">
+                                    {getVisibilityIcon(value, "h-4 w-4")}
+                                  </span>
+                                  <span className="min-w-0">
+                                    <span className="block text-[12px] font-semibold leading-4">
+                                      {tUI(langCode, `timeline.visibility.${value}`)}
+                                    </span>
+                                    <span
+                                      className={`block pt-0.5 text-[10px] leading-3 ${
+                                        active ? "text-[#0b1020]/70" : "text-white/58"
+                                      }`}
+                                    >
+                                      {tUI(langCode, `timeline.visibility.title.${value}`)}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {onOpenEmbeddedMap ? (
+                      <button
+                        type="button"
+                        onClick={onOpenEmbeddedMap}
+                        className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                        title="Apri mappa"
+                        aria-label="Apri mappa"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-6 w-6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <path
+                            d="M4 7.2 8.2 5l5.6 2 6.2-2.2v11.7l-4.2 2.2-5.6-2L4 19Z"
+                            strokeLinejoin="round"
+                          />
+                          <path d="M8.2 5v11.8M13.8 7v11.8" strokeLinecap="round" />
+                          <path
+                            d="M16.9 12.8c1.4-1.5 2.1-2.7 2.1-3.8a2.6 2.6 0 1 0-5.2 0c0 1.1.7 2.3 2.1 3.8l.5.5.5-.5Z"
+                            fill="currentColor"
+                            stroke="none"
+                          />
+                          <circle cx="16.4" cy="9" r="0.8" fill="#0b1020" stroke="none" />
+                        </svg>
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => router.push("/module/build-journey")}
+                      className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                      title={tUI(langCode, "timeline.new_button_long")}
+                      aria-label={tUI(langCode, "timeline.new_button_long")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-6 w-6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.9"
+                      >
+                        <path d="M12 5v14" strokeLinecap="round" />
+                        <path d="M5 12h14" strokeLinecap="round" />
                       </svg>
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => router.push("/module/build-journey")}
-                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-3 py-2.5 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105 sm:px-4"
-                    title={tUI(langCode, "timeline.new_button_long")}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.9"
+                  </div>
+
+                  <div className="hidden w-full items-center gap-2 lg:flex">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/48 sm:block">
+                        {tUI(langCode, "timeline.search.label")}
+                      </label>
+                      <input
+                        type="text"
+                        value={q}
+                        onChange={(e) => setQ(e.target.value)}
+                        placeholder={tUI(
+                          langCode,
+                          "timeline.search.placeholder"
+                        )}
+                        className="w-full min-w-0 rounded-[20px] border border-white/10 bg-white/8 px-4 py-3 text-[12px] text-white placeholder-white/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-[#f6c86a]/28 focus:bg-white/10 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+                      {onOpenEmbeddedMap ? (
+                        <button
+                          type="button"
+                          onClick={onOpenEmbeddedMap}
+                          className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                          title="Apri mappa"
+                          aria-label="Apri mappa"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4.5 w-4.5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                          >
+                            <path
+                              d="M4 7.2 8.2 5l5.6 2 6.2-2.2v11.7l-4.2 2.2-5.6-2L4 19Z"
+                              strokeLinejoin="round"
+                            />
+                            <path d="M8.2 5v11.8M13.8 7v11.8" strokeLinecap="round" />
+                            <path
+                              d="M16.9 12.8c1.4-1.5 2.1-2.7 2.1-3.8a2.6 2.6 0 1 0-5.2 0c0 1.1.7 2.3 2.1 3.8l.5.5.5-.5Z"
+                              fill="currentColor"
+                              stroke="none"
+                            />
+                            <circle cx="16.4" cy="9" r="0.8" fill="#0b1020" stroke="none" />
+                          </svg>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => router.push("/module/build-journey")}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-3 py-2.5 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105 sm:px-4"
+                        title={tUI(langCode, "timeline.new_button_long")}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-4 w-4"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                        >
+                          <path d="M12 5v14" strokeLinecap="round" />
+                          <path d="M5 12h14" strokeLinecap="round" />
+                        </svg>
+                        <span className="hidden sm:inline">
+                          {tUI(langCode, "timeline.new_button_long")}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {mobileSearchOpen ? (
+                    <div
+                      className="fixed inset-0 z-40 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm lg:hidden"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-label={tUI(langCode, "timeline.search.label")}
+                      onClick={() => setMobileSearchOpen(false)}
                     >
-                      <path d="M12 5v14" strokeLinecap="round" />
-                      <path d="M5 12h14" strokeLinecap="round" />
-                    </svg>
-                    <span className="hidden sm:inline">
-                      {tUI(langCode, "timeline.new_button_long")}
-                    </span>
-                  </button>
+                      <div
+                        className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#111827]/96 p-4 text-white shadow-[0_28px_60px_-30px_rgba(0,0,0,0.9)]"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/52">
+                              {tUI(langCode, "timeline.search.label")}
+                            </div>
+                            <div className="pt-1 text-[12px] text-white/70">
+                              {tUI(langCode, "timeline.search.placeholder")}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setMobileSearchOpen(false)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white"
+                            aria-label={tUI(langCode, "video.close.ariaLabel")}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.9"
+                            >
+                              <path d="m6 6 12 12" strokeLinecap="round" />
+                              <path d="m18 6-12 12" strokeLinecap="round" />
+                            </svg>
+                          </button>
+                        </div>
+                        <input
+                          autoFocus
+                          type="text"
+                          value={q}
+                          onChange={(e) => setQ(e.target.value)}
+                          placeholder={tUI(langCode, "timeline.search.placeholder")}
+                          className="w-full rounded-[20px] border border-white/10 bg-white/8 px-4 py-3 text-[14px] text-white placeholder-white/34 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] focus:border-[#f6c86a]/28 focus:bg-white/10 focus:outline-none"
+                        />
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setQ("")}
+                            className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/8 px-3 py-2 text-[11px] font-semibold text-white/82 transition hover:bg-white/12"
+                          >
+                            {tUI(langCode, "timeline.search.clear")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setMobileSearchOpen(false)}
+                            className="inline-flex items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-4 py-2 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)]"
+                          >
+                            OK
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex w-full flex-wrap items-center gap-2.5">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/48 sm:block">
+                      {tUI(langCode, "timeline.search.label")}
+                    </label>
+                    <input
+                      type="text"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder={tUI(
+                        langCode,
+                        "timeline.search.placeholder"
+                      )}
+                      className="w-72 rounded-md border border-neutral-300 bg-white px-3 py-1 text-sm text-neutral-900 placeholder-neutral-400 focus:border-neutral-400 focus:outline-none"
+                    />
+                  </div>
                 </div>
-              ) : null}
+              )}
             </div>
 
             <div
@@ -1299,7 +1687,7 @@ export default function TimelinePage({
               <div
                 className={
                   embedded
-                    ? "flex w-full items-center gap-2 overflow-x-auto pb-1"
+                    ? "hidden w-full items-center gap-2 overflow-x-auto pb-1 lg:flex"
                     : "flex w-full flex-wrap items-end gap-2"
                 }
               >
@@ -1329,30 +1717,6 @@ export default function TimelinePage({
                 <div className="flex items-center gap-1.5">
                   {(["timeline", "rating", "favourites", "published"] as SortMode[]).map((mode) => {
                     const active = sortMode === mode;
-                    const icon =
-                      mode === "timeline" ? (
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M4 12h16" strokeLinecap="round" />
-                          <path d="M7 8v8" strokeLinecap="round" />
-                          <path d="M12 6v12" strokeLinecap="round" />
-                          <path d="M17 9v6" strokeLinecap="round" />
-                        </svg>
-                      ) : mode === "rating" ? (
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
-                          <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                        </svg>
-                      ) : mode === "favourites" ? (
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
-                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4 8.04 4 9.54 4.81 10.35 6.09 11.16 4.81 12.66 4 14.2 4 16.7 4 18.7 6 18.7 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M7 3v3" strokeLinecap="round" />
-                          <path d="M17 3v3" strokeLinecap="round" />
-                          <path d="M4 9h16" strokeLinecap="round" />
-                          <rect x="4" y="5" width="16" height="15" rx="2" />
-                        </svg>
-                      );
 
                     return (
                       <button
@@ -1370,7 +1734,7 @@ export default function TimelinePage({
                         title={tUI(langCode, `timeline.sort.title.${mode}`)}
                         aria-label={tUI(langCode, `timeline.sort.${mode}`)}
                       >
-                        {icon}
+                        {getSortIcon(mode)}
                       </button>
                     );
                   })}
@@ -1400,24 +1764,6 @@ export default function TimelinePage({
                 <div className="flex items-center gap-1.5">
                 {(["all", "public", "private"] as const).map((v) => {
                   const active = visibilityFilter === v;
-                  const icon =
-                    v === "all" ? (
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <circle cx="12" cy="12" r="7.5" />
-                        <path d="M4.5 12h15" strokeLinecap="round" />
-                        <path d="M12 4.5c2.3 2.1 3.5 4.6 3.5 7.5S14.3 17.4 12 19.5c-2.3-2.1-3.5-4.6-3.5-7.5S9.7 6.6 12 4.5Z" />
-                      </svg>
-                    ) : v === "public" ? (
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M2 12s3.5-5 10-5 10 5 10 5-3.5 5-10 5-10-5-10-5Z" />
-                        <circle cx="12" cy="12" r="2.5" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <rect x="5" y="11" width="14" height="9" rx="2" />
-                        <path d="M8 11V8.5A4 4 0 0 1 12 4.5a4 4 0 0 1 4 4V11" />
-                      </svg>
-                    );
                   return (
                     <button
                       key={v}
@@ -1437,7 +1783,7 @@ export default function TimelinePage({
                       )}
                       aria-label={tUI(langCode, `timeline.visibility.${v}`)}
                     >
-                      {icon}
+                      {getVisibilityIcon(v)}
                     </button>
                   );
                 })}
@@ -1482,7 +1828,6 @@ export default function TimelinePage({
               </div>
             </div>
           </div>
-        </div>
 
         {error && (
           <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">

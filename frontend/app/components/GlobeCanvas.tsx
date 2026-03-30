@@ -126,12 +126,16 @@ function thinCities(cities: CitiesEntry[]): CitiesEntry[] {
 
 /* ============================== Scene bits ============================== */
 
-function useEuropeStart(radius: number, embedded: boolean) {
+function useEuropeStart(
+  radius: number,
+  embedded: boolean,
+  startFullyZoomedOut: boolean
+) {
   const { camera } = useThree();
   React.useEffect(() => {
     const targetLat = 47;
     const targetLon = 10;
-    const camDist = radius * (embedded ? 2.25 : 1.7);
+    const camDist = radius * (embedded ? (startFullyZoomedOut ? 4.1 : 2.25) : 1.7);
     const look = new THREE.Vector3(0, 0, 0);
     const pos = latLonToVector3(targetLat, targetLon, radius)
       .normalize()
@@ -140,7 +144,7 @@ function useEuropeStart(radius: number, embedded: boolean) {
     camera.position.copy(pos);
     camera.lookAt(look);
     camera.updateProjectionMatrix();
-  }, [camera, embedded, radius]);
+  }, [camera, embedded, radius, startFullyZoomedOut]);
 }
 
 function CityDots({
@@ -340,12 +344,15 @@ function GlobeMesh({
 
 export default function GlobeCanvas({
   onPointSelect,
+  onClearPointSelect,
   initialRadiusKm,
   clearSelectionSignal = 0,
   height,
   radius: globeRadius,
   embedded = false,
   footerPosition = "bottom",
+  startFullyZoomedOut = false,
+  onExitEmbeddedMap,
 }: {
   onPointSelect?: (info: {
     lat: number;
@@ -355,12 +362,15 @@ export default function GlobeCanvas({
     city?: string;
     radiusKm: number;
   }) => void;
+  onClearPointSelect?: () => void;
   initialRadiusKm?: number;
   clearSelectionSignal?: number;
   height?: number; // default 700
   radius?: number;
   embedded?: boolean;
   footerPosition?: "top" | "bottom";
+  startFullyZoomedOut?: boolean;
+  onExitEmbeddedMap?: () => void;
 }) {
   const radius = typeof globeRadius === "number" ? globeRadius : 1.0;
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -377,7 +387,6 @@ export default function GlobeCanvas({
 
   const [dragging, setDragging] = React.useState(false);
   const [hoveringCity, setHoveringCity] = React.useState(false);
-  const [isFullscreen, setIsFullscreen] = React.useState(false);
 
   const supabase = React.useMemo(() => createClientComponentClient(), []);
   const [langCode, setLangCode] = React.useState<string>("en");
@@ -508,24 +517,24 @@ export default function GlobeCanvas({
     setNearestCity(name || "Unknown");
   }, []);
 
-  React.useEffect(() => {
-    const onFullscreenChange = () => {
-      setIsFullscreen(document.fullscreenElement === containerRef.current);
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () =>
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
-
   const [radiusKm, setRadiusKm] = React.useState(initialRadiusKm ?? 1500);
   const effectiveRadiusKm = Math.max(MIN_EFFECTIVE_RADIUS_KM, radiusKm);
 
-  React.useEffect(() => {
+  const resetPickedPointState = React.useCallback(() => {
     setPicked(null);
     setContinent("");
     setCountry("");
     setNearestCity("");
-  }, [clearSelectionSignal]);
+  }, []);
+
+  const clearPickedPoint = React.useCallback(() => {
+    resetPickedPointState();
+    onClearPointSelect?.();
+  }, [onClearPointSelect, resetPickedPointState]);
+
+  React.useEffect(() => {
+    resetPickedPointState();
+  }, [resetPickedPointState, clearSelectionSignal]);
 
   const updateAttributesFor = React.useCallback(
     (lat: number, lon: number) => {
@@ -676,20 +685,6 @@ export default function GlobeCanvas({
     return value;
   };
 
-  const toggleFullscreen = React.useCallback(async () => {
-    const node = containerRef.current;
-    if (!node) return;
-    try {
-      if (document.fullscreenElement === node) {
-        await document.exitFullscreen();
-      } else {
-        await node.requestFullscreen();
-      }
-    } catch {
-      /* no-op */
-    }
-  }, []);
-
   const compactInfo = embedded && footerPosition === "top";
 
   const infoPanel = (
@@ -705,38 +700,50 @@ export default function GlobeCanvas({
         zIndex: 5,
       }}
     >
-      <div
-        className={
-          compactInfo
-            ? "grid grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[11px] leading-4"
-            : "grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"
-        }
-      >
-        <div className="min-w-0">
-          <div className={compactInfo ? "truncate" : "whitespace-nowrap"}>
-            <span className="text-neutral-500">
-              {tUI(langCode, "globe.footer.lat")}
-            </span>{" "}
-            <span className="break-words font-medium text-neutral-800">
-              {picked ? picked.lat.toFixed(4) : "-"}
-            </span>
-          </div>
-          <div className={compactInfo ? "truncate" : "whitespace-nowrap"}>
-            <span className="text-neutral-500">
-              {tUI(langCode, "globe.footer.lon")}
-            </span>{" "}
-            <span className="break-words font-medium text-neutral-800">
-              {picked ? picked.lon.toFixed(4) : "-"}
-            </span>
+        <div
+          className={
+            compactInfo
+              ? "grid grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[11px] leading-4"
+              : "grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2"
+          }
+        >
+          <div className="min-w-0">
+          <div className="flex items-center gap-3 whitespace-nowrap">
+            <div className="min-w-0 truncate">
+              <span className="text-neutral-700">
+                {tUI(langCode, "globe.footer.lat")}
+              </span>{" "}
+              <span className="break-words font-semibold text-neutral-950">
+                {picked ? picked.lat.toFixed(4) : "-"}
+              </span>
+            </div>
+            <div className="min-w-0 truncate">
+              <span className="text-neutral-700">
+                {tUI(langCode, "globe.footer.lon")}
+              </span>{" "}
+              <span className="break-words font-semibold text-neutral-950">
+                {picked ? picked.lon.toFixed(4) : "-"}
+              </span>
+            </div>
           </div>
           <div
-            className={`flex items-center ${compactInfo ? "mt-1 gap-2" : "mt-2 max-w-[220px] gap-3"}`}
+            className={`${
+              compactInfo ? "mt-1.5" : "mt-2"
+            }`}
           >
-            <span className="whitespace-nowrap text-neutral-500">
-              {tUI(langCode, "globe.footer.city_radius")}
-            </span>
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="whitespace-nowrap text-neutral-700">
+                {tUI(langCode, "globe.footer.city_radius")}
+              </span>
+              <span
+                className="font-semibold text-[var(--geo-navy)]"
+                style={{ width: compactInfo ? 52 : 60, textAlign: "right" }}
+              >
+                {radiusKm}
+              </span>
+            </div>
             <input
-              className="min-w-0 flex-1"
+              className="block w-full"
               type="range"
               min={25}
               max={5000}
@@ -744,36 +751,30 @@ export default function GlobeCanvas({
               value={radiusKm}
               onChange={(e) => setRadiusKm(Number(e.target.value))}
             />
-            <span
-              className="font-semibold text-[var(--geo-navy)]"
-              style={{ width: compactInfo ? 34 : 40, textAlign: "right" }}
-            >
-              {radiusKm}
-            </span>
           </div>
         </div>
         <div className="min-w-0 break-words">
           <div className={compactInfo ? "truncate" : undefined}>
-            <span className="text-neutral-500">
+            <span className="text-neutral-700">
               {tUI(langCode, "globe.footer.continent")}
             </span>{" "}
-            <span className="break-words font-medium text-neutral-800">
+            <span className="break-words font-semibold text-neutral-950">
               {displayUnknown(continent)}
             </span>
           </div>
           <div className={compactInfo ? "truncate" : undefined}>
-            <span className="text-neutral-500">
+            <span className="text-neutral-700">
               {tUI(langCode, "globe.footer.country")}
             </span>{" "}
-            <span className="break-words font-medium text-neutral-800">
+            <span className="break-words font-semibold text-neutral-950">
               {displayUnknown(country)}
             </span>
           </div>
           <div className={compactInfo ? "truncate" : undefined}>
-            <span className="text-neutral-500">
+            <span className="text-neutral-700">
               {tUI(langCode, "globe.footer.nearest_city")}
             </span>{" "}
-            <span className="break-words font-medium text-neutral-800">
+            <span className="break-words font-semibold text-neutral-950">
               {displayUnknown(nearestCity)}
             </span>
           </div>
@@ -802,37 +803,47 @@ export default function GlobeCanvas({
           flex: embedded ? "1 1 auto" : undefined,
         }}
       >
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          className="absolute right-4 top-4 z-20 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/60 bg-white/82 text-[var(--geo-navy)] shadow-[0_18px_34px_-18px_rgba(16,32,51,0.8)] backdrop-blur hover:bg-white"
-          title={
-            isFullscreen
-              ? "Chiudi schermo intero"
-              : "Apri a schermo intero"
-          }
-          aria-label={
-            isFullscreen
-              ? "Chiudi schermo intero"
-              : "Apri a schermo intero"
-          }
-        >
-          {isFullscreen ? (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M9 15H5v4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M15 9h4V5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M5 15l5-5" strokeLinecap="round" />
-              <path d="M19 9l-5 5" strokeLinecap="round" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M9 5H5v4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M15 19h4v-4" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M5 9l5-5" strokeLinecap="round" />
-              <path d="M19 15l-5 5" strokeLinecap="round" />
-            </svg>
-          )}
-        </button>
+        <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+          {embedded && onExitEmbeddedMap ? (
+            <>
+              <button
+                type="button"
+                onClick={clearPickedPoint}
+                className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                title="Clear"
+                aria-label="Clear"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                >
+                  <path d="m6 6 12 12" strokeLinecap="round" />
+                  <path d="m18 6-12 12" strokeLinecap="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={onExitEmbeddedMap}
+                className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                title="Timeline"
+                aria-label="Timeline"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                >
+                  <path d="M4 6.5h16l-6.3 7.2v4.8l-3.4-1.8v-3Z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </>
+          ) : null}
+        </div>
         <Canvas
           style={{
             width: "100%",
@@ -857,6 +868,7 @@ export default function GlobeCanvas({
           <Scene
             radius={radius}
             embedded={embedded}
+            startFullyZoomedOut={startFullyZoomedOut}
             onPickGlobePoint={(lat, lon) => {
               updateAttributesFor(lat, lon);
             }}
@@ -881,6 +893,7 @@ export default function GlobeCanvas({
 function Scene({
   radius,
   embedded,
+  startFullyZoomedOut,
   onPickGlobePoint,
   cities,
   onDragStart,
@@ -892,6 +905,7 @@ function Scene({
 }: {
   radius: number;
   embedded: boolean;
+  startFullyZoomedOut: boolean;
   onPickGlobePoint: (lat: number, lon: number) => void;
   cities: CitiesEntry[];
   onDragStart: () => void;
@@ -901,7 +915,7 @@ function Scene({
   markerPosition: THREE.Vector3 | null;
   markerSize: number;
 }) {
-  useEuropeStart(radius, embedded);
+  useEuropeStart(radius, embedded, startFullyZoomedOut);
 
   const handlePickGlobe = (lat: number, lon: number) => {
     onPickGlobePoint(lat, lon);
@@ -939,10 +953,10 @@ function Scene({
         enablePan={false}
         enableDamping
         dampingFactor={0.08}
-        rotateSpeed={0.15}
+        rotateSpeed={0.55}
         minDistance={embedded ? 1.7 : 1.25}
         maxDistance={embedded ? 4.1 : 3.2}
-        zoomSpeed={0.35}
+        zoomSpeed={0.28}
       />
     </>
   );

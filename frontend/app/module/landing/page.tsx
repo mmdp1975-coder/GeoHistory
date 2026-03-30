@@ -107,26 +107,13 @@ export default function LandingPage(): JSX.Element {
               </Suspense>
             ) : (
               <div className="relative h-[calc(100dvh-var(--gh-topbar-height,52px)-12px)] min-h-[560px]">
-                <button
-                  type="button"
-                  onClick={() => setMobilePanel("timeline")}
-                  className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-2 text-xs font-semibold text-white shadow-[0_14px_32px_-24px_rgba(0,0,0,0.6)] backdrop-blur-md"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <path d="M5 7h14M5 12h14M5 17h9" strokeLinecap="round" />
-                  </svg>
-                  <span>Timeline</span>
-                </button>
                 <GlobeCanvas
                   embedded
                   height={460}
                   radius={1.18}
+                  startFullyZoomedOut
+                  onExitEmbeddedMap={() => setMobilePanel("timeline")}
+                  onClearPointSelect={clearGeoSelection}
                   onPointSelect={(info: any) => setPointInfo(info)}
                   initialRadiusKm={pointInfo?.radiusKm ?? DEFAULT_GEO_RADIUS_KM}
                   clearSelectionSignal={globeResetKey}
