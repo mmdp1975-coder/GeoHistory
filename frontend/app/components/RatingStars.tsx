@@ -352,7 +352,7 @@ export default function RatingStars(props: Props) {
         </div>
           {compactPickerOpen ? (
             <div
-              className="absolute left-1/2 top-[calc(100%+6px)] z-[120] flex -translate-x-1/2 flex-col gap-1 rounded-2xl border border-amber-200/80 bg-white/95 p-1.5 shadow-[0_14px_32px_-20px_rgba(16,32,51,0.45)] backdrop-blur"
+              className="absolute bottom-[calc(100%+6px)] left-1/2 z-[120] flex -translate-x-1/2 flex-col gap-1 rounded-2xl border border-amber-200/80 bg-white/95 p-1.5 shadow-[0_14px_32px_-20px_rgba(16,32,51,0.45)] backdrop-blur"
               onClick={(event) => event.stopPropagation()}
             >
           {[5, 4, 3, 2, 1].map((n) => {

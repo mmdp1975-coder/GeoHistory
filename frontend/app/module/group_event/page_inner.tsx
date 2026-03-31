@@ -229,11 +229,11 @@ function makeEventMarkerElement(ev: EventVM, isSelected: boolean) {
  wrap.style.height = isSelected ? "46px" : "34px";
  wrap.style.display = "grid";
  wrap.style.placeItems = "center";
- if (isSelected) {
-  wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
-  wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
-  wrap.style.zIndex = "1000";
- }
+  if (isSelected) {
+   wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
+   wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
+   wrap.style.zIndex = "12";
+  }
 
  const iconUrl = ev.event_type_icon ? normalizeMediaUrl(ev.event_type_icon) : null;
  if (iconUrl) {
@@ -918,8 +918,7 @@ const [mobileJourneyDescOpen, setMobileJourneyDescOpen] = useState(false);
 const [mobileTopMediaOpen, setMobileTopMediaOpen] = useState(false);
 const [mobileTopTabOpen, setMobileTopTabOpen] = useState(false);
 const [mobilePlayerOpen, setMobilePlayerOpen] = useState(false);
-const [mobileJourneyMenuOpen, setMobileJourneyMenuOpen] = useState(false);
-const [mobileEventMenuOpen, setMobileEventMenuOpen] = useState(false);
+const [mobileActionMenuOpen, setMobileActionMenuOpen] = useState(false);
 const mobileMediaRef = useRef<HTMLDivElement | null>(null);
 const mobileTopTabRef = useRef<HTMLDivElement | null>(null);
 const mobileTopOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -944,6 +943,19 @@ useEffect(() => {
     window.removeEventListener("keydown", onKey);
   };
 }, [isLg, mobilePlayerOpen]);
+
+useEffect(() => {
+  if (isLg) {
+    setMobileActionMenuOpen(false);
+    return;
+  }
+  if (!mobileActionMenuOpen) return;
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") setMobileActionMenuOpen(false);
+  };
+  window.addEventListener("keydown", onKey);
+  return () => window.removeEventListener("keydown", onKey);
+}, [isLg, mobileActionMenuOpen]);
 const BRAND_BLUE = "#0f3c8c";
 
 const toggleMapModeView = useCallback(() => {
@@ -2436,7 +2448,7 @@ const handleNextEvent = useCallback(() => {
 
 const handleSelectEvent = useCallback(
   (nextIndex: number) => {
-    playOnSelectRef.current = true;
+    playOnSelectRef.current = false;
     pendingSelectedMapFocusRef.current = nextIndex;
     if (!isLg) {
       initialMobileMapFitDoneRef.current = true;
@@ -2466,7 +2478,7 @@ const handleSelectEvent = useCallback(
         focusTarget();
       }
     }
-    seekToEventIndex(nextIndex, { autoplay: true });
+    seekToEventIndex(nextIndex, { autoplay: false });
   },
   [seekToEventIndex, rows, isLg],
 );
@@ -3316,12 +3328,13 @@ setJourneyMediaFirst(jmFirst);
 
  /* ===== Preferiti ===== */
  const { userId: _uid } = useCurrentUser();
- const [isFav, setIsFav] = useState<boolean>(false);
- const [savingFav, setSavingFav] = useState<boolean>(false);
+  const [isFav, setIsFav] = useState<boolean>(false);
+  const [savingFav, setSavingFav] = useState<boolean>(false);
+  const [journeyRatingCount, setJourneyRatingCount] = useState<number>(0);
 
- useEffect(() => {
- (async () => {
- if (!gid) return;
+  useEffect(() => {
+  (async () => {
+  if (!gid) return;
  try {
  if (!_uid) { setIsFav(false); return; }
  let { data: fav, error } = await supabase
@@ -3334,10 +3347,26 @@ setJourneyMediaFirst(jmFirst);
  setIsFav(!!alt.data);
  } else setIsFav(!!fav);
  } catch { setIsFav(false); }
- })();
- }, [gid, supabase, _uid]);
+  })();
+  }, [gid, supabase, _uid]);
 
- async function toggleFavourite() {
+  useEffect(() => {
+  (async () => {
+  if (!gid) { setJourneyRatingCount(0); return; }
+  try {
+  const { data } = await supabase
+    .from("v_group_event_rating_stats")
+    .select("ratings_count")
+    .eq("group_event_id", gid)
+    .maybeSingle();
+  setJourneyRatingCount(Number(data?.ratings_count ?? 0));
+  } catch {
+  setJourneyRatingCount(0);
+  }
+  })();
+  }, [gid, supabase]);
+
+  async function toggleFavourite() {
  if (!gid) return;
  if (!userId) { alert("Per usare i preferiti devi accedere."); return; }
  if (savingFav) return;
@@ -3411,11 +3440,11 @@ if (!map || !mapReady || !gid) return;
  wrap.style.height = isSelected ? "46px" : "34px";
  wrap.style.display = "grid";
  wrap.style.placeItems = "center";
- if (isSelected) {
- wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
- wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
- wrap.style.zIndex = "1000";
- }
+  if (isSelected) {
+  wrap.style.boxShadow = "0 6px 14px rgba(0,0,0,0.20)";
+  wrap.style.border = "2px solid rgba(245, 158, 11, 0.45)";
+  wrap.style.zIndex = "12";
+  }
  const iconUrl = ev.event_type_icon ? normalizeMediaUrl(ev.event_type_icon) : null;
  if (iconUrl) {
    const img = document.createElement("img");
@@ -3450,7 +3479,7 @@ if (!map || !mapReady || !gid) return;
  .setLngLat([ev.longitude!, ev.latitude!])
  .addTo(map as any);
 
- try { (marker as any).setZIndex?.(idx === activeEventIndex ? 1000 : 0); } catch {}
+  try { (marker as any).setZIndex?.(idx === activeEventIndex ? 12 : 0); } catch {}
 
  el.addEventListener("click", () => {
    handleSelectEvent(idx);
@@ -3938,6 +3967,27 @@ const mobilePlayerArtwork =
 const mobilePlayerProgress = audioDuration > 0 ? Math.max(0, Math.min(100, (audioCurrentTime / audioDuration) * 100)) : 0;
 const mobilePlayerSeekDisabled = !audioDuration || hasSegmentedMp3;
 const mobilePlayerNarrationText = (panelDescription || journeyDescription || "").trim();
+const hasJourneyRating = journeyRatingCount > 0;
+const hasJourneyPlayer = journeyMedia.length > 0 || hasMp3Audio;
+const hasEventPlayer = !!selectedEvent && (!!selectedEvent.video_url || !!selectedEvent.event_media_first || !!panelDescription || hasSegmentedMp3 || hasMp3Audio);
+const mobileHubActive =
+  mobileActionMenuOpen ||
+  mobileTopMediaOpen ||
+  mobileTopTabOpen ||
+  mobilePlayerOpen ||
+  mobileJourneyDescOpen;
+const toggleMobileActionMenu = useCallback(() => {
+  setMobileActionMenuOpen((open) => {
+    const nextOpen = !open;
+    if (!nextOpen) {
+      setMobileTopMediaOpen(false);
+      setMobileTopTabOpen(false);
+      setMobilePlayerOpen(false);
+      setMobileJourneyDescOpen(false);
+    }
+    return nextOpen;
+  });
+}, []);
 const concurrentDisplay = useMemo(() => {
  return concurrentOther || [];
 }, [concurrentOther]);
@@ -4224,7 +4274,7 @@ const journeyAndEventMedia = useMemo(() => {
       {mobileTopMediaOpen ? (
         <div
           className="pointer-events-none absolute z-20"
-          style={{ left: "12px", right: "72px", bottom: "14px" }}
+          style={{ left: "12px", right: "84px", bottom: "74px" }}
         >
           <div
             ref={mobileMediaRef}
@@ -4258,112 +4308,12 @@ const journeyAndEventMedia = useMemo(() => {
       )}
       <div
         className="pointer-events-none absolute z-20"
-        style={{ top: "12px", left: "12px" }}
-      >
-        <div className="pointer-events-auto flex flex-col items-start gap-3">
-          <button
-            type="button"
-            onClick={() => setMobileJourneyMenuOpen((v) => !v)}
-            className={`inline-flex h-12 w-12 items-center justify-center rounded-full border text-white shadow-[0_16px_28px_-20px_rgba(0,0,0,0.82)] backdrop-blur-xl transition ${
-              mobileJourneyMenuOpen
-                ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/24"
-                : "border-white/90 bg-[#050816]"
-            }`}
-            aria-label="Apri menu journey"
-            title="Apri menu journey"
-          >
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-              <path d="M6 7h12M6 12h12M6 17h8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-            </svg>
-          </button>
-          {mobileJourneyMenuOpen ? (
-            <div className="overflow-hidden rounded-[18px] border border-transparent bg-transparent p-1 shadow-none backdrop-blur-0">
-              <div className="flex flex-col items-start gap-1">
-                <button
-                  onClick={toggleFavourite}
-                  disabled={!group_event_id || savingFav}
-                  aria-pressed={isFav}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${isFav ? "border-rose-400/60 bg-[#2a0f14] text-rose-200 ring-2 ring-rose-400/16" : "border-white/20 bg-[#09101d]/88"}`}
-                  aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
-                >
-                  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "#ef4444" : "none"} stroke={isFav ? "#ef4444" : "currentColor"} strokeWidth="1.6" />
-                  </svg>
-                </button>
-                {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={17} compact allowTextFeedback compactStatsClassName="text-white/95" compactWrapClassName="inline-flex h-11 items-center justify-center rounded-full border border-white/20 bg-[#09101d]/88 px-2.5 shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)]" /> : null}
-                <button
-                  onClick={() => setMobileJourneyDescOpen((v) => !v)}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileJourneyDescOpen ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/16" : "border-white/20 bg-[#09101d]/88"}`}
-                  title={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
-                  aria-label={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
-                >
-                  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-                    <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </button>
-                <button
-                  onClick={openQuiz}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-[#09101d]/88 text-[17px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)]"
-                  title={tUI(uiLang, "journey.quiz.open")}
-                  aria-label={tUI(uiLang, "journey.quiz.open")}
-                >
-                  ?
-                </button>
-                <button
-                  onClick={() => {
-                    setMobileTopMediaOpen((v) => !v);
-                    setMobilePlayerOpen(false);
-                  }}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileTopMediaOpen ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/16" : "border-white/20 bg-[#09101d]/88"}`}
-                  title={mobileTopMediaOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
-                  aria-label={mobileTopMediaOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
-                >
-                  <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-                    {mobileTopMediaOpen ? (
-                      <>
-                        <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="currentColor" opacity="0.24" />
-                        <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="none" stroke="currentColor" strokeWidth="2" />
-                        <path d="M9.1 8.6 14.6 12l-5.5 3.4V8.6Z" fill="currentColor" />
-                        <path d="M20.2 8.8 16.1 12l4.1 3.2V8.8Z" fill="currentColor" />
-                      </>
-                    ) : (
-                      <>
-                        <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="currentColor" opacity="0.2" />
-                        <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="none" stroke="currentColor" strokeWidth="2" />
-                        <path d="M8.6 8.2 14.8 12l-6.2 3.8V8.2Z" fill="currentColor" />
-                        <path d="M20.2 8.8 16.1 12l4.1 3.2V8.8Z" fill="currentColor" opacity="0.96" />
-                      </>
-                    )}
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div
-        className="pointer-events-none absolute z-20"
         style={{ right: "10px", bottom: "12px" }}
       >
-        <div className="pointer-events-auto flex flex-col-reverse items-end gap-3">
-          <button
-            type="button"
-            onClick={() => setMobileEventMenuOpen((v) => !v)}
-            className={`inline-flex h-12 w-12 items-center justify-center rounded-full border text-white shadow-[0_16px_28px_-20px_rgba(0,0,0,0.82)] backdrop-blur-xl transition ${
-              mobileEventMenuOpen || mobilePlayerOpen || mobileTopTabOpen
-                ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/24"
-                : "border-white/90 bg-[#050816]"
-            }`}
-            aria-label="Apri menu evento"
-            title="Apri menu evento"
-          >
-            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-              <path d="M6 7h12M6 12h12M10 17h8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-            </svg>
-          </button>
-          {mobileEventMenuOpen ? (
-            <div className="overflow-hidden rounded-[18px] border border-transparent bg-transparent p-1 shadow-none backdrop-blur-0">
-              <div className="flex flex-col-reverse items-end gap-1">
+        <div className="pointer-events-auto flex flex-col items-end gap-3">
+          {mobileActionMenuOpen ? (
+            <>
+              <div className="flex flex-col items-end gap-2">
                 <button
                   onClick={() => setMobilePlayerOpen((v) => !v)}
                   className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobilePlayerOpen ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/16" : "border-white/20 bg-[#09101d]/88"}`}
@@ -4390,7 +4340,7 @@ const journeyAndEventMedia = useMemo(() => {
                       }, 0);
                     }
                   }}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileTab === "event" && mobileTopTabOpen ? "border-[#f6c86a]/75 bg-[#f6c86a]/28 ring-2 ring-[#f6c86a]/16" : "border-white/20 bg-[#09101d]/88"}`}
+                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border bg-[#09101d]/88 text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileTab === "event" && mobileTopTabOpen ? "border-[#f6c86a]/75 ring-2 ring-[#f6c86a]/16" : "border-white/20"}`}
                   title={tUI(uiLang, "journey.tab.description")}
                   aria-label={tUI(uiLang, "journey.tab.description")}
                 >
@@ -4458,8 +4408,121 @@ const journeyAndEventMedia = useMemo(() => {
                   </span>
                 )}
               </div>
-            </div>
+              <div className="absolute bottom-0 right-[74px]">
+                <div className="flex items-end gap-2">
+                  <button
+                    onClick={toggleFavourite}
+                    disabled={!group_event_id || savingFav}
+                    aria-pressed={isFav}
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-full border text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${isFav ? "border-rose-400/60 bg-[#2a0f14] text-rose-200 ring-2 ring-rose-400/16" : "border-white/20 bg-[#09101d]/88"}`}
+                    aria-label={isFav ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti"}
+                  >
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 6 4 4 6.5 4c1.74 0 3.41 1.01 4.22 2.53C11.09 5.01 12.76 4 14.5 4 17 4 19 6 19 8.5c0 3.78-3.4 6.86-8.55 11.54z" fill={isFav ? "#ef4444" : "none"} stroke={isFav ? "#ef4444" : "currentColor"} strokeWidth="1.6" />
+                    </svg>
+                  </button>
+                  {group_event_id ? <RatingStars group_event_id={group_event_id} journeyId={group_event_id} size={17} compact allowTextFeedback compactStatsClassName="text-white/95" compactWrapClassName="inline-flex h-11 items-center justify-center rounded-full border border-white/20 bg-[#09101d]/88 px-2.5 shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)]" /> : null}
+                  <button
+                    onClick={() => setMobileJourneyDescOpen((v) => !v)}
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-full border bg-[#09101d]/88 text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileJourneyDescOpen ? "border-[#f6c86a]/75 ring-2 ring-[#f6c86a]/16" : "border-white/20"}`}
+                    title={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
+                    aria-label={mobileJourneyDescOpen ? tUI(uiLang, "journey.description.hide") : tUI(uiLang, "journey.description.show")}
+                  >
+                    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                      <path d="M5 7h14M5 12h10M5 17h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={openQuiz}
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-[#09101d]/88 text-[17px] font-semibold text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)]"
+                    title={tUI(uiLang, "journey.quiz.open")}
+                    aria-label={tUI(uiLang, "journey.quiz.open")}
+                  >
+                    ?
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMobileTopMediaOpen((v) => !v);
+                      setMobilePlayerOpen(false);
+                    }}
+                    className={`inline-flex h-11 w-11 items-center justify-center rounded-full border bg-[#09101d]/88 text-white shadow-[0_10px_18px_-14px_rgba(0,0,0,0.68)] transition ${mobileTopMediaOpen ? "border-[#f6c86a]/75 ring-2 ring-[#f6c86a]/16" : "border-white/20"}`}
+                    title={mobileTopMediaOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+                    aria-label={mobileTopMediaOpen ? tUI(uiLang, "journey.player.close") : tUI(uiLang, "journey.player.open")}
+                  >
+                    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+                      {mobileTopMediaOpen ? (
+                        <>
+                          <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="currentColor" opacity="0.24" />
+                          <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="none" stroke="currentColor" strokeWidth="2" />
+                          <path d="M9.1 8.6 14.6 12l-5.5 3.4V8.6Z" fill="currentColor" />
+                          <path d="M20.2 8.8 16.1 12l4.1 3.2V8.8Z" fill="currentColor" />
+                        </>
+                      ) : (
+                        <>
+                          <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="currentColor" opacity="0.2" />
+                          <rect x="4" y="5" width="12.5" height="14" rx="2.7" fill="none" stroke="currentColor" strokeWidth="2" />
+                          <path d="M8.6 8.2 14.8 12l-6.2 3.8V8.2Z" fill="currentColor" />
+                          <path d="M20.2 8.8 16.1 12l4.1 3.2V8.8Z" fill="currentColor" opacity="0.96" />
+                        </>
+                      )}
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </>
           ) : null}
+          <button
+            type="button"
+            onClick={toggleMobileActionMenu}
+            className={`relative inline-flex h-[62px] w-[62px] items-center justify-center rounded-full border text-white shadow-[0_18px_32px_-20px_rgba(0,0,0,0.86)] backdrop-blur-xl transition ${
+              mobileHubActive
+                ? "border-[#f6c86a]/80 bg-[radial-gradient(circle_at_50%_35%,rgba(246,200,106,0.28),rgba(5,8,22,0.96)_68%)] ring-2 ring-[#f6c86a]/24"
+                : "border-white/85 bg-[radial-gradient(circle_at_50%_35%,rgba(94,144,255,0.16),rgba(5,8,22,0.96)_72%)]"
+            }`}
+            aria-label={mobileActionMenuOpen ? tUI(uiLang, "journey.mobile.menu.close") : tUI(uiLang, "journey.mobile.menu.open")}
+            title={mobileActionMenuOpen ? tUI(uiLang, "journey.mobile.menu.close") : tUI(uiLang, "journey.mobile.menu.open")}
+          >
+            <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.9" opacity="0.92" />
+              <path d="M8.2 7.8 15.6 12l-7.4 4.2V7.8Z" fill="currentColor" />
+            </svg>
+            <span
+              className={`absolute right-[7px] top-[6px] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border px-1 text-[10px] font-bold leading-none ${
+                isFav
+                  ? "border-rose-300/55 bg-rose-500 text-white"
+                  : "border-white/18 bg-[#09101d]/90 text-white/44"
+              }`}
+              aria-hidden="true"
+            >
+              ♥
+            </span>
+            <span
+              className={`absolute left-[6px] top-[6px] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border px-1 text-[10px] font-bold leading-none ${
+                hasJourneyRating
+                  ? "border-amber-200/65 bg-[#f6c86a] text-[#3f2d00]"
+                  : "border-white/18 bg-[#09101d]/90 text-white/44"
+              }`}
+              aria-hidden="true"
+            >
+              ★
+            </span>
+            <span
+              className="absolute bottom-[6px] left-[6px] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-white/18 bg-[#09101d]/90 px-1 text-[11px] font-bold leading-none text-white/88"
+              aria-hidden="true"
+            >
+              ?
+            </span>
+            <span
+              className={`absolute bottom-[6px] right-[6px] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full border px-1 text-[10px] font-bold leading-none ${
+                selectedEvent?.wiki_url
+                  ? "border-white/24 bg-white/10 text-white"
+                  : "border-white/18 bg-[#09101d]/90 text-white/44"
+              }`}
+              aria-hidden="true"
+            >
+              W
+            </span>
+          </button>
         </div>
       </div>
     </div>

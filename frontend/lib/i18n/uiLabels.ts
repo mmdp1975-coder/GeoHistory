@@ -178,6 +178,8 @@ const en: UIDictionary = {
   "journey.tab.wiki": "Wiki",
   "journey.wiki.unavailable": "Wiki unavailable",
   "journey.video.open": "Video",
+  "journey.mobile.menu.open": "Open journey and event controls",
+  "journey.mobile.menu.close": "Close journey and event controls",
 
   // GLOBE – footer
   "globe.footer.lat": "Lat:",
@@ -553,6 +555,8 @@ const it: UIDictionary = {
   "journey.tab.wiki": "Wiki",
   "journey.wiki.unavailable": "Wiki non disponibile",
   "journey.video.open": "Video",
+  "journey.mobile.menu.open": "Apri controlli journey ed evento",
+  "journey.mobile.menu.close": "Chiudi controlli journey ed evento",
 
   // GLOBE – footer
   "globe.footer.lat": "Lat:",
