@@ -53,6 +53,7 @@ type GeWithCard = {
   avg_rating: number | null;
   ratings_count: number | null;
   has_audio?: boolean;
+  guest_access?: boolean;
 };
 
 const DEFAULT_FROM = -5000;
@@ -130,6 +131,7 @@ type TimelinePageProps = {
   onClearExternalGeoFilter?: () => void;
   onOpenEmbeddedMap?: () => void;
   initialSortMode?: SortMode;
+  showGeoFilterBadge?: boolean;
 };
 
 type SortMode = "timeline" | "rating" | "favourites" | "published";
@@ -232,12 +234,14 @@ export default function TimelinePage({
   onClearExternalGeoFilter,
   onOpenEmbeddedMap,
   initialSortMode = "timeline",
+  showGeoFilterBadge = true,
 }: TimelinePageProps) {
   const search = useSearchParams();
   const router = useRouter();
   const supabase = useMemo(() => createClientComponentClient(), []);
 
   const { checking, error: authError, userId, personaCode } = useCurrentUser();
+  const isGuestMode = !checking && !userId;
 
   const [langCode, setLangCode] = useState<string>("en");
 
@@ -283,6 +287,9 @@ export default function TimelinePage({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
   const [mobileVisibilityOpen, setMobileVisibilityOpen] = useState(false);
+  const visibilityOptions: VisibilityFilter[] = ["all", "public", "private"];
+  const [guestGateOpen, setGuestGateOpen] = useState(false);
+  const [guestGateJourneyTitle, setGuestGateJourneyTitle] = useState<string>("");
 
   /* ===== Lingua UI: profiles.language_code (id = user.id) ===== */
   useEffect(() => {
@@ -371,6 +378,7 @@ export default function TimelinePage({
   /* ======= 1) INIT: dominio temporale da v_journeys ======= */
   useEffect(() => {
     let cancelled = false;
+    if (checking) return;
     (async () => {
       try {
         setInitializing(true);
@@ -410,7 +418,7 @@ export default function TimelinePage({
     return () => {
       cancelled = true;
     };
-  }, [search, supabase]);
+  }, [checking, search, supabase]);
 
   const minDomain = useMemo(
     () => (dataMin == null ? DEFAULT_FROM : Math.trunc(dataMin)),
@@ -614,7 +622,24 @@ export default function TimelinePage({
         // Rating stats per gli ID mostrati
         const ids = finalRows.map((r) => r.journey_id);
         let statsMap = new Map<UUID, StatsRow>();
+        let guestAccessMap = new Map<UUID, boolean>();
         if (ids.length) {
+          if (isGuestMode) {
+            const { data: guestRows, error: guestErr } = await supabase
+              .from("group_events")
+              .select("id, guest_access")
+              .in("id", ids);
+            if (guestErr) throw guestErr;
+            ((guestRows ?? []) as Array<{ id?: string | null; guest_access?: boolean | null }>).forEach(
+              (row) => {
+                const id = row?.id;
+                if (typeof id === "string") {
+                  guestAccessMap.set(id, row?.guest_access === true);
+                }
+              }
+            );
+          }
+
           const { data: stats, error: sErr } = await supabase
             .from("v_group_event_rating_stats")
             .select("group_event_id, avg_rating, ratings_count")
@@ -662,6 +687,7 @@ export default function TimelinePage({
             avg_rating: st?.avg_rating ?? null,
             ratings_count: st?.ratings_count ?? null,
             has_audio: audioSet.has(r.journey_id),
+            guest_access: isGuestMode ? guestAccessMap.get(r.journey_id) === true : true,
           };
         });
 
@@ -722,11 +748,13 @@ export default function TimelinePage({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    checking,
     domainReady,
     debouncedSel,
     qDebounced,
     supabase,
     userId,
+    isGuestMode,
     geoFilter?.lat,
     geoFilter?.lon,
     geoFilter?.radiusKm,
@@ -948,6 +976,15 @@ export default function TimelinePage({
     ? `${sortMode}:${displayCards[0]?.id ?? "none"}:${displayCards.length}`
     : "static";
 
+  useEffect(() => {
+    if (!guestGateOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGuestGateOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [guestGateOpen]);
+
   const forceEmbeddedCarouselToEdge = () => {
     const list = cardsListRef.current;
     if (!list || !embedded) return;
@@ -1003,6 +1040,22 @@ export default function TimelinePage({
     }
   }, [displayCards, sortMode, embedded]);
 
+  const clearGeoFilter = () => {
+    if (embedded && externalGeoFilter && onClearExternalGeoFilter) {
+      onClearExternalGeoFilter();
+      return;
+    }
+
+    const params = new URLSearchParams(search?.toString() || "");
+    params.delete("lat");
+    params.delete("lon");
+    params.delete("radiusKm");
+    router.replace(`?${params.toString()}`);
+  };
+
+  const showInlineGeoFilterBadge = showGeoFilterBadge && !!geoFilter;
+  const timelineControlTopClass = showInlineGeoFilterBadge ? "top-[64px]" : "top-[42px]";
+
   /* ================== RENDER ================== */
   return (
     <div
@@ -1040,56 +1093,6 @@ export default function TimelinePage({
             ) : null}
           </div>
 
-          {/* Geo filter badge */}
-          {geoFilter && (
-            <div
-              className={
-                embedded
-                  ? "mx-3 mt-1.5 flex items-center justify-between rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-[11px] text-white/78 shadow-[0_18px_36px_-24px_rgba(0,0,0,0.68)] backdrop-blur-md"
-                  : "mt-2 flex items-center justify-between rounded-xl border border-white/20 bg-white/10 px-3 py-1.5 text-[11px]"
-              }
-            >
-              <div>
-                {tUI(langCode, "timeline.geo.badge.label")}: lat{" "}
-                <b>{geoFilter.lat.toFixed(4)}</b>, lon{" "}
-                <b>{geoFilter.lon.toFixed(4)}</b>, radius{" "}
-                <b>{geoFilter.radiusKm}</b> km
-                {geoWarning && (
-                  <span className={embedded ? "ml-2 text-amber-600" : "ml-2 text-amber-200"}>
-                    {" "}
-                    — {geoWarning}
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  if (embedded && externalGeoFilter && onClearExternalGeoFilter) {
-                    onClearExternalGeoFilter();
-                    return;
-                  }
-                  const params = new URLSearchParams(
-                    search?.toString() || ""
-                  );
-                  params.delete("lat");
-                  params.delete("lon");
-                  params.delete("radiusKm");
-                  router.replace(`?${params.toString()}`);
-                }}
-                className={
-                  embedded
-                    ? "rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white/88 hover:bg-white/14"
-                    : "rounded-lg border border-white/20 bg-white/10 px-2 py-0.5 text-[11px] hover:bg-white/20"
-                }
-                title={tUI(
-                  langCode,
-                  "timeline.geo.badge.clear.title"
-                )}
-              >
-                {tUI(langCode, "timeline.geo.badge.clear")}
-              </button>
-            </div>
-          )}
-
           {/* TIMELINE */}
           <div
             className={
@@ -1104,7 +1107,11 @@ export default function TimelinePage({
                   {tUI(langCode, "timeline.timeline.loading")}
                 </div>
               ) : (
-                <div className="relative h-[86px] select-none">
+                <div
+                  className={`relative select-none ${
+                    showInlineGeoFilterBadge ? "h-[108px]" : "h-[86px]"
+                  }`}
+                >
                   <div className="absolute inset-x-3 top-0 flex items-center justify-between">
                     <label className="flex items-center gap-1 rounded-full border border-white/18 bg-white/10 px-2 py-1 text-[10px] text-white/92 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-sm">
                       <span className="uppercase tracking-[0.16em] text-white/70">
@@ -1176,9 +1183,37 @@ export default function TimelinePage({
                     </label>
                   </div>
 
+                  {showInlineGeoFilterBadge && geoFilter && (
+                    <div className="absolute inset-x-3 top-[32px] flex items-center justify-center">
+                      <div className="flex max-w-full items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-1 text-[10px] text-white/84 shadow-[0_18px_36px_-24px_rgba(0,0,0,0.68)] backdrop-blur-md">
+                        <span className="truncate">
+                          {tUI(langCode, "timeline.geo.badge.label")}: lat{" "}
+                          <b>{geoFilter.lat.toFixed(4)}</b>, lon{" "}
+                          <b>{geoFilter.lon.toFixed(4)}</b>, radius{" "}
+                          <b>{geoFilter.radiusKm}</b> km
+                          {geoWarning && (
+                            <span className="ml-2 text-amber-300">
+                              {geoWarning}
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          onClick={clearGeoFilter}
+                          className="shrink-0 rounded-full border border-white/10 bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/88 hover:bg-white/14"
+                          title={tUI(
+                            langCode,
+                            "timeline.geo.badge.clear.title"
+                          )}
+                        >
+                          {tUI(langCode, "timeline.geo.badge.clear")}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* pista */}
                   <div
-                    className="absolute left-3 right-3 top-[42px] -translate-y-1/2"
+                    className={`absolute left-3 right-3 ${timelineControlTopClass} -translate-y-1/2`}
                     ref={trackRef}
                   >
                     <div
@@ -1195,7 +1230,7 @@ export default function TimelinePage({
                   {/* banda selezione + maniglie */}
                   <div
                     ref={selectedBarRef}
-                    className="absolute left-[10%] top-[42px] w-[80%] -translate-y-1/2"
+                    className={`absolute left-[10%] ${timelineControlTopClass} w-[80%] -translate-y-1/2`}
                     style={{
                       height: 6,
                       borderRadius: 9999,
@@ -1429,7 +1464,7 @@ export default function TimelinePage({
                       </button>
                       {mobileVisibilityOpen ? (
                         <div className="absolute right-0 top-[calc(100%+8px)] z-30 flex min-w-[220px] flex-col gap-1 rounded-2xl border border-white/12 bg-[#111827]/96 p-1.5 text-white shadow-[0_24px_40px_-28px_rgba(0,0,0,0.92)] backdrop-blur-xl">
-                          {(["all", "public", "private"] as VisibilityFilter[]).map(
+                          {visibilityOptions.map(
                             (value) => {
                               const active = visibilityFilter === value;
                               return (
@@ -1499,24 +1534,26 @@ export default function TimelinePage({
                       </button>
                     ) : null}
 
-                    <button
-                      type="button"
-                      onClick={() => router.push("/module/build-journey")}
-                      className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
-                      title={tUI(langCode, "timeline.new_button_long")}
-                      aria-label={tUI(langCode, "timeline.new_button_long")}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-6 w-6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.9"
+                    {!isGuestMode ? (
+                      <button
+                        type="button"
+                        onClick={() => router.push("/module/build-journey")}
+                        className="inline-flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+                        title={tUI(langCode, "timeline.new_button_long")}
+                        aria-label={tUI(langCode, "timeline.new_button_long")}
                       >
-                        <path d="M12 5v14" strokeLinecap="round" />
-                        <path d="M5 12h14" strokeLinecap="round" />
-                      </svg>
-                    </button>
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-6 w-6"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                        >
+                          <path d="M12 5v14" strokeLinecap="round" />
+                          <path d="M5 12h14" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="hidden w-full items-center gap-2 lg:flex">
@@ -1566,26 +1603,28 @@ export default function TimelinePage({
                           </svg>
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => router.push("/module/build-journey")}
-                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-3 py-2.5 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105 sm:px-4"
-                        title={tUI(langCode, "timeline.new_button_long")}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          className="h-4 w-4"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.9"
+                      {!isGuestMode ? (
+                        <button
+                          type="button"
+                          onClick={() => router.push("/module/build-journey")}
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] px-3 py-2.5 text-[11px] font-semibold text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105 sm:px-4"
+                          title={tUI(langCode, "timeline.new_button_long")}
                         >
-                          <path d="M12 5v14" strokeLinecap="round" />
-                          <path d="M5 12h14" strokeLinecap="round" />
-                        </svg>
-                        <span className="hidden sm:inline">
-                          {tUI(langCode, "timeline.new_button_long")}
-                        </span>
-                      </button>
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.9"
+                          >
+                            <path d="M12 5v14" strokeLinecap="round" />
+                            <path d="M5 12h14" strokeLinecap="round" />
+                          </svg>
+                          <span className="hidden sm:inline">
+                            {tUI(langCode, "timeline.new_button_long")}
+                          </span>
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1677,13 +1716,13 @@ export default function TimelinePage({
               )}
             </div>
 
-            <div
-              className={
-                embedded
-                  ? "flex w-full flex-col gap-2"
-                  : "flex w-full flex-wrap items-end gap-2"
-              }
-            >
+              <div
+                className={
+                  embedded
+                    ? "flex w-full flex-col gap-1"
+                    : "flex w-full flex-wrap items-end gap-2"
+                }
+              >
               <div
                 className={
                   embedded
@@ -1762,7 +1801,7 @@ export default function TimelinePage({
                   </span>
                 </span>
                 <div className="flex items-center gap-1.5">
-                {(["all", "public", "private"] as const).map((v) => {
+                  {visibilityOptions.map((v) => {
                   const active = visibilityFilter === v;
                   return (
                     <button
@@ -1790,6 +1829,37 @@ export default function TimelinePage({
                 </div>
               </div>
 
+              {embedded ? (
+                <div className="ml-auto flex shrink-0 items-center gap-3 pl-2 text-[10px] leading-3 text-white/60">
+                  {initializing ? (
+                    <span>{tUI(langCode, "timeline.summary.initializing")}</span>
+                  ) : loading ? (
+                    <span className="animate-pulse">
+                      {tUI(langCode, "timeline.summary.loading")}
+                    </span>
+                  ) : (
+                    <>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[14px] font-semibold leading-none text-white">
+                          {cards.length}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                          {tUI(langCode, "timeline.summary.group_events")}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[14px] font-semibold leading-none text-white">
+                          {totalMatches}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                          eventi
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
               </div>
 
               <div
@@ -1799,32 +1869,34 @@ export default function TimelinePage({
                     : "ml-auto min-w-[140px] text-right text-[10px] leading-3 text-white/70"
                 }
               >
-                {initializing ? (
-                  <span>{tUI(langCode, "timeline.summary.initializing")}</span>
-                ) : loading ? (
-                  <span className="animate-pulse">
-                    {tUI(langCode, "timeline.summary.loading")}
-                  </span>
-                ) : (
-                  <div className="flex justify-end gap-3">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[14px] font-semibold leading-none text-white">
-                        {cards.length}
-                      </span>
-                      <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
-                        {tUI(langCode, "timeline.summary.group_events")}
-                      </span>
+                {!embedded ? (
+                  initializing ? (
+                    <span>{tUI(langCode, "timeline.summary.initializing")}</span>
+                  ) : loading ? (
+                    <span className="animate-pulse">
+                      {tUI(langCode, "timeline.summary.loading")}
+                    </span>
+                  ) : (
+                    <div className="flex justify-end gap-3">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[14px] font-semibold leading-none text-white">
+                          {cards.length}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                          {tUI(langCode, "timeline.summary.group_events")}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[14px] font-semibold leading-none text-white">
+                          {totalMatches}
+                        </span>
+                        <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
+                          eventi
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[14px] font-semibold leading-none text-white">
-                        {totalMatches}
-                      </span>
-                      <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
-                        eventi
-                      </span>
-                    </div>
-                  </div>
-                )}
+                  )
+                ) : null}
               </div>
             </div>
           </div>
@@ -1865,13 +1937,24 @@ export default function TimelinePage({
             return (
                 <Scorecard
                   key={g.id}
-                  href={`/module/group_event?gid=${encodeURIComponent(
-                    g.id
-                  )}`}
+                  href={
+                    !isGuestMode || g.guest_access
+                      ? `/module/group_event?gid=${encodeURIComponent(g.id)}`
+                      : undefined
+                  }
                   title={g.title || g.slug || "Untitled"}
                   coverUrl={g.cover_url}
                   isFavourite={isFav}
                   hasAudio={g.has_audio}
+                  ctaLabel={isGuestMode && !g.guest_access ? "Login required" : null}
+                  onCardClick={
+                    isGuestMode && !g.guest_access
+                      ? () => {
+                          setGuestGateJourneyTitle(g.title || g.slug || "This journey");
+                          setGuestGateOpen(true);
+                        }
+                      : undefined
+                  }
                   onToggleFavourite={(event) =>
                     toggleFavourite(event, g.id)
                   }
@@ -1893,6 +1976,47 @@ export default function TimelinePage({
           })}
         </ul>
       </main>
+      {guestGateOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[rgba(8,11,20,0.62)] px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-[rgba(18,49,78,0.12)] bg-white p-6 shadow-[0_28px_90px_-40px_rgba(16,32,51,0.62)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(16,32,51,0.46)]">
+              Guest Mode
+            </div>
+            <h3 className="mt-2 text-xl font-semibold text-[var(--geo-navy)]">
+              Register to open this journey
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-[rgba(16,32,51,0.72)]">
+              <span className="font-semibold text-[var(--geo-navy)]">
+                {guestGateJourneyTitle}
+              </span>{" "}
+              is visible in the catalog, but full access requires a free account.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white px-5 text-sm font-semibold text-[var(--geo-navy)] transition hover:bg-slate-50"
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push("/login/register")}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[var(--geo-navy)] px-5 text-sm font-semibold text-white transition hover:bg-[#123f66]"
+              >
+                Register Free
+              </button>
+              <button
+                type="button"
+                onClick={() => setGuestGateOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-full px-2 text-sm font-medium text-[rgba(16,32,51,0.58)] transition hover:text-[var(--geo-navy)]"
+              >
+                Continue as guest
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

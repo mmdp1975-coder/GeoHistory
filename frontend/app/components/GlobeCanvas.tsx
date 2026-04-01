@@ -801,47 +801,90 @@ export default function GlobeCanvas({
           position: "relative",
           overflow: "hidden",
           flex: embedded ? "1 1 auto" : undefined,
+          background:
+            "radial-gradient(circle at 50% 36%, rgba(132,176,232,0.18) 0%, rgba(88,132,196,0.16) 20%, rgba(34,68,116,0.2) 36%, rgba(9,20,41,0.88) 60%, rgba(2,6,16,1) 100%), linear-gradient(180deg, rgba(76,108,164,0.1) 0%, rgba(14,26,49,0.82) 28%, rgba(4,9,20,0.98) 100%)",
         }}
       >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% 104%, rgba(118,182,255,0.2) 0%, rgba(118,182,255,0.14) 18%, rgba(108,162,236,0.08) 34%, transparent 66%), radial-gradient(ellipse at 50% 88%, rgba(198,224,255,0.1) 0%, rgba(198,224,255,0.04) 28%, transparent 58%)",
+            mixBlendMode: "screen",
+            opacity: 0.9,
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            background:
+              "radial-gradient(circle at 50% 28%, rgba(226,239,255,0.08) 0%, rgba(226,239,255,0.03) 12%, transparent 24%), radial-gradient(circle at 50% 120%, rgba(90,144,220,0.1) 0%, transparent 28%)",
+            mixBlendMode: "screen",
+            opacity: 0.7,
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 18% 16%, rgba(255,255,255,0.12) 0 1px, transparent 1.7px), radial-gradient(circle at 78% 22%, rgba(255,255,255,0.1) 0 1px, transparent 1.8px), radial-gradient(circle at 66% 72%, rgba(255,255,255,0.06) 0 1px, transparent 1.7px), radial-gradient(circle at 28% 66%, rgba(255,255,255,0.05) 0 1px, transparent 1.9px), radial-gradient(circle at 50% 44%, rgba(153,205,255,0.1), transparent 42%)",
+            backgroundSize: "260px 260px, 320px 320px, 360px 360px, 420px 420px, 100% 100%",
+            opacity: 0.62,
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[42%]"
+          style={{
+            background:
+              "linear-gradient(180deg, transparent 0%, rgba(7,18,35,0.1) 26%, rgba(9,22,43,0.24) 52%, rgba(118,178,242,0.12) 82%, rgba(178,216,255,0.14) 100%)",
+            filter: "blur(8px)",
+            opacity: 0.92,
+          }}
+        />
         <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+          {picked ? (
+            <button
+              type="button"
+              onClick={clearPickedPoint}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-2 text-[11px] font-medium text-white shadow-sm transition hover:bg-white/12"
+              title="Clear geo filter"
+              aria-label="Clear geo filter"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+              >
+                <path d="m6 6 12 12" strokeLinecap="round" />
+                <path d="m18 6-12 12" strokeLinecap="round" />
+              </svg>
+              <span>Clear geo filter</span>
+            </button>
+          ) : null}
           {embedded && onExitEmbeddedMap ? (
-            <>
-              <button
-                type="button"
-                onClick={clearPickedPoint}
-                className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
-                title="Clear"
-                aria-label="Clear"
+            <button
+              type="button"
+              onClick={onExitEmbeddedMap}
+              className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
+              title="Timeline"
+              aria-label="Timeline"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.9"
-                >
-                  <path d="m6 6 12 12" strokeLinecap="round" />
-                  <path d="m18 6-12 12" strokeLinecap="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={onExitEmbeddedMap}
-                className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-white/10 bg-white/8 text-white shadow-sm transition hover:bg-white/12"
-                title="Timeline"
-                aria-label="Timeline"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M4 6.5h16l-6.3 7.2v4.8l-3.4-1.8v-3Z" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </>
+                <path d="M4 6.5h16l-6.3 7.2v4.8l-3.4-1.8v-3Z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           ) : null}
         </div>
         <Canvas
@@ -861,9 +904,9 @@ export default function GlobeCanvas({
           }}
           onPointerEnter={() => setDragging(false)}
         >
-          <ambientLight intensity={1.0} />
-          <directionalLight position={[5, 3, 5]} intensity={1.2} />
-          <directionalLight position={[-5, -2, -5]} intensity={0.7} />
+          <ambientLight intensity={1.02} color="#c7ddff" />
+          <directionalLight position={[6, 3.2, 5]} intensity={1.18} color="#eef5ff" />
+          <directionalLight position={[-5, -2, -5]} intensity={0.58} color="#7aaef0" />
 
           <Scene
             radius={radius}

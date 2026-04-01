@@ -139,6 +139,7 @@ export default function LandingPage(): JSX.Element {
               initialSortMode="published"
               externalGeoFilter={selectedGeoFilter}
               onClearExternalGeoFilter={clearGeoSelection}
+              showGeoFilterBadge={false}
             />
           </Suspense>
         </section>
@@ -150,6 +151,8 @@ export default function LandingPage(): JSX.Element {
                 embedded
                 height={GLOBE_H}
                 radius={1.18}
+                startFullyZoomedOut
+                onClearPointSelect={clearGeoSelection}
                 onPointSelect={(info: any) => setPointInfo(info)}
                 initialRadiusKm={pointInfo?.radiusKm ?? DEFAULT_GEO_RADIUS_KM}
                 clearSelectionSignal={globeResetKey}

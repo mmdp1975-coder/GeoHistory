@@ -812,7 +812,8 @@ export default function GroupEventModulePage() {
 const sp = useSearchParams();
 const debugPlayer = sp.get("debug") === "1";
  const supabase = useMemo(() => createClientComponentClient(), []);
- const { userId } = useCurrentUser();
+ const { checking, userId } = useCurrentUser();
+ const isGuestMode = !checking && !userId;
  const isLg = useIsLg();
 
 const queryLang = sp.get("lang");
@@ -3007,6 +3008,7 @@ useEffect(() => {
  /* ===== Fetch ===== */
  useEffect(() => {
  if (!gid) return;
+ if (checking) return;
  (async () => {
  try {
  setLoading(true);
@@ -3017,6 +3019,14 @@ useEffect(() => {
  if (geErr) throw geErr;
  if (!geRows?.length) throw new Error("Group event not found");
  const geData = geRows[0];
+ if (
+   isGuestMode &&
+   (geData?.guest_access !== true ||
+     geData?.visibility !== "public" ||
+     geData?.workflow_state !== "published")
+ ) {
+   throw new Error("This journey requires a free account. Please log in or register to continue.");
+ }
 
  let geTrData: any = null;
  const { data: geTrExact } = await supabase
@@ -3235,8 +3245,8 @@ setJourneyMediaFirst(jmFirst);
  } finally {
  setLoading(false);
  }
- })();
- }, [gid, desiredLang, supabase, eidParam]);
+  })();
+  }, [gid, checking, desiredLang, isGuestMode, supabase, eidParam]);
 
  // Carica correlazioni per l'evento selezionato (lazy, senza viste)
  useEffect(() => {
@@ -3246,20 +3256,32 @@ setJourneyMediaFirst(jmFirst);
  (async () => {
  try {
   console.debug("[GE] fetch correlated journeys", { evId: ev.id });
-  const { data, error } = await supabase
+  let corrQuery = supabase
   .from("event_group_event_correlated")
   .select("group_event_id, group_events!inner(id, slug, visibility, approved_at, group_event_translations!left(title, lang))")
   .eq("event_id", ev.id);
+  if (isGuestMode) {
+    corrQuery = corrQuery
+      .eq("group_events.guest_access", true)
+      .eq("group_events.visibility", "public");
+  }
+  const { data, error } = await corrQuery;
  if (error) throw error;
 
   // Se non c'è traduzione nella lingua, prendi una qualsiasi
   let rowsCorr: any[] = data ?? [];
   if (!rowsCorr.length) {
-  const { data: anyLang } = await supabase
+  let anyLangQuery = supabase
   .from("event_group_event_correlated")
-.select("group_event_id, group_events!inner(id, slug, visibility, approved_at, group_event_translations!left(title, lang))")
-.eq("event_id", ev.id)
-.limit(5);
+ .select("group_event_id, group_events!inner(id, slug, visibility, approved_at, group_event_translations!left(title, lang))")
+ .eq("event_id", ev.id)
+ .limit(5);
+  if (isGuestMode) {
+    anyLangQuery = anyLangQuery
+      .eq("group_events.guest_access", true)
+      .eq("group_events.visibility", "public");
+  }
+  const { data: anyLang } = await anyLangQuery;
   rowsCorr = anyLang ?? [];
   }
 
@@ -3324,7 +3346,7 @@ setJourneyMediaFirst(jmFirst);
   console.warn("[GE] correlated journeys fetch error", e);
   }
   })();
- }, [rows, activeEventIndex, resolvedLang, supabase, corrByEvent]);
+ }, [rows, activeEventIndex, resolvedLang, supabase, corrByEvent, isGuestMode]);
 
  /* ===== Preferiti ===== */
  const { userId: _uid } = useCurrentUser();
@@ -3822,7 +3844,39 @@ useEffect(() => {
   const { data, error } = await query;
 if (error) { setConcurrentOther([]); return; }
 
- const pickTitle = (translations: any[], lang: string) => {
+  let concurrentRows = (data || []) as any[];
+  if (isGuestMode && concurrentRows.length) {
+    const candidateJourneyIds = Array.from(
+      new Set(
+        concurrentRows
+          .map((row: any) => row?.group_event_id)
+          .filter((id: any): id is string => typeof id === "string" && id.trim().length > 0)
+      )
+    );
+    if (candidateJourneyIds.length) {
+      const { data: allowedRows, error: allowedErr } = await supabase
+        .from("group_events")
+        .select("id")
+        .in("id", candidateJourneyIds)
+        .eq("guest_access", true)
+        .eq("visibility", "public")
+        .eq("workflow_state", "published");
+      if (allowedErr) {
+        setConcurrentOther([]);
+        return;
+      }
+      const allowedSet = new Set(
+        ((allowedRows ?? []) as Array<{ id?: string | null }>)
+          .map((row) => row?.id ?? null)
+          .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+      );
+      concurrentRows = concurrentRows.filter((row: any) =>
+        allowedSet.has(String(row?.group_event_id || ""))
+      );
+    }
+  }
+
+  const pickTitle = (translations: any[], lang: string) => {
    const norm = (v: string | null | undefined) => (v || "").toLowerCase();
    const order = [lang, norm(resolvedLang), "it", "en"].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
    for (const target of order) {
@@ -3833,8 +3887,8 @@ if (error) { setConcurrentOther([]); return; }
    return first?.title ?? null;
  };
 
- const grouped = new Map<string, any>();
- (data || []).forEach((r: any) => {
+  const grouped = new Map<string, any>();
+  concurrentRows.forEach((r: any) => {
    const key = `${r.group_event_id}:${r.event_id}`;
    if (!grouped.has(key)) {
      grouped.set(key, {
@@ -3952,8 +4006,8 @@ if (error) { setConcurrentOther([]); return; }
   }
   setConcurrentOther(limited);
   } catch { setConcurrentOther([]); }
-  })();
-}, [rows, activeEventIndex, gid, supabase, resolvedLang, desiredLang]);
+})();
+}, [rows, activeEventIndex, gid, supabase, resolvedLang, desiredLang, isGuestMode]);
 
 const selectedEvent = activeEventIndex >= 0 ? rows[activeEventIndex] : null;
 const selectedTimelineItem = timelineData?.items?.find((it) => it.index === activeEventIndex) ?? null;

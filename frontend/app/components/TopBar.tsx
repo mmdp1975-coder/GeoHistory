@@ -24,6 +24,7 @@ export default function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
   const supabase = createClientComponentClient();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -59,9 +60,12 @@ export default function TopBar() {
           if (active) {
             console.log('[TopBar] Nessun utente: uso lingua browser:', browserLang);
             setLangCode(browserLang);
+            setIsAuthenticated(false);
           }
           return;
         }
+
+        if (active) setIsAuthenticated(true);
 
         const { data, error } = await supabase
           .from('profiles')
@@ -74,6 +78,7 @@ export default function TopBar() {
           if (active) {
             console.log('[TopBar] Uso lingua browser come fallback:', browserLang);
             setLangCode(browserLang);
+            setIsAuthenticated(true);
           }
           return;
         }
@@ -83,7 +88,10 @@ export default function TopBar() {
             '[TopBar] Nessun language_code definito sul profilo: uso lingua browser:',
             browserLang
           );
-          if (active) setLangCode(browserLang);
+          if (active) {
+            setLangCode(browserLang);
+            setIsAuthenticated(true);
+          }
           return;
         }
 
@@ -100,6 +108,7 @@ export default function TopBar() {
           setLangCode(
             typeof window !== 'undefined' ? window.navigator.language : 'en'
           );
+          setIsAuthenticated(false);
         }
       }
     }
@@ -310,17 +319,19 @@ export default function TopBar() {
                   </span>
                 </button>
 
-                <Link
-                  href="/module/settings"
-                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
-                  aria-label={tUI(langCode, 'topbar.settings')}
-                  title={tUI(langCode, 'topbar.settings.title')}
-                >
-                  <SettingsIcon className="h-6 w-6 md:h-5 md:w-5" />
-                  <span className="hidden md:inline">
-                    {tUI(langCode, 'topbar.settings')}
-                  </span>
-                </Link>
+                {isAuthenticated ? (
+                  <Link
+                    href="/module/settings"
+                    className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                    aria-label={tUI(langCode, 'topbar.settings')}
+                    title={tUI(langCode, 'topbar.settings.title')}
+                  >
+                    <SettingsIcon className="h-6 w-6 md:h-5 md:w-5" />
+                    <span className="hidden md:inline">
+                      {tUI(langCode, 'topbar.settings')}
+                    </span>
+                  </Link>
+                ) : null}
 
 
                 <Link
@@ -359,18 +370,35 @@ export default function TopBar() {
                   </span>
                 </button>
 
-                <button
-                  onClick={handleLogout}
-                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-0 py-0 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white md:h-auto md:w-auto md:gap-2 md:px-3.5 md:py-2`}
-                  type="button"
-                  aria-label={tUI(langCode, 'topbar.logout')}
-                  title={tUI(langCode, 'topbar.logout.title')}
-                >
-                  <LogOut className="h-6 w-6 md:h-5 md:w-5" />
-                  <span className="hidden md:inline">
-                    {tUI(langCode, 'topbar.logout')}
-                  </span>
-                </button>
+                {isAuthenticated ? (
+                  <button
+                    onClick={handleLogout}
+                    className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-0 py-0 text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white md:h-auto md:w-auto md:gap-2 md:px-3.5 md:py-2`}
+                    type="button"
+                    aria-label={tUI(langCode, 'topbar.logout')}
+                    title={tUI(langCode, 'topbar.logout.title')}
+                  >
+                    <LogOut className="h-6 w-6 md:h-5 md:w-5" />
+                    <span className="hidden md:inline">
+                      {tUI(langCode, 'topbar.logout')}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <Link
+                      href="/login"
+                      className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white/78 px-3 text-[13px] font-semibold text-[var(--geo-navy)] shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-white"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/login/register"
+                      className="hidden h-9 shrink-0 items-center justify-center rounded-full bg-[var(--geo-navy)] px-3 text-[13px] font-semibold text-white shadow-[0_8px_24px_-18px_rgba(16,32,51,0.45)] transition hover:-translate-y-px hover:bg-[#123f66] sm:inline-flex"
+                    >
+                      Register
+                    </Link>
+                  </div>
+                )}
               </div>
             </>
           )}
