@@ -2,16 +2,36 @@
 
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GA_MEASUREMENT_ID, getGuestId, isAnalyticsEnabled, trackEvent } from "@/lib/analytics";
 
 export default function AnalyticsTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const hasStartedSessionRef = useRef(false);
+  const [analyticsReady, setAnalyticsReady] = useState(false);
 
   useEffect(() => {
     if (!isAnalyticsEnabled()) return;
+    if (typeof window === "undefined") return;
+
+    if (typeof window.gtag === "function") {
+      setAnalyticsReady(true);
+      return;
+    }
+
+    const id = window.setInterval(() => {
+      if (typeof window.gtag === "function") {
+        setAnalyticsReady(true);
+        window.clearInterval(id);
+      }
+    }, 250);
+
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!isAnalyticsEnabled() || !analyticsReady) return;
 
     const guestId = getGuestId();
     const queryString = searchParams.toString();
@@ -28,7 +48,7 @@ export default function AnalyticsTracker() {
       });
       hasStartedSessionRef.current = true;
     }
-  }, [pathname, searchParams]);
+  }, [analyticsReady, pathname, searchParams]);
 
   if (!isAnalyticsEnabled()) return null;
 
@@ -37,6 +57,7 @@ export default function AnalyticsTracker() {
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
         strategy="afterInteractive"
+        onLoad={() => setAnalyticsReady(true)}
       />
       <Script id="ga4-init" strategy="afterInteractive">
         {`
