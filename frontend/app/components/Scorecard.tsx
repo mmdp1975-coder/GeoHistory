@@ -419,7 +419,7 @@ export function Scorecard({
           ) : null}
 
           {ctaLabel ? (
-            <div className={compact ? "absolute bottom-2 left-2" : "absolute bottom-3 left-3"}>
+            <div className={compact ? "absolute bottom-2 left-2" : "absolute left-3 top-3"}>
               <span className="inline-flex items-center rounded-full bg-[rgba(8,18,30,0.82)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white shadow">
                 {ctaLabel}
               </span>
