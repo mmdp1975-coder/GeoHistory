@@ -31,10 +31,7 @@ export const dynamic = "force-dynamic";
 function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const supabaseRef = useRef<SupabaseClient | null>(null);
-  if (!supabaseRef.current) {
-    supabaseRef.current = getSupabase();
-  }
-
+  const [supabaseReady, setSupabaseReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [checking, setChecking] = useState(true);
@@ -44,12 +41,18 @@ function ResetPasswordContent() {
   const [loading, setLoading] = useState(false);
   const inFlight = useRef(false);
 
+  useEffect(() => {
+    supabaseRef.current = getSupabase();
+    setSupabaseReady(true);
+  }, []);
+
   // STEP 1: verify the token_hash and create a session
   useEffect(() => {
     let cancelled = false;
 
     async function run() {
       try {
+        if (!supabaseRef.current) return;
         const token_hash = searchParams.get("token_hash");
         const typeParam = searchParams.get("type") as EmailOtpType | null;
 
@@ -98,11 +101,18 @@ function ResetPasswordContent() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, [searchParams, supabaseReady]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (checking || !ready || loading || inFlight.current || !supabaseRef.current) {
+    if (
+      checking ||
+      !ready ||
+      !supabaseReady ||
+      loading ||
+      inFlight.current ||
+      !supabaseRef.current
+    ) {
       return;
     }
 
@@ -143,7 +153,7 @@ function ResetPasswordContent() {
     }
   }
 
-  const disabled = !ready || checking || loading || ok;
+  const disabled = !supabaseReady || !ready || checking || loading || ok;
 
   return (
     <div className={styles.page}>

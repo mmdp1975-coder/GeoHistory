@@ -1,5 +1,6 @@
 // frontend/app/layout.tsx
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import AnalyticsTracker from "./components/AnalyticsTracker";
 import SupabaseProvider from "./components/SupabaseProvider";
@@ -63,7 +64,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased" suppressHydrationWarning>
-        <AnalyticsTracker />
+        <Suspense fallback={null}>
+          <AnalyticsTracker />
+        </Suspense>
         <SupabaseProvider>
           <IdleLogoutProvider>{children}</IdleLogoutProvider>
         </SupabaseProvider>
