@@ -15,6 +15,19 @@ export default function AnalyticsTracker() {
     if (!isAnalyticsEnabled()) return;
     if (typeof window === "undefined") return;
 
+    window.dataLayer = window.dataLayer || [];
+
+    if (typeof window.gtag !== "function") {
+      window.gtag = function gtag(...args: unknown[]) {
+        window.dataLayer.push(args);
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAnalyticsEnabled()) return;
+    if (typeof window === "undefined") return;
+
     if (typeof window.gtag === "function") {
       setAnalyticsReady(true);
       return;
@@ -57,17 +70,23 @@ export default function AnalyticsTracker() {
       <Script
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
         strategy="afterInteractive"
-        onLoad={() => setAnalyticsReady(true)}
+        onLoad={() => {
+          if (typeof window !== "undefined") {
+            window.dataLayer = window.dataLayer || [];
+
+            if (typeof window.gtag !== "function") {
+              window.gtag = function gtag(...args: unknown[]) {
+                window.dataLayer.push(args);
+              };
+            }
+
+            window.gtag("js", new Date());
+            window.gtag("config", GA_MEASUREMENT_ID, { send_page_view: false });
+          }
+
+          setAnalyticsReady(true);
+        }}
       />
-      <Script id="ga4-init" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          window.gtag = gtag;
-          gtag('js', new Date());
-          gtag('config', '${GA_MEASUREMENT_ID}', { send_page_view: false });
-        `}
-      </Script>
     </>
   );
 }
