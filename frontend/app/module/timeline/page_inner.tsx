@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useCurrentUser } from "@/lib/useCurrentUser";
 import { tUI } from "@/lib/i18n/uiLabels";
+import { trackEvent } from "@/lib/analytics";
 
 type UUID = string;
 
@@ -1947,14 +1948,26 @@ export default function TimelinePage({
                   isFavourite={isFav}
                   hasAudio={g.has_audio}
                   ctaLabel={isGuestMode && !g.guest_access ? "Login required" : null}
-                  onCardClick={
-                    isGuestMode && !g.guest_access
-                      ? () => {
-                          setGuestGateJourneyTitle(g.title || g.slug || "This journey");
-                          setGuestGateOpen(true);
-                        }
-                      : undefined
-                  }
+                  onCardClick={() => {
+                    const journeyTitle = g.title || g.slug || "This journey";
+                    if (isGuestMode && !g.guest_access) {
+                      trackEvent("locked_journey_click", {
+                        journey_id: g.id,
+                        journey_title: journeyTitle,
+                        source: embedded ? "embedded_timeline" : "timeline",
+                      });
+                      setGuestGateJourneyTitle(journeyTitle);
+                      setGuestGateOpen(true);
+                      return;
+                    }
+
+                    trackEvent("journey_open", {
+                      journey_id: g.id,
+                      journey_title: journeyTitle,
+                      source: embedded ? "embedded_timeline" : "timeline",
+                      guest_mode: isGuestMode,
+                    });
+                  }}
                   onToggleFavourite={(event) =>
                     toggleFavourite(event, g.id)
                   }
@@ -1994,14 +2007,26 @@ export default function TimelinePage({
             <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/login")}
+                onClick={() => {
+                  trackEvent("login_click", {
+                    source: "guest_gate",
+                    journey_title: guestGateJourneyTitle || null,
+                  });
+                  router.push("/login");
+                }}
                 className="inline-flex h-11 items-center justify-center rounded-full border border-[rgba(18,49,78,0.12)] bg-white px-5 text-sm font-semibold text-[var(--geo-navy)] transition hover:bg-slate-50"
               >
                 Login
               </button>
               <button
                 type="button"
-                onClick={() => router.push("/login/register")}
+                onClick={() => {
+                  trackEvent("register_click", {
+                    source: "guest_gate",
+                    journey_title: guestGateJourneyTitle || null,
+                  });
+                  router.push("/login/register");
+                }}
                 className="inline-flex h-11 items-center justify-center rounded-full bg-[var(--geo-navy)] px-5 text-sm font-semibold text-white transition hover:bg-[#123f66]"
               >
                 Register Free

@@ -65,6 +65,7 @@ type ConcurrentJourney = {
   evTitle: string;
   evRangeLabel?: string | null;
   startYear?: number;
+  guestAccessible?: boolean;
 };
 
 
@@ -3845,6 +3846,7 @@ useEffect(() => {
 if (error) { setConcurrentOther([]); return; }
 
   let concurrentRows = (data || []) as any[];
+  let allowedSet: Set<string> | null = null;
   if (isGuestMode && concurrentRows.length) {
     const candidateJourneyIds = Array.from(
       new Set(
@@ -3865,13 +3867,10 @@ if (error) { setConcurrentOther([]); return; }
         setConcurrentOther([]);
         return;
       }
-      const allowedSet = new Set(
+      allowedSet = new Set(
         ((allowedRows ?? []) as Array<{ id?: string | null }>)
           .map((row) => row?.id ?? null)
           .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
-      );
-      concurrentRows = concurrentRows.filter((row: any) =>
-        allowedSet.has(String(row?.group_event_id || ""))
       );
     }
   }
@@ -3891,19 +3890,20 @@ if (error) { setConcurrentOther([]); return; }
   concurrentRows.forEach((r: any) => {
    const key = `${r.group_event_id}:${r.event_id}`;
    if (!grouped.has(key)) {
-     grouped.set(key, {
-       event_id: r.event_id,
-       group_event_id: r.group_event_id,
-       year_from: r.year_from ?? null,
+      grouped.set(key, {
+        event_id: r.event_id,
+        group_event_id: r.group_event_id,
+        year_from: r.year_from ?? null,
        year_to: r.year_to ?? null,
        era: r.era ?? null,
        exact_date: r.exact_date ?? null,
        latitude: r.latitude ?? null,
        longitude: r.longitude ?? null,
        image_url: r.image_url ?? null,
-       translations: [],
-     });
-   }
+        translations: [],
+        guestAccessible: !isGuestMode || !!allowedSet?.has(String(r.group_event_id || "")),
+      });
+    }
    const g = grouped.get(key);
    if (r.title) g.translations.push({ title: r.title, lang: r.lang });
  });
@@ -3941,16 +3941,17 @@ if (error) { setConcurrentOther([]); return; }
          start: yearFrom ?? yearTo ?? 0,
        }
      : null);
-    return {
-      evId: String(r.event_id),
-      geId: String(r.group_event_id ?? ""),
-      geTitle: null,
-      evTitle: String(yy.title || "Event"),
-      evRangeLabel: formatEventRange(yy),
-      span: spn,
-      startYear: spn?.start,
-      ev: yy,
-    } as any;
+     return {
+       evId: String(r.event_id),
+       geId: String(r.group_event_id ?? ""),
+       geTitle: null,
+       evTitle: String(yy.title || "Event"),
+       evRangeLabel: formatEventRange(yy),
+       span: spn,
+       startYear: spn?.start,
+       guestAccessible: r.guestAccessible !== false,
+       ev: yy,
+     } as any;
  }).filter((x) => x && x.geId && x.evId);
  // filtro su span reale; se manca span includo comunque
  if (!s) { setConcurrentOther([]); return; }
@@ -4595,8 +4596,15 @@ const journeyAndEventMedia = useMemo(() => {
                 <button
                   key={`${c.geId}:${c.evId}`}
                   type="button"
-                  onClick={() => router.push(geUrl(c.geId, c.evId))}
-                  className="w-[84vw] max-w-none shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/6 text-left shadow-[0_18px_38px_-24px_rgba(0,0,0,0.76)]"
+                  onClick={() => {
+                    if (c.guestAccessible === false) return;
+                    router.push(geUrl(c.geId, c.evId));
+                  }}
+                  className={`w-[84vw] max-w-none shrink-0 overflow-hidden rounded-2xl border text-left shadow-[0_18px_38px_-24px_rgba(0,0,0,0.76)] ${
+                    c.guestAccessible === false
+                      ? "border-white/8 bg-white/5 opacity-75"
+                      : "border-white/10 bg-white/6"
+                  }`}
                   title={c.geTitle ?? c.evTitle}
                 >
                   <div className="flex items-stretch gap-3 p-3">
@@ -4625,6 +4633,11 @@ const journeyAndEventMedia = useMemo(() => {
                       {c.evRangeLabel ? (
                         <div className="text-[11px] text-white/56">
                           {c.evRangeLabel}
+                        </div>
+                      ) : null}
+                      {c.guestAccessible === false ? (
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-white/50">
+                          Login required
                         </div>
                       ) : null}
                     </div>
@@ -5071,15 +5084,24 @@ function ConcurrentJourneyCard({
   onClick?: () => void;
 }) {
   const eventLine = item.evRangeLabel ? `${item.evRangeLabel} - ${item.evTitle}` : item.evTitle;
+  const isLocked = item.guestAccessible === false;
   return (
     <a
       href={href}
       onClick={(e) => {
+        if (isLocked) {
+          e.preventDefault();
+          return;
+        }
         if (!onClick) return;
         e.preventDefault();
         onClick();
       }}
-      className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left shadow-sm transition ${
+        isLocked
+          ? "border-slate-200 bg-slate-50/85 opacity-75"
+          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+      }`}
       title={`${item.geTitle ?? "Journey"} - ${eventLine}`}
     >
       <div
@@ -5106,6 +5128,11 @@ function ConcurrentJourneyCard({
         <div className="truncate text-[12px] leading-5 text-slate-600">
           {eventLine}
         </div>
+        {isLocked ? (
+          <div className="pt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+            Login required
+          </div>
+        ) : null}
       </div>
     </a>
   );
