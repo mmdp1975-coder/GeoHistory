@@ -260,6 +260,14 @@ export default function NewJourneyPage() {
                 yearFrom={j.year_from_min}
                 yearTo={j.year_to_max}
                 prefetch={false}
+                onCardClick={() => {
+                  if (typeof window !== "undefined" && typeof window.gtag === "function") {
+                    window.gtag("event", "click_journey", {
+                      journey_id: j.journey_id,
+                      journey_title: title,
+                    });
+                  }
+                }}
                 liProps={{ "data-jid": j.journey_id, "data-slug": j.journey_slug }}
               />
             );
