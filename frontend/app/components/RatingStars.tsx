@@ -166,22 +166,40 @@ export default function RatingStars(props: Props) {
   async function persistRating(n: number, text: string) {
     const trimmedFeedback = text.trim();
     const payloadBase: Record<string, any> = { group_event_id: id, rating: n };
-    const payloads = trimmedFeedback
-      ? [
-          { ...payloadBase, feedback_text: trimmedFeedback },
-          { ...payloadBase, feedback: trimmedFeedback },
-          payloadBase,
-        ]
-      : [payloadBase];
-    let lastError: any = null;
+    const { error } = await supabase.from("v_rate_journey_upsert").insert(payloadBase as any);
+    if (error) return { savedText: false, error };
 
-    for (const payload of payloads) {
-      const { error } = await supabase.from("v_rate_journey_upsert").insert(payload as any);
-      if (!error) return { savedText: payload !== payloadBase && !!trimmedFeedback, error: null };
-      lastError = error;
+    if (!trimmedFeedback) return { savedText: false, error: null };
+
+    try {
+      const feedbackRes = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "rating",
+          type: "content",
+          title: null,
+          message: trimmedFeedback,
+          rating: n,
+          wants_reply: false,
+          group_event_id: id,
+          page_path: typeof window !== "undefined" ? window.location.pathname : null,
+          language_code: (langCode || "").slice(0, 2) || null,
+          metadata: {},
+        }),
+      });
+
+      if (!feedbackRes.ok) {
+        const payload = await feedbackRes.json().catch(() => ({}));
+        console.warn("[RatingStars] Unable to persist text feedback:", payload?.error || feedbackRes.statusText);
+        return { savedText: false, error: null };
+      }
+    } catch (error: any) {
+      console.warn("[RatingStars] Unable to persist text feedback:", error?.message || error);
+      return { savedText: false, error: null };
     }
 
-    return { savedText: false, error: lastError };
+    return { savedText: true, error: null };
   }
 
   async function rate(n: number, text = feedbackText) {

@@ -41,3 +41,15 @@ export function trackEvent(eventName: string, params: AnalyticsEventParams = {})
     ...params,
   });
 }
+
+export function trackPageView(pagePath: string) {
+  if (typeof window === "undefined" || typeof window.gtag !== "function" || !isAnalyticsEnabled()) {
+    return;
+  }
+
+  window.gtag("event", "page_view", {
+    page_path: pagePath,
+    page_location: `${window.location.origin}${pagePath}`,
+    guest_id: getGuestId(),
+  });
+}

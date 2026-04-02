@@ -1,356 +1,526 @@
 {
-  "journey_title_it": "I pirati dei Caraibi: nascita, apogeo e declino",
-  "journey_title_en": "Pirates of the Caribbean: Rise, Zenith, and Decline",
+  "journey_title_it": "Gli Imperatori Romani: dal Principato alla Caduta di Costantinopoli",
+  "journey_title_en": "The Roman Emperors: From the Principate to the Fall of Constantinople",
   "events": [
     {
-      "titolo_evento_it": "1492: Sbarco di Colombo a San Salvador",
-      "title_event_en": "1492: Columbus Landfall at San Salvador",
-      "era": "AD",
-      "from": 1492,
-      "to": 1492,
-      "continent": "North America",
-      "country": "Bahamas",
-      "location": "San Salvador Island"
-    },
-    {
-      "titolo_evento_it": "1494: Trattato di Tordesillas e spartizione atlantica",
-      "title_event_en": "1494: Treaty of Tordesillas and Atlantic Partition",
-      "era": "AD",
-      "from": 1494,
-      "to": 1494,
+      "titolo_evento_it": "Vittoria di Ottaviano ad Azio",
+      "title_event_en": "Octavian’s Victory at Actium",
+      "era": "BC",
+      "from": 31,
+      "to": 31,
       "continent": "Europe",
-      "country": "Spain",
-      "location": "Tordesillas"
+      "country": "Greece",
+      "location": "Actium, Greece"
     },
     {
-      "titolo_evento_it": "1555: Saccheggio francese dell’Avana da parte di Jacques de Sores",
-      "title_event_en": "1555: French Sack of Havana by Jacques de Sores",
-      "era": "AD",
-      "from": 1555,
-      "to": 1555,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "1561: L’Avana designata punto di riunione della Flotta delle Indie",
-      "title_event_en": "1561: Havana Designated Rendezvous of the Spanish Treasure Fleets",
-      "era": "AD",
-      "from": 1561,
-      "to": 1561,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "1568: Scontro di San Juan de Ulúa tra Hawkins e la Spagna",
-      "title_event_en": "1568: Battle of San Juan de Ulúa",
-      "era": "AD",
-      "from": 1568,
-      "to": 1568,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "San Juan de Ulúa, Veracruz"
-    },
-    {
-      "titolo_evento_it": "1572–1573: Incursioni di Drake a Nombre de Dios e sul Camino Real",
-      "title_event_en": "1572–1573: Drake’s Raids on Nombre de Dios and the Camino Real",
-      "era": "AD",
-      "from": 1572,
-      "to": 1573,
-      "continent": "North America",
-      "country": "Panama",
-      "location": "Nombre de Dios"
-    },
-    {
-      "titolo_evento_it": "1586: Drake saccheggia Cartagena de Indias",
-      "title_event_en": "1586: Drake Sacks Cartagena de Indias",
-      "era": "AD",
-      "from": 1586,
-      "to": 1586,
-      "continent": "South America",
-      "country": "Colombia",
-      "location": "Cartagena de Indias"
-    },
-    {
-      "titolo_evento_it": "1595: Difesa spagnola respinge Drake a San Juan",
-      "title_event_en": "1595: Spanish Defense Repels Drake at San Juan",
-      "era": "AD",
-      "from": 1595,
-      "to": 1595,
-      "continent": "North America",
-      "country": "Puerto Rico",
-      "location": "San Juan"
-    },
-    {
-      "titolo_evento_it": "1625: Insediamenti franco-inglesi a Saint Kitts favoriscono i bucanieri",
-      "title_event_en": "1625: French-English Settlements on Saint Kitts Foster Buccaneering",
-      "era": "AD",
-      "from": 1625,
-      "to": 1625,
-      "continent": "North America",
-      "country": "Saint Kitts and Nevis",
-      "location": "Basseterre, Saint Kitts"
-    },
-    {
-      "titolo_evento_it": "1634: Curaçao olandese diventa base corsara",
-      "title_event_en": "1634: Dutch Curaçao Becomes a Privateering Base",
-      "era": "AD",
-      "from": 1634,
-      "to": 1634,
-      "continent": "North America",
-      "country": "Curaçao",
-      "location": "Willemstad"
-    },
-    {
-      "titolo_evento_it": "1635: Tortuga si consolida come roccaforte dei bucanieri",
-      "title_event_en": "1635: Tortuga Consolidates as a Buccaneer Stronghold",
-      "era": "AD",
-      "from": 1635,
-      "to": 1635,
-      "continent": "North America",
-      "country": "Haiti",
-      "location": "Île de la Tortue"
-    },
-    {
-      "titolo_evento_it": "1655: Conquista inglese della Giamaica",
-      "title_event_en": "1655: English Conquest of Jamaica",
-      "era": "AD",
-      "from": 1655,
-      "to": 1655,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Spanish Town"
-    },
-    {
-      "titolo_evento_it": "1662: Port Royal emette lettere di corsa contro la Spagna",
-      "title_event_en": "1662: Port Royal Issues Letters of Marque Against Spain",
-      "era": "AD",
-      "from": 1662,
-      "to": 1662,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Port Royal"
-    },
-    {
-      "titolo_evento_it": "1668: Henry Morgan conquista Portobelo",
-      "title_event_en": "1668: Henry Morgan Captures Portobelo",
-      "era": "AD",
-      "from": 1668,
-      "to": 1668,
-      "continent": "North America",
-      "country": "Panama",
-      "location": "Portobelo"
-    },
-    {
-      "titolo_evento_it": "1670: Trattato di Madrid tra Inghilterra e Spagna",
-      "title_event_en": "1670: Treaty of Madrid Between England and Spain",
-      "era": "AD",
-      "from": 1670,
-      "to": 1670,
+      "titolo_evento_it": "Il Senato conferisce il titolo di Augusto a Ottaviano",
+      "title_event_en": "Senate Grants the Title “Augustus” to Octavian",
+      "era": "BC",
+      "from": 27,
+      "to": 27,
       "continent": "Europe",
-      "country": "Spain",
-      "location": "Madrid"
+      "country": "Italy",
+      "location": "Rome, Italy"
     },
     {
-      "titolo_evento_it": "1671: Sacco di Panama City da parte di Henry Morgan",
-      "title_event_en": "1671: Henry Morgan’s Sack of Panama City",
-      "era": "AD",
-      "from": 1671,
-      "to": 1671,
-      "continent": "North America",
-      "country": "Panama",
-      "location": "Panama City"
-    },
-    {
-      "titolo_evento_it": "1683: Laurens de Graaf saccheggia Veracruz",
-      "title_event_en": "1683: Laurens de Graaf Sacks Veracruz",
-      "era": "AD",
-      "from": 1683,
-      "to": 1683,
-      "continent": "North America",
-      "country": "Mexico",
-      "location": "Veracruz"
-    },
-    {
-      "titolo_evento_it": "1692: Il terremoto distrugge Port Royal",
-      "title_event_en": "1692: Earthquake Destroys Port Royal",
-      "era": "AD",
-      "from": 1692,
-      "to": 1692,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Port Royal"
-    },
-    {
-      "titolo_evento_it": "1697: Trattato di Ryswick riconosce Saint-Domingue alla Francia",
-      "title_event_en": "1697: Treaty of Ryswick Recognizes Saint-Domingue for France",
-      "era": "AD",
-      "from": 1697,
-      "to": 1697,
+      "titolo_evento_it": "Riforma delle province e dell'esercito di Augusto",
+      "title_event_en": "Augustus’ Provincial and Military Reforms",
+      "era": "BC",
+      "from": 27,
+      "to": 20,
       "continent": "Europe",
-      "country": "Netherlands",
-      "location": "Rijswijk"
+      "country": "Italy",
+      "location": "Rome, Italy"
     },
     {
-      "titolo_evento_it": "1698: Piracy Act e corti d’Ammiragliato coloniali",
-      "title_event_en": "1698: Piracy Act and Colonial Admiralty Courts",
+      "titolo_evento_it": "Consolidamento del Principato e inizio della Pax Romana",
+      "title_event_en": "Consolidation of the Principate and the Dawn of the Pax Romana",
       "era": "AD",
-      "from": 1698,
-      "to": 1698,
+      "from": 1,
+      "to": 14,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Morte di Augusto e successione di Tiberio",
+      "title_event_en": "Death of Augustus and Succession of Tiberius",
+      "era": "AD",
+      "from": 14,
+      "to": 14,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Ascesa e caduta di Seiano sotto Tiberio",
+      "title_event_en": "Sejanus’s Rise and Fall under Tiberius",
+      "era": "AD",
+      "from": 23,
+      "to": 31,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Caligola proclamato imperatore dopo Tiberio",
+      "title_event_en": "Caligula Proclaimed Emperor after Tiberius",
+      "era": "AD",
+      "from": 37,
+      "to": 37,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Assassinio di Caligola e proclamazione di Claudio",
+      "title_event_en": "Assassination of Caligula and Proclamation of Claudius",
+      "era": "AD",
+      "from": 41,
+      "to": 41,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Conquista della Britannia sotto Claudio",
+      "title_event_en": "Claudius’ Conquest of Britannia",
+      "era": "AD",
+      "from": 43,
+      "to": 43,
       "continent": "Europe",
       "country": "United Kingdom",
-      "location": "London"
+      "location": "Colchester, United Kingdom"
     },
     {
-      "titolo_evento_it": "1701–1714: Guerra di Successione Spagnola e boom del corsarismo caraibico",
-      "title_event_en": "1701–1714: War of the Spanish Succession and a Caribbean Privateering Boom",
+      "titolo_evento_it": "Nerone sale al trono dopo Claudio",
+      "title_event_en": "Nero Ascends the Throne after Claudius",
       "era": "AD",
-      "from": 1701,
-      "to": 1714,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Kingston"
-    },
-    {
-      "titolo_evento_it": "1703–1706: Nassau saccheggiata e abbandonata da coloni",
-      "title_event_en": "1703–1706: Nassau Raided and Abandoned by Settlers",
-      "era": "AD",
-      "from": 1703,
-      "to": 1706,
-      "continent": "North America",
-      "country": "Bahamas",
-      "location": "Nassau"
-    },
-    {
-      "titolo_evento_it": "1708: Esplosione del galeone San José presso Cartagena",
-      "title_event_en": "1708: San José Galleon Explodes off Cartagena",
-      "era": "AD",
-      "from": 1708,
-      "to": 1708,
-      "continent": "South America",
-      "country": "Colombia",
-      "location": "Cartagena de Indias"
-    },
-    {
-      "titolo_evento_it": "1713: Trattato di Utrecht e smobilitazione dei corsari",
-      "title_event_en": "1713: Treaty of Utrecht and Privateer Demobilization",
-      "era": "AD",
-      "from": 1713,
-      "to": 1713,
+      "from": 54,
+      "to": 54,
       "continent": "Europe",
-      "country": "Netherlands",
-      "location": "Utrecht"
+      "country": "Italy",
+      "location": "Rome, Italy"
     },
     {
-      "titolo_evento_it": "1715: L’uragano distrugge la Flotta del Tesoro sulla Treasure Coast",
-      "title_event_en": "1715: Hurricane Wrecks the Spanish Treasure Fleet on the Treasure Coast",
+      "titolo_evento_it": "Grande incendio di Roma e ricostruzione neroniana",
+      "title_event_en": "Great Fire of Rome and Nero’s Reconstruction",
       "era": "AD",
-      "from": 1715,
-      "to": 1715,
-      "continent": "North America",
-      "country": "United States",
-      "location": "Florida Treasure Coast"
+      "from": 64,
+      "to": 68,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
     },
     {
-      "titolo_evento_it": "1716–1718: Nascita della Repubblica dei Pirati a Nassau",
-      "title_event_en": "1716–1718: Birth of the Pirate Republic at Nassau",
+      "titolo_evento_it": "Caduta di Nerone e Anno dei quattro imperatori",
+      "title_event_en": "Fall of Nero and the Year of the Four Emperors",
       "era": "AD",
-      "from": 1716,
-      "to": 1718,
-      "continent": "North America",
-      "country": "Bahamas",
-      "location": "Nassau"
+      "from": 68,
+      "to": 69,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
     },
     {
-      "titolo_evento_it": "1717: Proclamazione del King’s Pardon di Giorgio I",
-      "title_event_en": "1717: King George I’s Pardon Proclamation",
+      "titolo_evento_it": "Ascesa di Vespasiano e fondazione della dinastia Flavia",
+      "title_event_en": "Vespasian’s Rise and the Founding of the Flavian Dynasty",
       "era": "AD",
-      "from": 1717,
-      "to": 1717,
+      "from": 69,
+      "to": 69,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Presa di Gerusalemme da Tito durante la guerra giudaica",
+      "title_event_en": "Titus Captures Jerusalem in the Jewish War",
+      "era": "AD",
+      "from": 70,
+      "to": 70,
+      "continent": "Asia",
+      "country": "Israel",
+      "location": "Jerusalem, Israel"
+    },
+    {
+      "titolo_evento_it": "Eruzione del Vesuvio e risposta imperiale di Tito",
+      "title_event_en": "Eruption of Vesuvius and Titus’ Imperial Response",
+      "era": "AD",
+      "from": 79,
+      "to": 79,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Pompeii, Italy"
+    },
+    {
+      "titolo_evento_it": "Inaugurazione dell'Anfiteatro Flavio sotto Tito",
+      "title_event_en": "Opening of the Flavian Amphitheatre under Titus",
+      "era": "AD",
+      "from": 80,
+      "to": 80,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Governo autoritario e riforme di Domiziano",
+      "title_event_en": "Domitian’s Authoritarian Rule and Reforms",
+      "era": "AD",
+      "from": 81,
+      "to": 96,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Assassinio di Domiziano e avvento di Nerva",
+      "title_event_en": "Assassination of Domitian and Accession of Nerva",
+      "era": "AD",
+      "from": 96,
+      "to": 96,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Adozione di Traiano e svolta verso l'espansione",
+      "title_event_en": "Adoption of Trajan and Turn toward Expansion",
+      "era": "AD",
+      "from": 98,
+      "to": 98,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Conquista della Dacia da parte di Traiano",
+      "title_event_en": "Trajan’s Conquest of Dacia",
+      "era": "AD",
+      "from": 101,
+      "to": 106,
+      "continent": "Europe",
+      "country": "Romania",
+      "location": "Sarmizegetusa Regia, Romania"
+    },
+    {
+      "titolo_evento_it": "Campagne orientali di Traiano e apogeo territoriale",
+      "title_event_en": "Trajan’s Eastern Campaigns and Territorial Apex",
+      "era": "AD",
+      "from": 114,
+      "to": 117,
+      "continent": "Asia",
+      "country": "Iraq",
+      "location": "Ctesiphon, Iraq"
+    },
+    {
+      "titolo_evento_it": "Consolidamento e frontiere sotto Adriano",
+      "title_event_en": "Hadrian’s Consolidation and Frontier Policy",
+      "era": "AD",
+      "from": 117,
+      "to": 138,
       "continent": "Europe",
       "country": "United Kingdom",
-      "location": "London"
+      "location": "Hadrian's Wall, United Kingdom"
     },
     {
-      "titolo_evento_it": "1718: Woodes Rogers riconquista Nassau e avvia la repressione",
-      "title_event_en": "1718: Woodes Rogers Reclaims Nassau and Begins Suppression",
+      "titolo_evento_it": "Governo pacifico di Antonino Pio",
+      "title_event_en": "Antoninus Pius’ Peaceful Reign",
       "era": "AD",
-      "from": 1718,
-      "to": 1718,
-      "continent": "North America",
-      "country": "Bahamas",
-      "location": "Nassau"
-    },
-    {
-      "titolo_evento_it": "1720: Esecuzione di Calico Jack Rackham a Port Royal",
-      "title_event_en": "1720: Execution of Calico Jack Rackham at Port Royal",
-      "era": "AD",
-      "from": 1720,
-      "to": 1720,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Port Royal"
-    },
-    {
-      "titolo_evento_it": "1721: Impiccagione di Charles Vane a Port Royal",
-      "title_event_en": "1721: Hanging of Charles Vane at Port Royal",
-      "era": "AD",
-      "from": 1721,
-      "to": 1721,
-      "continent": "North America",
-      "country": "Jamaica",
-      "location": "Port Royal"
-    },
-    {
-      "titolo_evento_it": "1722–1726: Pattugliamenti della Royal Navy nelle Indie Occidentali",
-      "title_event_en": "1722–1726: Royal Navy West Indies Patrols Suppress Piracy",
-      "era": "AD",
-      "from": 1722,
-      "to": 1726,
-      "continent": "North America",
-      "country": "Antigua and Barbuda",
-      "location": "English Harbour"
-    },
-    {
-      "titolo_evento_it": "1729–1732: Secondo governatorato di Woodes Rogers alle Bahamas",
-      "title_event_en": "1729–1732: Woodes Rogers’s Second Governorship in the Bahamas",
-      "era": "AD",
-      "from": 1729,
-      "to": 1732,
-      "continent": "North America",
-      "country": "Bahamas",
-      "location": "Nassau"
-    },
-    {
-      "titolo_evento_it": "1731: L’orecchio di Jenkins e la stretta dei guarda costas",
-      "title_event_en": "1731: Jenkins’s Ear and Intensified Spanish Guarda Costas",
-      "era": "AD",
-      "from": 1731,
-      "to": 1731,
-      "continent": "North America",
-      "country": "Cuba",
-      "location": "Havana"
-    },
-    {
-      "titolo_evento_it": "1739: L’ammiraglio Vernon conquista Portobelo",
-      "title_event_en": "1739: Admiral Vernon Captures Portobelo",
-      "era": "AD",
-      "from": 1739,
-      "to": 1739,
-      "continent": "North America",
-      "country": "Panama",
-      "location": "Portobelo"
-    },
-    {
-      "titolo_evento_it": "1748: Pace di Aquisgrana e fine del ciclo corsaro",
-      "title_event_en": "1748: Peace of Aix-la-Chapelle and the End of the Privateering Cycle",
-      "era": "AD",
-      "from": 1748,
-      "to": 1748,
+      "from": 138,
+      "to": 161,
       "continent": "Europe",
-      "country": "Germany",
-      "location": "Aachen"
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Guerre marcomanniche sotto Marco Aurelio",
+      "title_event_en": "Marcomannic Wars under Marcus Aurelius",
+      "era": "AD",
+      "from": 166,
+      "to": 180,
+      "continent": "Europe",
+      "country": "Austria",
+      "location": "Carnuntum, Austria"
+    },
+    {
+      "titolo_evento_it": "Commodo e la crisi dell'autorità imperiale",
+      "title_event_en": "Commodus and the Crisis of Imperial Authority",
+      "era": "AD",
+      "from": 180,
+      "to": 192,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Ascesa di Settimio Severo dopo la crisi del 193",
+      "title_event_en": "Septimius Severus Seizes Power after the Crisis of 193",
+      "era": "AD",
+      "from": 193,
+      "to": 197,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Constitutio Antoniniana di Caracalla",
+      "title_event_en": "Caracalla’s Constitutio Antoniniana",
+      "era": "AD",
+      "from": 212,
+      "to": 212,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Crisi del III secolo e regno di Gallieno",
+      "title_event_en": "Third-Century Crisis and the Reign of Gallienus",
+      "era": "AD",
+      "from": 253,
+      "to": 268,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Milan, Italy"
+    },
+    {
+      "titolo_evento_it": "Aureliano riunifica l'Impero sconfiggendo Palmira e l'Impero Gallico",
+      "title_event_en": "Aurelian Reunites the Empire, Defeating Palmyra and the Gallic Empire",
+      "era": "AD",
+      "from": 272,
+      "to": 274,
+      "continent": "Asia",
+      "country": "Syria",
+      "location": "Palmyra, Syria"
+    },
+    {
+      "titolo_evento_it": "Ascesa di Diocleziano e riforma tetrarchica",
+      "title_event_en": "Diocletian’s Accession and the Tetrarchic Reform",
+      "era": "AD",
+      "from": 284,
+      "to": 293,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Nicomedia, Turkey"
+    },
+    {
+      "titolo_evento_it": "Riforme amministrative e fiscali di Diocleziano",
+      "title_event_en": "Diocletian’s Administrative and Fiscal Reforms",
+      "era": "AD",
+      "from": 293,
+      "to": 305,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Nicomedia, Turkey"
+    },
+    {
+      "titolo_evento_it": "Grande persecuzione dei cristiani sotto Diocleziano",
+      "title_event_en": "The Great Persecution under Diocletian",
+      "era": "AD",
+      "from": 303,
+      "to": 305,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Nicomedia, Turkey"
+    },
+    {
+      "titolo_evento_it": "Vittoria di Costantino al Ponte Milvio",
+      "title_event_en": "Constantine’s Victory at the Milvian Bridge",
+      "era": "AD",
+      "from": 312,
+      "to": 312,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Editto di Milano di Costantino",
+      "title_event_en": "Constantine’s Edict of Milan",
+      "era": "AD",
+      "from": 313,
+      "to": 313,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Milan, Italy"
+    },
+    {
+      "titolo_evento_it": "Fondazione di Costantinopoli da parte di Costantino",
+      "title_event_en": "Constantine Founds Constantinople",
+      "era": "AD",
+      "from": 324,
+      "to": 330,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Concilio di Nicea convocato da Costantino",
+      "title_event_en": "First Council of Nicaea Convened by Constantine",
+      "era": "AD",
+      "from": 325,
+      "to": 325,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Iznik, Turkey"
+    },
+    {
+      "titolo_evento_it": "Regno di Giuliano l'Apostata e tentativo di restaurazione pagana",
+      "title_event_en": "Reign of Julian the Apostate and Pagan Restoration Attempt",
+      "era": "AD",
+      "from": 361,
+      "to": 363,
+      "continent": "Asia",
+      "country": "Turkey",
+      "location": "Antakya, Turkey"
+    },
+    {
+      "titolo_evento_it": "Editto di Tessalonica: Teodosio I fa del cristianesimo religione di Stato",
+      "title_event_en": "Edict of Thessalonica: Theodosius I Makes Christianity the State Religion",
+      "era": "AD",
+      "from": 380,
+      "to": 380,
+      "continent": "Europe",
+      "country": "Greece",
+      "location": "Thessaloniki, Greece"
+    },
+    {
+      "titolo_evento_it": "Morte di Teodosio I e divisione definitiva dell'Impero",
+      "title_event_en": "Death of Theodosius I and Definitive Division of the Empire",
+      "era": "AD",
+      "from": 395,
+      "to": 395,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Sacco di Roma da parte di Alarico sotto Onorio",
+      "title_event_en": "Sack of Rome by Alaric under Honorius",
+      "era": "AD",
+      "from": 410,
+      "to": 410,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Rome, Italy"
+    },
+    {
+      "titolo_evento_it": "Rescritto di Onorio e abbandono della Britannia",
+      "title_event_en": "Honorius’ Rescript and the Abandonment of Britain",
+      "era": "AD",
+      "from": 410,
+      "to": 410,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Ravenna, Italy"
+    },
+    {
+      "titolo_evento_it": "Regno di Valentiniano III e supremazia di Ezio",
+      "title_event_en": "Reign of Valentinian III and the Ascendancy of Aetius",
+      "era": "AD",
+      "from": 425,
+      "to": 454,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Ravenna, Italy"
+    },
+    {
+      "titolo_evento_it": "Sconfitta di Attila ai Campi Catalaunici",
+      "title_event_en": "Attila Defeated at the Catalaunian Plains",
+      "era": "AD",
+      "from": 451,
+      "to": 451,
+      "continent": "Europe",
+      "country": "France",
+      "location": "Châlons-en-Champagne, France"
+    },
+    {
+      "titolo_evento_it": "Deposizione di Romolo Augustolo e fine dell'Impero Romano d'Occidente",
+      "title_event_en": "Deposition of Romulus Augustulus and the End of the Western Roman Empire",
+      "era": "AD",
+      "from": 476,
+      "to": 476,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Ravenna, Italy"
+    },
+    {
+      "titolo_evento_it": "Reconquista di Giustiniano in Africa e Italia",
+      "title_event_en": "Justinian’s Reconquest of Africa and Italy",
+      "era": "AD",
+      "from": 533,
+      "to": 554,
+      "continent": "Europe",
+      "country": "Italy",
+      "location": "Ravenna, Italy"
+    },
+    {
+      "titolo_evento_it": "Costruzione della Hagia Sophia sotto Giustiniano",
+      "title_event_en": "Construction of Hagia Sophia under Justinian",
+      "era": "AD",
+      "from": 532,
+      "to": 537,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Guerre di Eraclio contro i Sasanidi e prime conquiste arabe",
+      "title_event_en": "Heraclius’ Wars against the Sasanians and Early Arab Conquests",
+      "era": "AD",
+      "from": 622,
+      "to": 641,
+      "continent": "Asia",
+      "country": "Israel",
+      "location": "Jerusalem, Israel"
+    },
+    {
+      "titolo_evento_it": "Iconoclastia sotto Leone III e Costantino V",
+      "title_event_en": "Iconoclasm under Leo III and Constantine V",
+      "era": "AD",
+      "from": 726,
+      "to": 787,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Basilio II sconfigge i Bulgari a Kleidion",
+      "title_event_en": "Basil II Defeats the Bulgarians at Kleidion",
+      "era": "AD",
+      "from": 1014,
+      "to": 1014,
+      "continent": "Europe",
+      "country": "Bulgaria",
+      "location": "Klyuch, Bulgaria"
+    },
+    {
+      "titolo_evento_it": "Quarta Crociata e conquista latina di Costantinopoli",
+      "title_event_en": "The Fourth Crusade and the Latin Conquest of Constantinople",
+      "era": "AD",
+      "from": 1204,
+      "to": 1204,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Michele VIII Paleologo restaura l'Impero a Costantinopoli",
+      "title_event_en": "Michael VIII Palaiologos Restores the Empire at Constantinople",
+      "era": "AD",
+      "from": 1261,
+      "to": 1261,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
+    },
+    {
+      "titolo_evento_it": "Caduta di Costantinopoli e morte di Costantino XI",
+      "title_event_en": "Fall of Constantinople and Death of Constantine XI",
+      "era": "AD",
+      "from": 1453,
+      "to": 1453,
+      "continent": "Europe",
+      "country": "Turkey",
+      "location": "Istanbul, Turkey"
     }
   ]
 }

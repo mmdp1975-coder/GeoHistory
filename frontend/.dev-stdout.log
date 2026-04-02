@@ -1,0 +1,18 @@
+
+> geohistory-frontend@1.0.0 dev
+> next dev -p 3000
+
+  ▲ Next.js 14.2.10
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 3.2s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 3.1s (226 modules)
+ ○ Compiling /login ...
+ ✓ Compiled /login in 17.9s (895 modules)
+ ○ Compiling /feedback ...
+ ✓ Compiled /feedback in 2.4s (945 modules)
+ GET /feedback 200 in 3056ms
+[?25h

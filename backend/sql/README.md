@@ -6,6 +6,7 @@ This folder contains handcrafted SQL migrations that extend the GeoHistory data 
 
 - `20251007_add_media_assets.sql` &mdash; creates the shared `media_assets` catalog, polymorphic `media_attachments`, helper views (including the expanded attachment view), and all supporting enums/indexes/triggers plus cover-sync routines.
 - `20251007_migrate_legacy_media.sql` &mdash; backfills the new tables starting from the legacy columns (`events_list.image_url`, `events_list.images`, `group_events.cover_url`). It also sets the `public_url` field for the imported assets and carries over source metadata.
+- `20260402_create_user_feedback.sql` &mdash; creates the unified `user_feedback` intake table for support requests, structured product feedback, and journey rating comments, including enums, indexes, `updated_at` trigger, and basic RLS insert policies.
 
 ## Applying the migration
 

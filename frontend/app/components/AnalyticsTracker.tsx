@@ -3,12 +3,19 @@
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { GA_MEASUREMENT_ID, getGuestId, isAnalyticsEnabled, trackEvent } from "@/lib/analytics";
+import {
+  GA_MEASUREMENT_ID,
+  getGuestId,
+  isAnalyticsEnabled,
+  trackEvent,
+  trackPageView,
+} from "@/lib/analytics";
 
 export default function AnalyticsTracker() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const hasStartedSessionRef = useRef(false);
+  const hasConfiguredAnalyticsRef = useRef(false);
   const [analyticsReady, setAnalyticsReady] = useState(false);
 
   useEffect(() => {
@@ -18,8 +25,8 @@ export default function AnalyticsTracker() {
     window.dataLayer = window.dataLayer || [];
 
     if (typeof window.gtag !== "function") {
-      window.gtag = function gtag(...args: unknown[]) {
-        window.dataLayer.push(args);
+      window.gtag = function gtag() {
+        window.dataLayer.push(arguments);
       };
     }
   }, []);
@@ -50,10 +57,15 @@ export default function AnalyticsTracker() {
     const queryString = searchParams.toString();
     const pagePath = queryString ? `${pathname}?${queryString}` : pathname;
 
-    window.gtag?.("config", GA_MEASUREMENT_ID, {
-      page_path: pagePath,
-      guest_id: guestId,
-    });
+    if (!hasConfiguredAnalyticsRef.current) {
+      window.gtag?.("js", new Date());
+      window.gtag?.("config", GA_MEASUREMENT_ID, {
+        guest_id: guestId,
+      });
+      hasConfiguredAnalyticsRef.current = true;
+    }
+
+    trackPageView(pagePath);
 
     if (!hasStartedSessionRef.current) {
       trackEvent("guest_session_start", {
@@ -75,13 +87,10 @@ export default function AnalyticsTracker() {
             window.dataLayer = window.dataLayer || [];
 
             if (typeof window.gtag !== "function") {
-              window.gtag = function gtag(...args: unknown[]) {
-                window.dataLayer.push(args);
+              window.gtag = function gtag() {
+                window.dataLayer.push(arguments);
               };
             }
-
-            window.gtag("js", new Date());
-            window.gtag("config", GA_MEASUREMENT_ID, { send_page_view: false });
           }
 
           setAnalyticsReady(true);

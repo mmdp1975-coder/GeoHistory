@@ -1,7 +1,7 @@
 // frontend/app/components/TopBar.tsx
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -11,12 +11,9 @@ import {
   ArrowLeft,
   Settings as SettingsIcon,
   LogOut,
-  PlayCircle,
+  Headset,
   Maximize,
   Minimize,
-  X,
-  Volume2,
-  Info,
 } from 'lucide-react';
 import { tUI } from '@/lib/i18n/uiLabels';
 
@@ -26,12 +23,7 @@ export default function TopBar() {
   const supabase = createClientComponentClient();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const [isVideoOpen, setIsVideoOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [volume, setVolume] = useState(100);
-  const [shouldAutoplay, setShouldAutoplay] = useState(false);
-  const [playbackError, setPlaybackError] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   // 👉 lingua usata per le label UI
   const [langCode, setLangCode] = useState<string>('en');
@@ -132,20 +124,6 @@ export default function TopBar() {
     router.push('/module/landing');
   }
 
-  function openVideo() {
-    setIsVideoOpen(true);
-    setShouldAutoplay(true);
-    setPlaybackError(false);
-  }
-
-  function closeVideo() {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = 0;
-    }
-    setIsVideoOpen(false);
-  }
-
   useEffect(() => {
     const onFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -177,41 +155,7 @@ export default function TopBar() {
     }
   }
 
-  useEffect(() => {
-    if (!isVideoOpen || !videoRef.current) return;
-
-    const normalizedVolume = volume / 100;
-    videoRef.current.volume = normalizedVolume;
-    videoRef.current.muted = normalizedVolume === 0;
-  }, [volume, isVideoOpen]);
-
-  useEffect(() => {
-    if (!isVideoOpen || !shouldAutoplay || !videoRef.current) return;
-
-    const video = videoRef.current;
-    const normalizedVolume = volume / 100;
-
-    video.currentTime = 0;
-    video.volume = normalizedVolume;
-    video.muted = normalizedVolume === 0;
-
-    const playPromise = video.play();
-
-    if (playPromise) {
-      playPromise
-        .then(() => setPlaybackError(false))
-        .catch(() => setPlaybackError(true));
-    } else {
-      setPlaybackError(false);
-    }
-
-    setShouldAutoplay(false);
-  }, [isVideoOpen, shouldAutoplay, volume]);
-
   const isQuiz = pathname?.startsWith('/module/quiz');
-  const guideVideoSrc = langCode.toLowerCase().startsWith('it')
-    ? '/GeoHistoryGuide/GeoHistoryGuide_IT.mp4'
-    : '/GeoHistoryGuide/GeoHistoryGuide_EN.mp4';
   const mobileBarHeight = isFullscreen ? 42 : 52;
 
   useEffect(() => {
@@ -335,27 +279,16 @@ export default function TopBar() {
 
 
                 <Link
-                  href="/about"
-                  className={`hidden ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 sm:inline-flex md:h-auto md:w-auto md:gap-2 md:px-3`}
-                  aria-label="About"
-                  title="About"
-                >
-                  <Info className="h-6 w-6 md:h-5 md:w-5" />
-                  <span className="hidden md:inline">About</span>
-                </Link>
-
-                <button
-                  onClick={openVideo}
+                  href="/feedback"
                   className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
-                  type="button"
-                  aria-label={tUI(langCode, 'topbar.guide.ariaLabel')}
-                  title={tUI(langCode, 'topbar.guide.title')}
+                  aria-label={tUI(langCode, 'topbar.support.ariaLabel')}
+                  title={tUI(langCode, 'topbar.support.title')}
                 >
-                  <PlayCircle className="h-6 w-6 md:h-5 md:w-5" />
+                  <Headset className="h-6 w-6 md:h-5 md:w-5" />
                   <span className="hidden md:inline">
-                    {tUI(langCode, 'topbar.guide')}
+                    {tUI(langCode, 'topbar.support')}
                   </span>
-                </button>
+                </Link>
 
                 <button
                   onClick={toggleFullscreen}
@@ -425,57 +358,6 @@ export default function TopBar() {
         }
       `}</style>
 
-      {isVideoOpen && !isQuiz && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
-          <div className="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl p-4">
-            <button
-              type="button"
-              className="absolute top-3 right-3 z-10 text-slate-500 hover:text-slate-900"
-              aria-label={tUI(langCode, 'video.close.ariaLabel')}
-              title={tUI(langCode, 'video.close.title')}
-              onClick={closeVideo}
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <video
-              ref={videoRef}
-              className="w-full rounded-lg"
-              src={guideVideoSrc}
-              controls
-              playsInline
-            >
-              {tUI(langCode, 'video.unsupported')}
-            </video>
-
-            <div className="mt-4 flex flex-col gap-2">
-              <div className="flex items-center gap-3 text-slate-600">
-                <Volume2 className="w-5 h-5" />
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={volume}
-                  onChange={(event) =>
-                    setVolume(Number(event.target.value))
-                  }
-                  className="w-full accent-slate-600 cursor-pointer"
-                  aria-label={tUI(langCode, 'video.volume.label')}
-                />
-                <span className="w-10 text-right text-xs font-medium">
-                  {Math.round(volume)}%
-                </span>
-              </div>
-
-              {playbackError && (
-                <p className="text-xs text-amber-600">
-                  {tUI(langCode, 'video.playbackError')}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

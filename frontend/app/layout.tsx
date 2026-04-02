@@ -1,8 +1,8 @@
 // frontend/app/layout.tsx
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Suspense } from "react";
 import "./globals.css";
-import AnalyticsTracker from "./components/AnalyticsTracker";
 import SupabaseProvider from "./components/SupabaseProvider";
 import IdleLogoutProvider from "./components/IdleLogoutProvider";
 
@@ -63,10 +63,22 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-LZLCQNS2P0"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', 'G-LZLCQNS2P0');
+          `}
+        </Script>
+      </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased" suppressHydrationWarning>
-        <Suspense fallback={null}>
-          <AnalyticsTracker />
-        </Suspense>
         <SupabaseProvider>
           <IdleLogoutProvider>{children}</IdleLogoutProvider>
         </SupabaseProvider>
