@@ -1950,6 +1950,7 @@ export default function TimelinePage({
                   ctaLabel={isGuestMode && !g.guest_access ? "Login required" : null}
                   onCardClick={() => {
                     const journeyTitle = g.title || g.slug || "This journey";
+                    console.log("click_journey_triggered");
                     if (typeof window !== "undefined" && typeof window.gtag === "function") {
                       window.gtag("event", "click_journey", {
                         journey_id: g.id,
