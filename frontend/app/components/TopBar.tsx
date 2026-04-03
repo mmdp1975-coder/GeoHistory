@@ -340,7 +340,7 @@ export default function TopBar() {
       {isFullscreen ? (
         <div
           aria-hidden
-          className="block md:hidden"
+          className="block"
           style={{ height: `${mobileBarHeight}px` }}
         />
       ) : null}
