@@ -3246,7 +3246,7 @@ setJourneyMediaFirst(jmFirst);
  setMapViewportMode("focus-selected");
  setSelectedIndex(nextIndex);
  } else {
- pendingSelectedMapFocusRef.current = 0;
+ pendingSelectedMapFocusRef.current = null;
  setMapViewportMode("fit-all");
  setSelectedIndex(0);
  }
