@@ -14,6 +14,7 @@ import {
   Headset,
   Maximize,
   Minimize,
+  School,
 } from 'lucide-react';
 import { tUI } from '@/lib/i18n/uiLabels';
 
@@ -22,6 +23,7 @@ export default function TopBar() {
   const pathname = usePathname();
   const supabase = createClientComponentClient();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeClassroomCount, setActiveClassroomCount] = useState(0);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -53,6 +55,7 @@ export default function TopBar() {
             console.log('[TopBar] Nessun utente: uso lingua browser:', browserLang);
             setLangCode(browserLang);
             setIsAuthenticated(false);
+            setActiveClassroomCount(0);
           }
           return;
         }
@@ -93,6 +96,56 @@ export default function TopBar() {
           console.log('[TopBar] language_code usato dalla TopBar:', dbLang);
           setLangCode(dbLang);
         }
+
+        const [ownedResult, membershipsResult] = await Promise.all([
+          supabase
+            .from('classrooms')
+            .select('id')
+            .eq('owner_profile_id', user.id)
+            .eq('status', 'active'),
+          supabase
+            .from('classroom_members')
+            .select('classroom_id, member_role')
+            .eq('member_profile_id', user.id)
+            .eq('status', 'active'),
+        ]);
+
+        if (ownedResult.error) {
+          console.warn('[TopBar] Errore leggendo classroom possedute:', ownedResult.error.message);
+        }
+
+        if (membershipsResult.error) {
+          console.warn('[TopBar] Errore leggendo membership classroom:', membershipsResult.error.message);
+        }
+
+        const ownedIds = new Set((ownedResult.data || []).map((row) => row.id));
+        const joinedIds = Array.from(
+          new Set(
+            (membershipsResult.data || [])
+              .filter((row) => row.classroom_id && row.member_role !== 'owner')
+              .map((row) => row.classroom_id)
+          )
+        );
+
+        if (!joinedIds.length) {
+          if (active) setActiveClassroomCount(ownedIds.size);
+          return;
+        }
+
+        const { data: joinedClassrooms, error: joinedError } = await supabase
+          .from('classrooms')
+          .select('id')
+          .in('id', joinedIds)
+          .eq('status', 'active');
+
+        if (joinedError) {
+          console.warn('[TopBar] Errore leggendo classroom aderite:', joinedError.message);
+          if (active) setActiveClassroomCount(ownedIds.size);
+          return;
+        }
+
+        (joinedClassrooms || []).forEach((row) => ownedIds.add(row.id));
+        if (active) setActiveClassroomCount(ownedIds.size);
       } catch (err: any) {
         console.warn('[TopBar] Errore imprevisto caricando la lingua:', err?.message);
         if (active) {
@@ -101,6 +154,7 @@ export default function TopBar() {
             typeof window !== 'undefined' ? window.navigator.language : 'en'
           );
           setIsAuthenticated(false);
+          setActiveClassroomCount(0);
         }
       }
     }
@@ -277,6 +331,24 @@ export default function TopBar() {
                   </Link>
                 ) : null}
 
+                <Link
+                  href="/module/classroom"
+                  className={`inline-flex ${isFullscreen ? 'h-8 w-8' : 'h-10 w-10'} shrink-0 items-center justify-center rounded-full px-1.5 py-1.5 text-[var(--geo-navy)] transition hover:bg-white/70 md:h-auto md:w-auto md:gap-2 md:px-3`}
+                  aria-label={tUI(langCode, 'topbar.classroom')}
+                  title={tUI(langCode, 'topbar.classroom.title')}
+                >
+                  <span className="relative inline-flex h-6 w-6 items-center justify-center md:h-5 md:w-5">
+                    <School className="h-6 w-6 md:h-5 md:w-5" />
+                    {activeClassroomCount > 0 ? (
+                      <span className="absolute -bottom-1 -right-1 inline-flex min-w-[18px] items-center justify-center rounded-full border-2 border-white bg-[#d62839] px-1 text-[10px] font-bold leading-4 text-white shadow-[0_8px_18px_-12px_rgba(214,40,57,0.9)]">
+                        {activeClassroomCount}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="hidden md:inline">
+                    {tUI(langCode, 'topbar.classroom')}
+                  </span>
+                </Link>
 
                 <Link
                   href="/feedback"

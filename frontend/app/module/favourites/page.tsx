@@ -290,7 +290,7 @@ export default function FavouritesPage() {
               return (
                 <Scorecard
                   key={j.journey_id}
-                  href={`/module/group_event?gid=${encodeURIComponent(j.journey_id)}`}
+                  href={`/module/group_event?gid=${encodeURIComponent(j.journey_id)}&source=scorecard`}
                   title={title}
                   coverUrl={j.journey_cover_url}
                   isFavourite={j.is_favourite}

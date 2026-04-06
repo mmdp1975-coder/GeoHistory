@@ -3,12 +3,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import styles from "../auth.module.css";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@supabase/supabase-js";
 import * as ClientModule from "../../../lib/supabaseBrowserClient";
+import { normalizeRedirectPath } from "@/lib/authRedirect";
 
 /* ---------- Supabase client con fallback sicuro ---------- */
 function getSupabase(): SupabaseClient {
@@ -71,7 +73,8 @@ function passwordStrength(password: string): { label: string; color: string } {
   return { label: "Weak", color: "#dc2626" };
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
+  const searchParams = useSearchParams();
   /* ---------- Form state ---------- */
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -120,9 +123,13 @@ export default function RegisterPage() {
   /* ---------- Redirect email post signup ---------- */
   const emailRedirectTo = useMemo(() => {
     if (typeof window === "undefined") return undefined;
+    const redirectTo = normalizeRedirectPath(searchParams.get("redirectTo"));
     // dopo conferma email torna alla login
-    return `${window.location.origin}/login`;
-  }, []);
+    const loginPath = redirectTo
+      ? `/login?redirectTo=${encodeURIComponent(redirectTo)}`
+      : "/login";
+    return `${window.location.origin}${loginPath}`;
+  }, [searchParams]);
 
   /* ---------- Locale per label personas ---------- */
   const locale =
@@ -488,7 +495,16 @@ export default function RegisterPage() {
                 {loading ? "Creating..." : "Create account"}
               </button>
               <div className={styles.links}>
-                <Link className={styles.a} href="/login">
+                <Link
+                  className={styles.a}
+                  href={
+                    normalizeRedirectPath(searchParams.get("redirectTo"))
+                      ? `/login?redirectTo=${encodeURIComponent(
+                          normalizeRedirectPath(searchParams.get("redirectTo")) || ""
+                        )}`
+                      : "/login"
+                  }
+                >
                   Back to login
                 </Link>
                 <Link className={styles.a} href="/login/forgot">
@@ -500,6 +516,24 @@ export default function RegisterPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <div className={styles.bg} />
+          <div className={styles.veil} />
+          <div className={styles.card}>
+            <div className={styles.alert}>Loading...</div>
+          </div>
+        </div>
+      }
+    >
+      <RegisterPageContent />
+    </Suspense>
   );
 }
 

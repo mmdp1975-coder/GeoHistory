@@ -3,14 +3,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./auth.module.css";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import type { Session } from "@supabase/supabase-js";
+import { normalizeRedirectPath } from "@/lib/authRedirect";
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClientComponentClient();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const hasAttemptedPlay = useRef(false);
@@ -34,6 +36,10 @@ export default function LoginPage() {
   const pwdType = useMemo(() => (showPwd ? "text" : "password"), [showPwd]);
   const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
   const isCooldownActive = cooldown > 0 && normalizedEmail === cooldownEmail;
+  const redirectTo = useMemo(
+    () => normalizeRedirectPath(searchParams.get("redirectTo")),
+    [searchParams]
+  );
 
   // ✅ Se esiste già una sessione → redirect immediato e certo
   useEffect(() => {
@@ -44,16 +50,16 @@ export default function LoginPage() {
       if (!mounted) return;
       if (session?.access_token) {
         try {
-          router.replace("/module/landing");
+          router.replace(redirectTo || "/module/landing");
           // Fallback hard se il router non naviga
           setTimeout(() => {
             if (typeof window !== "undefined") {
-              window.location.href = "/module/landing";
+              window.location.href = redirectTo || "/module/landing";
             }
           }, 100);
         } catch {
           if (typeof window !== "undefined") {
-            window.location.href = "/module/landing";
+            window.location.href = redirectTo || "/module/landing";
           }
         }
       }
@@ -62,7 +68,7 @@ export default function LoginPage() {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [redirectTo, router, supabase.auth]);
 
   // Gestione cooldown timer (per messaggio Too many attempts)
   useEffect(() => {
@@ -168,16 +174,16 @@ export default function LoginPage() {
       // ✅ redirect immediato e certo (niente listener)
       setInfo("Login successful. Redirecting...");
       try {
-        router.replace("/module/landing");
+        router.replace(redirectTo || "/module/landing");
         // Fallback hard nel caso l'app router non cambi vista
         setTimeout(() => {
           if (typeof window !== "undefined") {
-            window.location.href = "/module/landing";
+            window.location.href = redirectTo || "/module/landing";
           }
         }, 100);
       } catch {
         if (typeof window !== "undefined") {
-          window.location.href = "/module/landing";
+          window.location.href = redirectTo || "/module/landing";
         }
       }
     } catch (err: any) {
@@ -366,7 +372,10 @@ export default function LoginPage() {
                     <Link className={styles.a} href="/login/forgot">
                       Forgot password
                     </Link>
-                    <Link className={styles.a} href="/login/register">
+                    <Link
+                      className={styles.a}
+                      href={redirectTo ? `/login/register?redirectTo=${encodeURIComponent(redirectTo)}` : "/login/register"}
+                    >
                       Create an account
                     </Link>
                   </div>
@@ -457,5 +466,23 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className={styles.page}>
+          <div className={styles.bg} />
+          <div className={styles.veil} />
+          <div className={styles.card}>
+            <div className={styles.alert}>Loading...</div>
+          </div>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

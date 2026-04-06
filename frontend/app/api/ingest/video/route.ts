@@ -69,7 +69,8 @@ export async function POST(req: NextRequest) {
         journey: {
           title: extracted.journey_title || metaTitle,
           description: extracted.journey_description || metaDesc || null,
-          cover: meta?.thumbnail_url || null
+          cover: meta?.thumbnail_url || null,
+          macro_category_code: extracted.macro_category_code || null,
         },
         events: enrichedEvents
       }

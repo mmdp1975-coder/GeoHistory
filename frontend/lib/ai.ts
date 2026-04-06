@@ -10,10 +10,19 @@ const EventZ = z.object({
   location_text: z.string().optional().nullable(),
   description: z.string().min(10).max(1000).optional().nullable()
 });
+const MacroCategoryCodeZ = z.enum([
+  "historical-period",
+  "person",
+  "sport",
+  "food-beverage",
+  "travel",
+  "economy-technology",
+]);
 const ExtractedZ = z.object({
   journey_title: z.string().min(3).max(200),
   journey_description: z.string().optional().nullable(),
   cover_hint: z.string().optional().nullable(),
+  macro_category_code: MacroCategoryCodeZ.optional().nullable(),
   events: z.array(EventZ).min(1).max(200)
 });
 export type Extracted = z.infer<typeof ExtractedZ>;
@@ -47,7 +56,8 @@ Sei un estrattore strutturato. Dato un chunk di transcript, restituisci JSON con
 - Era default AD.
 - location_text breve (es. "Rome, Italy").
 - Ogni evento ha una descrizione di 2–3 frasi.
-Schema obbligatorio: { journey_title, journey_description?, cover_hint?, events: [{title?, year_from?, year_to?, era?, location_text?, description?}] }`;
+Schema obbligatorio: { journey_title, journey_description?, cover_hint?, macro_category_code?, events: [{title?, year_from?, year_to?, era?, location_text?, description?}] }.
+macro_category_code deve essere uno tra: historical-period, person, sport, food-beverage, travel, economy-technology.`;
 }
 
 async function extractFromChunk(params: {
@@ -77,6 +87,7 @@ export function mergeAndDedup(all: Extracted[]): Extracted {
   const title = first?.journey_title || "Journey";
   const desc = first?.journey_description || null;
   const cover = first?.cover_hint || null;
+  const macroCategory = first?.macro_category_code || null;
   const map = new Map<string, z.infer<typeof EventZ>>();
   for (const part of all) {
     for (const ev of part.events) {
@@ -99,7 +110,13 @@ export function mergeAndDedup(all: Extracted[]): Extracted {
       }
     }
   }
-  return { journey_title: title, journey_description: desc, cover_hint: cover, events: Array.from(map.values()) };
+  return {
+    journey_title: title,
+    journey_description: desc,
+    cover_hint: cover,
+    macro_category_code: macroCategory,
+    events: Array.from(map.values()),
+  };
 }
 
 async function withConcurrency<T, R>(items: T[], limit: number, worker: (x: T) => Promise<R>): Promise<R[]> {

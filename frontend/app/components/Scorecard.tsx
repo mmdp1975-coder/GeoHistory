@@ -36,6 +36,8 @@ type ScorecardProps = {
   onCardClick?: () => void;
   usePlainImg?: boolean;
   compact?: boolean;
+  asListItem?: boolean;
+  coverClassName?: string;
 };
 
 function formatDateShort(iso?: string | null, langCode: string = "en") {
@@ -107,6 +109,8 @@ export function Scorecard({
   onCardClick,
   usePlainImg = false,
   compact = false,
+  asListItem = true,
+  coverClassName,
 }: ScorecardProps) {
   const supabase = createClientComponentClient();
   const [langCode, setLangCode] = useState<string>("en");
@@ -242,11 +246,17 @@ export function Scorecard({
     return <div className="flex h-full w-full flex-col">{children}</div>;
   };
 
-  return (
-    <li className={cardClassName} {...restLiProps}>
+  const cardInner = (
+    <>
       <CardWrapper>
         {/* COVER */}
-        <div className={mergeClassNames("relative w-full overflow-hidden bg-neutral-100", compact ? "aspect-square" : "h-[148px]")}>
+        <div
+          className={mergeClassNames(
+            "relative w-full overflow-hidden bg-neutral-100",
+            compact ? "aspect-square" : "h-[148px]",
+            coverClassName
+          )}
+        >
           {coverUrl ? (
             (() => {
               const browserCoverUrl = normalizeCoverUrl(coverUrl);
@@ -601,7 +611,17 @@ export function Scorecard({
         </div>
         ) : null}
       </CardWrapper>
+    </>
+  );
+
+  return asListItem ? (
+    <li className={cardClassName} {...restLiProps}>
+      {cardInner}
     </li>
+  ) : (
+    <div className={cardClassName}>
+      {cardInner}
+    </div>
   );
 }
 

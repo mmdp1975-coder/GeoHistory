@@ -21,6 +21,13 @@ import { Scorecard } from "@/app/components/Scorecard";
 import { tUI } from "@/lib/i18n/uiLabels";
 
 type Visibility = "private" | "public";
+type MacroCategoryCode =
+  | "historical-period"
+  | "person"
+  | "sport"
+  | "food-beverage"
+  | "travel"
+  | "economy-technology";
 
 const DEFAULT_LANGUAGE = "it";
 const DEFAULT_BASE_NAME = "storia";
@@ -49,11 +56,13 @@ type JourneySummary = {
   yearTo?: number | null;
   owner_profile_id?: string | null;
   hasAudio?: boolean;
+  macroCategoryCode?: MacroCategoryCode | null;
 };
 
 type VJourneyRow = {
   journey_id: string;
   journey_slug: string | null;
+  macro_category_code?: MacroCategoryCode | null;
   translation_title: string | null;
   approved_at: string | null;
   events_count: number | null;
@@ -119,6 +128,16 @@ const DEFAULT_STYLE_BY_AUDIENCE: Record<string, string> = {
 };
 
 const DEFAULT_MEDIA_ROLES = ["gallery", "cover", "poster", "context"];
+const MACRO_CATEGORY_CODES: MacroCategoryCode[] = [
+  "historical-period",
+  "person",
+  "sport",
+  "food-beverage",
+  "travel",
+  "economy-technology",
+];
+const isMacroCategoryCode = (value?: string | null): value is MacroCategoryCode =>
+  !!value && MACRO_CATEGORY_CODES.includes(value as MacroCategoryCode);
 
 const buildRoleOptions = (items: GroupEventMediaItem[]) => {
   const roles = new Set(DEFAULT_MEDIA_ROLES);
@@ -368,6 +387,7 @@ const buildAcceptFromKind = (kind?: MediaKind | null) => {
 const EMPTY_GROUP_EVENT: SaveJourneyPayload["group_event"] = {
   cover_url: "",
   visibility: "private",
+  macro_category_code: "",
   description: "",
   language: DEFAULT_LANGUAGE,
   slug: "",
@@ -696,6 +716,7 @@ export default function BuildJourneyPage() {
   const [importActiveLang, setImportActiveLang] = useState<string>(DEFAULT_LANGUAGE);
   const [newJourneyOpen, setNewJourneyOpen] = useState(false);
   const [newJourneyTitle, setNewJourneyTitle] = useState("");
+  const [newJourneyMacroCategory, setNewJourneyMacroCategory] = useState<string>("");
   const [newJourneyAudience, setNewJourneyAudience] = useState("Studenti");
   const [newJourneyStyle, setNewJourneyStyle] = useState<string>(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
   const [newJourneyDetailLevel, setNewJourneyDetailLevel] = useState<"breve" | "medio" | "approfondito">("medio");
@@ -768,6 +789,7 @@ export default function BuildJourneyPage() {
   const reelCurrentStageRef = useRef<string>("idle");
   const newJourneyCanRun =
     !!newJourneyTitle.trim() &&
+    !!newJourneyMacroCategory &&
     !!newJourneyAudience &&
     !!newJourneyStyle &&
     !!newJourneyEventGuideline.trim() &&
@@ -897,6 +919,16 @@ export default function BuildJourneyPage() {
       { value: "en", label: "English" },
     ],
     [],
+  );
+  const macroCategoryOptions = useMemo(
+    () => [
+      { value: "", label: tUI(langCode, "build.group.category.placeholder") },
+      ...MACRO_CATEGORY_CODES.map((code) => ({
+        value: code,
+        label: tUI(langCode, `journey.category.${code}`),
+      })),
+    ],
+    [langCode],
   );
 
   useEffect(() => {
@@ -1800,6 +1832,7 @@ export default function BuildJourneyPage() {
           yearTo: journey.year_to_max,
           owner_profile_id: profile.id,
           hasAudio: audioSet.has(journey.journey_id),
+          macroCategoryCode: journey.macro_category_code ?? null,
         }))
       );
 
@@ -1845,6 +1878,7 @@ export default function BuildJourneyPage() {
         ...prev,
         cover_url: base.cover_url || "",
         visibility: (base.visibility || "private") as Visibility,
+        macro_category_code: base.macro_category_code || "",
         description: base.description || "",
         language,
         slug: base.slug || "",
@@ -2426,7 +2460,9 @@ export default function BuildJourneyPage() {
   }, [journeyEvents, sortedEvents, selectedEventTempId]);
 
   const canSaveMetadata =
-    (ge.slug ?? "").trim().length > 0 && (ge.code ?? "").trim().length > 0;
+    (ge.slug ?? "").trim().length > 0 &&
+    (ge.code ?? "").trim().length > 0 &&
+    isMacroCategoryCode(ge.macro_category_code ?? null);
 
   const canSaveJourney = canSaveMetadata;
 
@@ -2514,6 +2550,9 @@ export default function BuildJourneyPage() {
       group_event: {
         cover_url: preparedGroupMedia.coverUrl || undefined,
         visibility: ge.visibility,
+        macro_category_code: isMacroCategoryCode(ge.macro_category_code ?? null)
+          ? ge.macro_category_code
+          : undefined,
         description: ge.description || undefined,
         language: ge.language || DEFAULT_LANGUAGE,
         slug: resolvedSlug || undefined,
@@ -2964,6 +3003,7 @@ export default function BuildJourneyPage() {
     const journeyLangKeys = ["language", "lang", "locale", "lingua"];
     const journeyVisibilityKeys = ["visibility", "public", "visibilita", "visibilità"];
     const journeyCoverKeys = ["cover", "cover_url", "image", "coverurl", "copertina"];
+    const journeyCategoryKeys = ["macro_category_code", "macro category", "category", "categoria"];
 
     const eventTitleKeys = ["title", "name", "titolo"];
     const eventDescShortKeys = ["description_short", "summary", "descrizione_breve"];
@@ -3106,6 +3146,12 @@ export default function BuildJourneyPage() {
       translationsToUse.find((tr) => tr.title?.trim())?.title?.trim() ||
       "";
     const coverUrl = normalizeValue(extract(journeyRow, journeyCoverKeys) || "");
+    const macroCategoryRaw = normalizeValue(extract(journeyRow, journeyCategoryKeys) || "");
+    const macroCategory = isMacroCategoryCode(macroCategoryRaw)
+      ? macroCategoryRaw
+      : isMacroCategoryCode(ge.macro_category_code ?? null)
+      ? ge.macro_category_code
+      : "";
     const slugFromSheet = normalizeValue(extract(journeyRow, ["slug"]) || "");
     const codeFromSheet = normalizeValue(extract(journeyRow, ["code"]) || "");
     const slug = slugFromSheet || buildAutoSlug(effectiveTitle, journeyDescription, importYearHint);
@@ -3115,6 +3161,7 @@ export default function BuildJourneyPage() {
       ...prev,
       visibility,
       cover_url: coverUrl || prev.cover_url,
+      macro_category_code: macroCategory || prev.macro_category_code,
       description: journeyDescription || prev.description,
       language: journeyLang || prev.language,
       slug,
@@ -3347,6 +3394,7 @@ export default function BuildJourneyPage() {
       "Descrizione IT": readValue(journeySource, ["Descrizione IT", "description_it", "journey_description_it"]),
       "Title EN": readValue(journeySource, ["Title EN", "title_en", "journey_title_en", "titleEN"]),
       "Description EN": readValue(journeySource, ["Description EN", "description_en", "journey_description_en"]),
+      "Macro Category": readValue(journeySource, ["Macro Category", "macro_category_code", "category", "categoria"]),
     };
     const eventHeaders = [
       "Journey IT",
@@ -3418,6 +3466,8 @@ export default function BuildJourneyPage() {
       payload?.journey?.description_it || payload?.journey_description_it || "";
     const journeyDescEn =
       payload?.journey?.description_en || payload?.journey_description_en || "";
+    const macroCategory =
+      payload?.journey?.macro_category_code || payload?.macro_category_code || "";
     const events = Array.isArray(payload?.events) ? payload.events : [];
     const eventLines = events.map((event: any, idx: number) => {
       const titleIt = event?.title_it || event?.titolo_evento_it || event?.titleIT || "";
@@ -3444,6 +3494,9 @@ export default function BuildJourneyPage() {
     }
     if (journeyDescEn) {
       lines.push(`Descrizione EN: ${journeyDescEn}`);
+    }
+    if (macroCategory) {
+      lines.push(`Categoria: ${macroCategory}`);
     }
     lines.push(`Eventi: ${events.length}`);
     if (eventLines.length) {
@@ -3843,6 +3896,7 @@ export default function BuildJourneyPage() {
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
+    setNewJourneyMacroCategory("");
     setNewJourneyAudience("Studenti");
     setNewJourneyStyle(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
     setNewJourneyDetailLevel("medio");
@@ -3871,6 +3925,7 @@ export default function BuildJourneyPage() {
     setNewJourneyTotalElapsed(0);
     setNewJourneyStepDurations({});
     setNewJourneyPendingPayload(null);
+    setNewJourneyMacroCategory("");
     setNewJourneyAudience("Studenti");
     setNewJourneyStyle(DEFAULT_STYLE_BY_AUDIENCE.Studenti);
     setNewJourneyDetailLevel("medio");
@@ -4223,6 +4278,13 @@ export default function BuildJourneyPage() {
     try {
       const parsed = buildParsedFromPrompt3(payloadToImport);
       applyParsedImport(parsed);
+      const payloadMacroCategory =
+        payloadToImport?.journey?.macro_category_code ||
+        payloadToImport?.macro_category_code ||
+        newJourneyMacroCategory;
+      if (isMacroCategoryCode(payloadMacroCategory)) {
+        setGe((prev) => ({ ...prev, macro_category_code: payloadMacroCategory }));
+      }
       const startedAt = newJourneyStepStartRef.current;
       if (startedAt) {
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
@@ -4491,6 +4553,12 @@ export default function BuildJourneyPage() {
                           { value: "private", label: tUI(langCode, "build.sidebar.filter.private") },
                           { value: "public", label: tUI(langCode, "build.sidebar.filter.public") },
                         ]}
+                      />
+                      <Select
+                        label={tUI(langCode, "build.group.category")}
+                        value={ge.macro_category_code ?? ""}
+                        onChange={(value) => setGe((prev) => ({ ...prev, macro_category_code: value }))}
+                        options={macroCategoryOptions}
                       />
                       <div>
                         <p className="mb-1 text-sm font-medium text-neutral-700">{tUI(langCode, "build.group.workflow")}</p>
@@ -5630,6 +5698,13 @@ export default function BuildJourneyPage() {
               placeholder='Esempio: "uno per ogni presidente"'
             />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+              <Select
+                label="Categoria"
+                value={newJourneyMacroCategory}
+                onChange={setNewJourneyMacroCategory}
+                options={macroCategoryOptions}
+                className="sm:max-w-[240px] w-full"
+              />
               <Select
                 label="Audience"
                 value={newJourneyAudience}

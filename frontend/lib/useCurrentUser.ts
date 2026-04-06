@@ -1,8 +1,8 @@
 /**
  * useCurrentUser — hook centralizzato per GeoHistory
  * - Legge utente da Supabase Auth
- * - Carica profiles (persona_id) e personas (code)
- * - Espone flag isAdminOrMod + personaCode, con gestione errori
+ * - Carica profiles (persona_id) e personas (code, create_classroom)
+ * - Espone i dati minimi per auth, persona corrente e capability Classroom
  *
  * Note:
  * - Nessun JSX qui (file .ts), così evitiamo i classici problemi di parsing TSX.
@@ -12,8 +12,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
-type Persona = { id: string; code: string | null };
-type Profile = { id: string; persona_id: string | null };
+type Persona = {
+  id: string;
+  code: string | null;
+  create_classroom: boolean | null;
+  name_it?: string | null;
+  name_en?: string | null;
+};
+type Profile = { id: string; persona_id: string | null; language_code?: string | null };
 
 export type CurrentUserState = {
   checking: boolean;
@@ -22,10 +28,12 @@ export type CurrentUserState = {
   userId: string | null;
 
   profile: Pick<Profile, "id" | "persona_id"> | null;
-  persona: Pick<Persona, "id" | "code"> | null;
+  persona: Persona | null;
+  languageCode: string | null;
 
   personaCode: string;              // es. "ADMIN", "MOD", "FAN", etc.
   isAdminOrMod: boolean;            // true se personaCode inizia con ADMIN o MOD
+  canCreateClassroom: boolean;
 };
 
 export function useCurrentUser(): CurrentUserState {
@@ -36,8 +44,10 @@ export function useCurrentUser(): CurrentUserState {
     userId: null,
     profile: null,
     persona: null,
+    languageCode: null,
     personaCode: "",
     isAdminOrMod: false,
+    canCreateClassroom: false,
   });
 
   async function ensureProfileFromAuth(user: any, personaId?: string | null) {
@@ -85,8 +95,10 @@ export function useCurrentUser(): CurrentUserState {
             userId: null,
             profile: null,
             persona: null,
+            languageCode: null,
             personaCode: "",
             isAdminOrMod: false,
+            canCreateClassroom: false,
           });
           return;
         }
@@ -94,7 +106,7 @@ export function useCurrentUser(): CurrentUserState {
         // 2) Profile (persona_id)
         let { data: profile, error: profErr } = await supabase
           .from("profiles")
-          .select("id, persona_id")
+          .select("id, persona_id, language_code")
           .eq("id", user.id)
           .maybeSingle();
         if (profErr || !profile) {
@@ -102,7 +114,7 @@ export function useCurrentUser(): CurrentUserState {
           await ensureProfileFromAuth(user);
           const retry = await supabase
             .from("profiles")
-            .select("id, persona_id")
+            .select("id, persona_id, language_code")
             .eq("id", user.id)
             .maybeSingle();
           profile = retry.data ?? null;
@@ -115,24 +127,28 @@ export function useCurrentUser(): CurrentUserState {
             userId: user.id,
             profile: null,
             persona: null,
+            languageCode: null,
             personaCode: "USER",
             isAdminOrMod: false,
+            canCreateClassroom: false,
           });
           return;
         }
 
-        // 3) Persona (code)
+        // 3) Persona (code + classroom capability)
         let persona: Persona | null = null;
         let code = "USER";
+        let canCreateClassroom = false;
         if ((profile as Profile).persona_id) {
           const { data: personaData, error: persErr } = await supabase
             .from("personas")
-            .select("id, code")
+            .select("id, code, create_classroom")
             .eq("id", (profile as Profile).persona_id)
             .maybeSingle();
           if (!persErr && personaData) {
             persona = personaData as Persona;
             code = (persona?.code ?? "").trim().toUpperCase() || "USER";
+            canCreateClassroom = !!persona?.create_classroom;
           }
         } else if (user.user_metadata?.persona_id) {
           await ensureProfileFromAuth(user, user.user_metadata.persona_id);
@@ -146,15 +162,19 @@ export function useCurrentUser(): CurrentUserState {
           userId: user.id,
           profile: profile as Profile,
           persona,
+          languageCode: (profile as Profile).language_code || null,
           personaCode: code,
           isAdminOrMod: isPrivileged,
+          canCreateClassroom,
         });
       } catch (e: any) {
         setState((s) => ({
           ...s,
           checking: false,
           error: e?.message ?? "Errore durante la verifica utente.",
+          languageCode: null,
           isAdminOrMod: false,
+          canCreateClassroom: false,
         }));
       }
     })();

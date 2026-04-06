@@ -10,6 +10,22 @@ import { tUI } from "@/lib/i18n/uiLabels";
 import { trackEvent } from "@/lib/analytics";
 
 type UUID = string;
+type MacroCategoryCode =
+  | "historical-period"
+  | "person"
+  | "sport"
+  | "food-beverage"
+  | "travel"
+  | "economy-technology";
+type CategoryFilter = "all" | MacroCategoryCode;
+const MACRO_CATEGORY_CODES: MacroCategoryCode[] = [
+  "historical-period",
+  "person",
+  "sport",
+  "food-beverage",
+  "travel",
+  "economy-technology",
+];
 
 /** === View row (v_journeys) === */
 type VJourneyRow = {
@@ -27,6 +43,7 @@ type VJourneyRow = {
   visibility?: string | null; // usata per filtro client
   workflow_state?: string | null; // ignorata
   approved_at: string | null; // data pubblicazione
+  macro_category_code?: MacroCategoryCode | null;
 };
 
 type DomainRow = {
@@ -55,6 +72,7 @@ type GeWithCard = {
   ratings_count: number | null;
   has_audio?: boolean;
   guest_access?: boolean;
+  macro_category_code?: MacroCategoryCode | null;
 };
 
 const DEFAULT_FROM = -5000;
@@ -138,6 +156,20 @@ type TimelinePageProps = {
 type SortMode = "timeline" | "rating" | "favourites" | "published";
 type VisibilityFilter = "all" | "public" | "private";
 
+function getCategoryIcon(className = "h-3.5 w-3.5") {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path d="M4 6h16l-6.2 7.1v4.9l-3.6-1.9v-3Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function getSortIcon(mode: SortMode, className = "h-3.5 w-3.5") {
   if (mode === "timeline") {
     return (
@@ -182,6 +214,13 @@ function getSortIcon(mode: SortMode, className = "h-3.5 w-3.5") {
       <path d="M4 9h16" strokeLinecap="round" />
       <rect x="4" y="5" width="16" height="15" rx="2" />
     </svg>
+  );
+}
+
+function isMacroCategoryCode(value: unknown): value is MacroCategoryCode {
+  return (
+    typeof value === "string" &&
+    (MACRO_CATEGORY_CODES as string[]).includes(value)
   );
 }
 
@@ -266,7 +305,6 @@ export default function TimelinePage({
 
   const [loading, setLoading] = useState(false);
   const [cards, setCards] = useState<GeWithCard[]>([]);
-  const [totalMatches, setTotalMatches] = useState(0);
 
   const [favs, setFavs] = useState<Set<UUID>>(new Set());
   const [favMsg, setFavMsg] = useState<string | null>(null);
@@ -283,12 +321,16 @@ export default function TimelinePage({
   const [geoWarning, setGeoWarning] = useState<string | null>(null);
   const [visibilityFilter, setVisibilityFilter] =
     useState<VisibilityFilter>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<CategoryFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>(initialSortMode);
   const cardsListRef = useRef<HTMLUListElement | null>(null);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [mobileSortOpen, setMobileSortOpen] = useState(false);
   const [mobileVisibilityOpen, setMobileVisibilityOpen] = useState(false);
+  const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
   const visibilityOptions: VisibilityFilter[] = ["all", "public", "private"];
+  const categoryOptions: CategoryFilter[] = ["all", ...MACRO_CATEGORY_CODES];
   const [guestGateOpen, setGuestGateOpen] = useState(false);
   const [guestGateJourneyTitle, setGuestGateJourneyTitle] = useState<string>("");
 
@@ -363,18 +405,25 @@ export default function TimelinePage({
   }, [supabase]);
 
   useEffect(() => {
-    if (!mobileSearchOpen && !mobileSortOpen && !mobileVisibilityOpen) return;
+    if (
+      !mobileSearchOpen &&
+      !mobileSortOpen &&
+      !mobileVisibilityOpen &&
+      !mobileCategoryOpen
+    )
+      return;
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setMobileSearchOpen(false);
       setMobileSortOpen(false);
       setMobileVisibilityOpen(false);
+      setMobileCategoryOpen(false);
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mobileSearchOpen, mobileSortOpen, mobileVisibilityOpen]);
+  }, [mobileSearchOpen, mobileSortOpen, mobileVisibilityOpen, mobileCategoryOpen]);
 
   /* ======= 1) INIT: dominio temporale da v_journeys ======= */
   useEffect(() => {
@@ -528,6 +577,7 @@ export default function TimelinePage({
               "is_favourite",
               "visibility",
               "approved_at",
+              "macro_category_code",
             ].join(",")
           )
           .lte("year_from_min", to)
@@ -689,17 +739,14 @@ export default function TimelinePage({
             ratings_count: st?.ratings_count ?? null,
             has_audio: audioSet.has(r.journey_id),
             guest_access: isGuestMode ? guestAccessMap.get(r.journey_id) === true : true,
+            macro_category_code: isMacroCategoryCode(r.macro_category_code)
+              ? r.macro_category_code
+              : null,
           };
         });
 
         if (!cancelled) {
           setCards(mapped);
-          setTotalMatches(
-            mapped.reduce(
-              (acc, x) => acc + (x.events_count || 0),
-              0
-            )
-          );
 
           // preferiti per il set (fallback se serve)
           const favSet = new Set<UUID>();
@@ -947,7 +994,11 @@ export default function TimelinePage({
   }, [domainReady, fromYear, toYear, embedded]);
 
   const displayCards = useMemo(() => {
-    const sorted = [...cards];
+    const filtered = cards.filter(
+      (card) =>
+        categoryFilter === "all" || card.macro_category_code === categoryFilter
+    );
+    const sorted = [...filtered];
     sorted.sort((a, b) => {
       if (sortMode === "rating") {
         const ar = a.avg_rating ?? -1;
@@ -972,9 +1023,13 @@ export default function TimelinePage({
       return (b.events_count ?? 0) - (a.events_count ?? 0);
     });
     return sorted;
-  }, [cards, favs, sortMode]);
+  }, [cards, favs, sortMode, categoryFilter]);
+  const filteredTotalMatches = useMemo(
+    () => displayCards.reduce((acc, x) => acc + (x.events_count || 0), 0),
+    [displayCards]
+  );
   const carouselResetKey = embedded
-    ? `${sortMode}:${displayCards[0]?.id ?? "none"}:${displayCards.length}`
+    ? `${sortMode}:${categoryFilter}:${displayCards[0]?.id ?? "none"}:${displayCards.length}`
     : "static";
 
   useEffect(() => {
@@ -1363,13 +1418,14 @@ export default function TimelinePage({
               {embedded ? (
                 <>
                   <div className="flex w-full items-center gap-2 lg:hidden">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileSearchOpen(true);
-                        setMobileSortOpen(false);
-                        setMobileVisibilityOpen(false);
-                      }}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileSearchOpen(true);
+                          setMobileSortOpen(false);
+                          setMobileVisibilityOpen(false);
+                          setMobileCategoryOpen(false);
+                        }}
                       className="inline-flex h-[46px] min-w-0 max-w-[168px] flex-1 items-center gap-2 rounded-[20px] border border-white/10 bg-white/8 px-3 text-left text-[12px] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-white/12"
                       aria-label={tUI(langCode, "timeline.search.label")}
                     >
@@ -1397,6 +1453,7 @@ export default function TimelinePage({
                           setMobileSortOpen((value) => !value);
                           setMobileVisibilityOpen(false);
                           setMobileSearchOpen(false);
+                          setMobileCategoryOpen(false);
                         }}
                         className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105"
                         title={tUI(langCode, "timeline.sort.label")}
@@ -1455,6 +1512,7 @@ export default function TimelinePage({
                           setMobileVisibilityOpen((value) => !value);
                           setMobileSortOpen(false);
                           setMobileSearchOpen(false);
+                          setMobileCategoryOpen(false);
                         }}
                         className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105"
                         title={tUI(langCode, "timeline.visibility.label")}
@@ -1501,6 +1559,58 @@ export default function TimelinePage({
                               );
                             }
                           )}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileCategoryOpen((value) => !value);
+                          setMobileSortOpen(false);
+                          setMobileVisibilityOpen(false);
+                          setMobileSearchOpen(false);
+                        }}
+                        className="inline-flex h-[46px] w-[46px] items-center justify-center rounded-full border border-[#f6c86a]/35 bg-[#f6c86a] text-[#0b1020] shadow-[0_14px_30px_-18px_rgba(246,200,106,0.65)] transition hover:brightness-105"
+                        title={tUI(langCode, "timeline.category.label")}
+                        aria-label={tUI(langCode, "timeline.category.label")}
+                        aria-expanded={mobileCategoryOpen}
+                      >
+                        {getCategoryIcon("h-6 w-6")}
+                      </button>
+                      {mobileCategoryOpen ? (
+                        <div className="absolute right-0 top-[calc(100%+8px)] z-30 flex min-w-[240px] flex-col gap-1 rounded-2xl border border-white/12 bg-[#111827]/96 p-1.5 text-white shadow-[0_24px_40px_-28px_rgba(0,0,0,0.92)] backdrop-blur-xl">
+                          {categoryOptions.map((value) => {
+                            const active = categoryFilter === value;
+                            const label =
+                              value === "all"
+                                ? tUI(langCode, "timeline.category.all")
+                                : tUI(langCode, `journey.category.${value}`);
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => {
+                                  setCategoryFilter(value);
+                                  setMobileCategoryOpen(false);
+                                  forceEmbeddedCarouselToEdge();
+                                }}
+                                className={
+                                  active
+                                    ? "flex items-start gap-3 rounded-xl border border-[#f6c86a]/25 bg-[#f6c86a] px-3 py-2.5 text-left text-[#0b1020]"
+                                    : "flex items-start gap-3 rounded-xl border border-white/8 bg-white/6 px-3 py-2.5 text-left text-white hover:bg-white/10"
+                                }
+                              >
+                                <span className="mt-0.5 shrink-0">
+                                  {getCategoryIcon("h-4 w-4")}
+                                </span>
+                                <span className="block min-w-0 text-[12px] font-semibold leading-4">
+                                  {label}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>
@@ -1559,9 +1669,6 @@ export default function TimelinePage({
 
                   <div className="hidden w-full items-center gap-2 lg:flex">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <label className="hidden whitespace-nowrap text-[9px] font-medium uppercase tracking-[0.12em] text-white/48 sm:block">
-                        {tUI(langCode, "timeline.search.label")}
-                      </label>
                       <input
                         type="text"
                         value={q}
@@ -1575,6 +1682,31 @@ export default function TimelinePage({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+                      <div className="flex shrink-0 items-center gap-2 rounded-[20px] border border-white/10 bg-white/6 px-2 py-1.5">
+                        <span
+                          className="flex items-center text-white/60"
+                          title={tUI(langCode, "timeline.category.label")}
+                          aria-label={tUI(langCode, "timeline.category.label")}
+                        >
+                          {getCategoryIcon("h-3.5 w-3.5")}
+                        </span>
+                        <select
+                          value={categoryFilter}
+                          onChange={(e) =>
+                            setCategoryFilter(e.target.value as CategoryFilter)
+                          }
+                          className="min-w-[210px] rounded-full border border-white/12 bg-white px-3 py-2 text-[11px] text-neutral-900 outline-none transition hover:bg-white"
+                        >
+                          <option value="all">
+                            {tUI(langCode, "timeline.category.all")}
+                          </option>
+                          {MACRO_CATEGORY_CODES.map((value) => (
+                            <option key={value} value={value}>
+                              {tUI(langCode, `journey.category.${value}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       {onOpenEmbeddedMap ? (
                         <button
                           type="button"
@@ -1842,7 +1974,7 @@ export default function TimelinePage({
                     <>
                       <div className="flex items-baseline gap-1">
                         <span className="text-[14px] font-semibold leading-none text-white">
-                          {cards.length}
+                          {displayCards.length}
                         </span>
                         <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                           {tUI(langCode, "timeline.summary.group_events")}
@@ -1850,7 +1982,7 @@ export default function TimelinePage({
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-[14px] font-semibold leading-none text-white">
-                          {totalMatches}
+                          {filteredTotalMatches}
                         </span>
                         <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                           eventi
@@ -1881,7 +2013,7 @@ export default function TimelinePage({
                     <div className="flex justify-end gap-3">
                       <div className="flex items-baseline gap-1">
                         <span className="text-[14px] font-semibold leading-none text-white">
-                          {cards.length}
+                          {displayCards.length}
                         </span>
                         <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                           {tUI(langCode, "timeline.summary.group_events")}
@@ -1889,7 +2021,7 @@ export default function TimelinePage({
                       </div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-[14px] font-semibold leading-none text-white">
-                          {totalMatches}
+                          {filteredTotalMatches}
                         </span>
                         <span className="text-[9px] uppercase tracking-[0.12em] text-white/65">
                           eventi
@@ -1940,7 +2072,7 @@ export default function TimelinePage({
                   key={g.id}
                   href={
                     !isGuestMode || g.guest_access
-                      ? `/module/group_event?gid=${encodeURIComponent(g.id)}`
+                      ? `/module/group_event?gid=${encodeURIComponent(g.id)}&source=scorecard`
                       : undefined
                   }
                   title={g.title || g.slug || "Untitled"}

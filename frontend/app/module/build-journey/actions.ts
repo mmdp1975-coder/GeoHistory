@@ -441,6 +441,7 @@ export type SaveJourneyPayload = {
   group_event: {
     cover_url?: string;
     visibility: Visibility;
+    macro_category_code?: string;
     description?: string;
     language?: string;
 
@@ -752,8 +753,13 @@ export async function saveJourney(payload: SaveJourneyPayload) {
     coverFromMedia
       ? coverFromMedia.public_url?.trim() || coverFromMedia.source_url?.trim() || null
       : null;
+  const macroCategoryCode = payload.group_event.macro_category_code?.trim();
+  if (!macroCategoryCode) {
+    throw new Error("macro_category_code mancante.");
+  }
   const groupEventPayload = {
     visibility: payload.group_event.visibility,
+    macro_category_code: macroCategoryCode,
     allow_fan: payload.group_event.allow_fan ?? false,
       allow_stud_high: payload.group_event.allow_stud_high ?? false,
       allow_stud_middle: payload.group_event.allow_stud_middle ?? false,

@@ -22,7 +22,7 @@ export default function PreviewPage() {
   const [videoSrc, setVideoSrc] = useState("/GHJLogin/GHJLogin_EN.mp4");
   const [locale, setLocale] = useState<LocaleKey>("en");
   const [journeySrc, setJourneySrc] = useState(
-    "/module/group_event?gid=e5ca79b3-38b0-4de2-8cd1-bc1d949a4342&preview=1"
+    "/module/group_event?gid=e5ca79b3-38b0-4de2-8cd1-bc1d949a4342&preview=1&source=scorecard"
   );
 
   const labels = useMemo(() => {
@@ -113,7 +113,7 @@ export default function PreviewPage() {
     } else if (step === "journey") {
       journeyReloadRef.current += 1;
       setJourneySrc(
-        `/module/group_event?gid=e5ca79b3-38b0-4de2-8cd1-bc1d949a4342&preview=1&_t=${Date.now()}`
+        `/module/group_event?gid=e5ca79b3-38b0-4de2-8cd1-bc1d949a4342&preview=1&source=scorecard&_t=${Date.now()}`
       );
       scheduleTimeout(() => setStep("timeline"), 10000);
     }
